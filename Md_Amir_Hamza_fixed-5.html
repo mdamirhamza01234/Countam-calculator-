@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Calculator with Full Currency & History</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000000;
+            margin: 0;
+            padding: 10px;
+        }
+        .calculator {
+            background-color: #0b0c10;
+            padding: 20px;
+            border-radius: 24px;
+            width: 450px;
+            max-width: 98vw;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 1px solid #1f242d;
+            position: relative;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .history-icon-btn {
+            background: none;
+            border: none;
+            color: #8ab4f8;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .display-card {
+            background-color: #0b0c10;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            text-align: right;
+            border-radius: 12px;
+            touch-action: pan-x;
+        }
+        .expression {
+            color: #727782;
+            font-size: 16px;
+            min-height: 24px;
+            margin-bottom: 5px;
+        }
+        .result-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #ffffff;
+            font-size: 38px;
+            font-weight: 400;
+            text-align: right;
+            caret-color: #38bdf8;
+        }
+
+        .angle-toggle-bar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 10px;
+            min-height: 32px;
+        }
+        .swipe-badge {
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #334155;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .section-title {
+            color: #8ab4f8;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 12px 0 8px 4px;
+            border-bottom: 1px solid #1f242d;
+            padding-bottom: 4px;
+        }
+        .upper-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .lower-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+        button.btn {
+            background: #21252d;
+            color: #e2e8f0;
+            border: none;
+            height: 46px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+        button.btn:active {
+            transform: scale(0.95);
+            background: #2d323e;
+        }
+        button.num {
+            background: #191c23;
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        button.action {
+            background: #2c3545;
+            color: #f28b82;
+        }
+        button.op {
+            background: #2c3545;
+            color: #8ab4f8;
+            font-size: 18px;
+        }
+        button.equal {
+            background: #8ab4f8;
+            color: #1a1d24;
+            font-weight: 600;
+        }
+        button.sci {
+            background: #171d2a;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+        button.active-power {
+            background: #3b82f6 !important;
+            color: white !important;
+        }
+        button.exchange-btn {
+            background: #1e3a8a !important;
+            color: #60a5fa !important;
+            font-size: 16px !important;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #121824;
+            border: 1px solid #1f293d;
+            border-radius: 20px;
+            width: 420px;
+            max-width: 95vw;
+            padding: 24px;
+            color: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 10px;
+        }
+        .modal-header h3 { margin: 0; font-size: 18px; color: #8ab4f8; }
+        .close-btn { background: none; border: none; color: #ef4444; font-size: 20px; cursor: pointer; }
+        .history-list { max-height: 250px; overflow-y: auto; margin-bottom: 15px; }
+        .history-item { padding: 8px 12px; border-bottom: 1px solid #1e293b; cursor: pointer; }
+        .history-item:hover { background: #1a2332; }
+        .history-exp { color: #94a3b8; font-size: 13px; }
+        .history-res { color: #38bdf8; font-size: 16px; font-weight: bold; }
+        .converter-field { margin-bottom: 12px; }
+        .converter-field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+        .converter-field select, .converter-field input {
+            width: 100%; padding: 10px; background: #1a2332; border: 1px solid #2d3748;
+            color: white; border-radius: 10px; font-size: 14px; outline: none;
+        }
+        .swap-container { display: flex; justify-content: center; margin: -2px 0 8px 0; }
+        .swap-btn {
+            background: #1a2332; border: 1px solid #2d3748; color: #38bdf8; font-size: 16px;
+            border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex;
+            align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s;
+        }
+        .swap-btn:hover { background: #28354a; transform: rotate(180deg); }
+        .converted-result {
+            background: #1e293b; padding: 15px; border-radius: 10px; text-align: center;
+            margin-top: 15px; font-size: 20px; color: #38bdf8; font-weight: 600;
+        }
+        .api-status { font-size: 11px; color: #10b981; text-align: center; margin-top: 8px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+<div class="calculator">
+    <div class="top-bar">
+        <button class="history-icon-btn" onclick="openHistory()" title="History">📜 History</button>
+        <span style="color:#727782; font-size:12px;">Quantum Calc</span>
+    </div>
+
+    <div class="display-card" id="swipeArea">
+        <div class="expression" id="expression"></div>
+        <input type="text" class="result-input" id="result" value="0" inputmode="none" autocomplete="off">
+    </div>
+
+    <div class="angle-toggle-bar">
+        <div id="inputAngleBadge" class="swipe-badge" style="display: none;" onclick="toggleAngleMode()">
+            <span>↔️ Mode:</span> <strong id="inModeText">DEG</strong>
+        </div>
+        <div id="invResultBadge" class="swipe-badge" style="display: none;" onclick="toggleInverseResultAngle()">
+            <span>🔄 Output:</span> <strong id="invModeText">DEG</strong>
+        </div>
+    </div>
+
+    <div class="section-title">Numeric Keypad</div>
+    <div class="upper-grid">
+        <button class="btn action" onclick="clearAll()">AC</button>
+        <button class="btn action" style="color:#a5c1f5;" onclick="deleteChar()">⌫</button>
+        <button class="btn action" style="color:#a5c1f5;" onclick="toggleSign()">+/-</button>
+        <button class="btn op" onclick="appendValue('÷')">÷</button>
+
+        <button class="btn num" onclick="appendValue('7')">7</button>
+        <button class="btn num" onclick="appendValue('8')">8</button>
+        <button class="btn num" onclick="appendValue('9')">9</button>
+        <button class="btn op" onclick="appendValue('×')">×</button>
+
+        <button class="btn num" onclick="appendValue('4')">4</button>
+        <button class="btn num" onclick="appendValue('5')">5</button>
+        <button class="btn num" onclick="appendValue('6')">6</button>
+        <button class="btn op" onclick="appendValue('-')">-</button>
+
+        <button class="btn num" onclick="appendValue('1')">1</button>
+        <button class="btn num" onclick="appendValue('2')">2</button>
+        <button class="btn num" onclick="appendValue('3')">3</button>
+        <button class="btn op" onclick="appendValue('+')">+</button>
+
+        <button class="btn num" onclick="appendValue('0')">0</button>
+        <button class="btn num" onclick="appendValue('.')">.</button>
+        <button class="btn num" onclick="appendValue('%')">%</button>
+        <button class="btn equal" onclick="calculate()">=</button>
+    </div>
+
+    <div class="section-title">Scientific Tools</div>
+    <div class="lower-grid">
+        <button class="btn sci" onclick="toggle2nd()">2nd</button>
+        <button class="btn sci" id="degBtn" onclick="toggleAngleMode()">Deg</button>
+        <button class="btn sci" onclick="appendValue('(')">(</button>
+        <button class="btn sci" onclick="appendValue(')')">)</button>
+        <button class="btn sci" onclick="appendFunc('1/')">1/x</button>
+
+        <button class="btn sci" id="sinBtn" onclick="appendFunc('sin')">sin</button>
+        <button class="btn sci" id="cosBtn" onclick="appendFunc('cos')">cos</button>
+        <button class="btn sci" id="tanBtn" onclick="appendFunc('tan')">tan</button>
+        <button class="btn sci" onclick="appendDirectSup('²')">x²</button>
+        <button class="btn sci" onclick="appendDirectSup('³')">x³</button>
+
+        <button class="btn sci" onclick="appendFunc('sin⁻¹')">sin⁻¹</button>
+        <button class="btn sci" onclick="appendFunc('cos⁻¹')">cos⁻¹</button>
+        <button class="btn sci" onclick="appendFunc('tan⁻¹')">tan⁻¹</button>
+        <button class="btn sci" id="powerToggleBtn" onclick="togglePowerMode()">x<sup>y</sup></button>
+        <button class="btn sci" onclick="appendPowerTen()">10<sup>x</sup></button>
+
+        <button class="btn sci" onclick="appendFunc('√')">√</button>
+        <button class="btn sci" onclick="appendValue('√')"><sup>y</sup>√x</button>
+        <button class="btn sci" onclick="appendFunc('ln')">ln</button>
+        <button class="btn sci" onclick="appendFunc('lg')">lg</button>
+        <button class="btn sci" onclick="appendPowerE()">e<sup>x</sup></button>
+
+        <button class="btn sci" onclick="appendFactorial()">x!</button>
+        <button class="btn sci" onclick="appendValue('π')">π</button>
+        <button class="btn sci" onclick="appendValue('e')">e</button>
+        <button class="btn sci" onclick="appendValue('EE')">EE</button>
+        <button class="btn sci" onclick="appendRand()">Rand</button>
+
+        <button class="btn sci exchange-btn" onclick="openConverter()">💱</button>
+        <button class="btn sci" onclick="clearMemory()">mc</button>
+        <button class="btn sci" onclick="addMemory()">m+</button>
+        <button class="btn sci" onclick="subMemory()">m-</button>
+        <button class="btn sci" onclick="recallMemory()">mr</button>
+    </div>
+</div>
+
+<div class="modal" id="historyModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📜 Calculation History</h3>
+            <button class="close-btn" onclick="closeHistory()">✖</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+        <button class="btn action" style="width: 100%;" onclick="clearHistoryList()">Clear History</button>
+    </div>
+</div>
+
+<div class="modal" id="converterModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>🌐 Universal Converter</h3>
+            <button class="close-btn" onclick="closeConverter()">✖</button>
+        </div>
+
+        <div class="converter-field">
+            <label>Category</label>
+            <select id="categorySelect" onchange="updateUnits()">
+                <option value="money">💱 Global Currency</option>
+                <option value="length">📏 Length</option>
+                <option value="area">📐 Area</option>
+                <option value="weight">⚖️ Weight</option>
+                <option value="volume">🧊 Volume</option>
+                <option value="temperature">🌡️ Temperature</option>
+                <option value="angle">📐 Angle</option>
+                <option value="energy">⚡ Energy</option>
+                <option value="pressure">💨 Pressure</option>
+            </select>
+        </div>
+
+        <div class="converter-field">
+            <label>Value to Convert</label>
+            <input type="number" id="convertInput" value="1" oninput="runConversion()">
+        </div>
+
+        <div class="converter-field">
+            <label>From</label>
+            <select id="fromUnit" onchange="runConversion()"></select>
+        </div>
+
+        <div class="swap-container">
+            <button class="swap-btn" onclick="swapUnits()" title="Swap Units">🔄</button>
+        </div>
+
+        <div class="converter-field">
+            <label>To</label>
+            <select id="toUnit" onchange="runConversion()"></select>
+        </div>
+
+        <div class="converted-result" id="convertedOutput">0</div>
+        <div class="api-status" id="apiStatus">🔄 Checking Exchange Rates...</div>
+    </div>
+</div>
+
+<script>
+    const expressionEl = document.getElementById('expression');
+    const resultEl = document.getElementById('result');
+    let isRad = false;
+    let is2nd = false;
+    let isPowerMode = false;
+    let memory = 0;
+    
+    let historyData = [];
+    let conversionHistoryTimer = null;
+    let isLastResultInverseAngle = false;
+    let lastInverseValueRad = null;
+    let currentInverseDisplayMode = 'DEG';
+
+    // The cursor should never be allowed to sit in the middle of a function
+    // name (e.g. between the "s" and "i" of "sin") — tapping or arrow-keying
+    // there snaps it to whichever end of the word is closer instead.
+    const protectedTokenPattern = /sin⁻¹|cos⁻¹|tan⁻¹|sin|cos|tan|ln|lg/g;
+
+    function snapCursorOutOfProtectedTokens() {
+        if (resultEl.selectionStart !== resultEl.selectionEnd) return;
+        const pos = resultEl.selectionStart;
+        const text = resultEl.value;
+        protectedTokenPattern.lastIndex = 0;
+        let match;
+        while ((match = protectedTokenPattern.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (pos > start && pos < end) {
+                const newPos = (pos - start <= end - pos) ? start : end;
+                resultEl.setSelectionRange(newPos, newPos);
+                return;
+            }
+        }
+    }
+
+    resultEl.addEventListener('click', snapCursorOutOfProtectedTokens);
+    resultEl.addEventListener('keyup', snapCursorOutOfProtectedTokens);
+    resultEl.addEventListener('select', snapCursorOutOfProtectedTokens);
+
+    const operators = ['+', '-', '×', '÷'];
+
+    const supMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+        '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        '+': '⁺', '-': '⁻'
+    };
+
+    const supToNormalMap = {
+        '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+        '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+        '⁺': '+', '⁻': '-'
+    };
+
+    function insertAtCursor(textToInsert) {
+        let startPos = resultEl.selectionStart !== null ? resultEl.selectionStart : resultEl.value.length;
+        let endPos = resultEl.selectionEnd !== null ? resultEl.selectionEnd : resultEl.value.length;
+        let currentText = resultEl.value;
+
+        if (operators.includes(textToInsert)) {
+            const charBeforeCursor = currentText.charAt(startPos - 1);
+            const charAtCursor = currentText.charAt(startPos);
+
+            if (operators.includes(charBeforeCursor)) {
+                currentText = currentText.substring(0, startPos - 1) + currentText.substring(startPos);
+                startPos--;
+                endPos = startPos;
+            } else if (operators.includes(charAtCursor)) {
+                currentText = currentText.substring(0, startPos) + currentText.substring(startPos + 1);
+                endPos = startPos;
+            }
+        }
+
+        if (currentText === '0' && textToInsert !== '.' && !isPowerMode) {
+            resultEl.value = textToInsert;
+            resultEl.setSelectionRange(textToInsert.length, textToInsert.length);
+        } else {
+            resultEl.value = currentText.substring(0, startPos) + textToInsert + currentText.substring(endPos);
+            const newPos = startPos + textToInsert.length;
+            resultEl.setSelectionRange(newPos, newPos);
+        }
+        resultEl.focus();
+    }
+
+    function togglePowerMode() {
+        isPowerMode = !isPowerMode;
+        document.getElementById('powerToggleBtn').classList.toggle('active-power', isPowerMode);
+        resultEl.focus();
+    }
+
+    function toggleAngleMode() {
+        isRad = !isRad;
+        document.getElementById('degBtn').innerText = isRad ? 'Rad' : 'Deg';
+        document.getElementById('inModeText').innerText = isRad ? 'RAD' : 'DEG';
+    }
+
+    function toggle2nd() {
+        is2nd = !is2nd;
+        document.getElementById('sinBtn').innerText = is2nd ? 'sin⁻¹' : 'sin';
+        document.getElementById('cosBtn').innerText = is2nd ? 'cos⁻¹' : 'cos';
+        document.getElementById('tanBtn').innerText = is2nd ? 'tan⁻¹' : 'tan';
+    }
+
+    function appendValue(val) {
+        if (isPowerMode && supMap[val]) {
+            insertAtCursor(supMap[val]);
+        } else {
+            if (operators.includes(val)) {
+                isPowerMode = false;
+                document.getElementById('powerToggleBtn').classList.remove('active-power');
+            }
+            insertAtCursor(val);
+        }
+    }
+
+    function appendDirectSup(supChar) { insertAtCursor(supChar); }
+    function appendPowerTen() { insertAtCursor('10'); togglePowerMode(); }
+    function appendPowerE() { insertAtCursor('e'); togglePowerMode(); }
+
+    function appendFunc(func) {
+        isPowerMode = false;
+        document.getElementById('powerToggleBtn').classList.remove('active-power');
+        
+        let actualFunc = func;
+        if (is2nd && ['sin', 'cos', 'tan'].includes(func)) {
+            actualFunc = func + '⁻¹';
+        }
+        insertAtCursor(actualFunc + '(');
+    }
+
+    // Factorial is postfix (4! not fact(4)), so it just drops a "!" right
+    // after whatever the person already typed instead of wrapping it in a
+    // function call — matches how it's written on paper and on screen.
+    function appendFactorial() {
+        isPowerMode = false;
+        document.getElementById('powerToggleBtn').classList.remove('active-power');
+        insertAtCursor('!');
+    }
+
+    function appendRand() { insertAtCursor(Math.random().toFixed(4)); }
+
+    function toggleSign() {
+        let val = resultEl.value;
+        if (val.startsWith('-')) {
+            resultEl.value = val.substring(1);
+        } else if (val !== '0') {
+            resultEl.value = '-' + val;
+        }
+        resultEl.focus();
+    }
+
+    function clearAll() {
+        expressionEl.innerText = '';
+        resultEl.value = '0';
+        isPowerMode = false;
+        document.getElementById('powerToggleBtn').classList.remove('active-power');
+        document.getElementById('invResultBadge').style.display = 'none';
+        isLastResultInverseAngle = false;
+        resultEl.focus();
+    }
+
+    // Function names that should be deleted as a whole unit with Backspace
+    // instead of one letter at a time — otherwise you can end up with
+    // broken leftovers like "si" or "in" on screen.
+    const protectedFunctionTokens = ['sin⁻¹', 'cos⁻¹', 'tan⁻¹', 'sin', 'cos', 'tan', 'ln', 'lg'];
+
+    function deleteChar() {
+        const startPos = resultEl.selectionStart;
+        const endPos = resultEl.selectionEnd;
+        const currentText = resultEl.value;
+
+        if (startPos !== endPos) {
+            resultEl.value = currentText.substring(0, startPos) + currentText.substring(endPos);
+            resultEl.setSelectionRange(startPos, startPos);
+        } else if (startPos > 0) {
+            const before = currentText.substring(0, startPos);
+            let deleteLen = 1;
+            for (const token of protectedFunctionTokens) {
+                if (before.endsWith(token)) {
+                    deleteLen = token.length;
+                    break;
+                }
+            }
+            resultEl.value = currentText.substring(0, startPos - deleteLen) + currentText.substring(startPos);
+            resultEl.setSelectionRange(startPos - deleteLen, startPos - deleteLen);
+        }
+
+        if (resultEl.value === '' || resultEl.value === 'Error' || resultEl.value === 'Undefined') {
+            resultEl.value = '0';
+        }
+        resultEl.focus();
+    }
+
+    function factorial(n) {
+        if (n < 0) return NaN;
+        if (n === 0 || n === 1) return 1;
+        let res = 1;
+        for (let i = 2; i <= n; i++) res *= i;
+        return res;
+    }
+
+    function customTan(deg) {
+        if (!isRad && Math.abs(deg % 180) === 90) return 'Undefined';
+        return isRad ? Math.tan(deg) : Math.tan(deg * Math.PI / 180);
+    }
+
+    function customSin(deg) {
+        return isRad ? Math.sin(deg) : Math.sin(deg * Math.PI / 180);
+    }
+
+    function customCos(deg) {
+        return isRad ? Math.cos(deg) : Math.cos(deg * Math.PI / 180);
+    }
+
+    function autoCloseBrackets(str) {
+        let openCount = (str.match(/\(/g) || []).length;
+        let closeCount = (str.match(/\)/g) || []).length;
+        while (openCount > closeCount) {
+            str += ')';
+            closeCount++;
+        }
+        return str;
+    }
+
+    // Handles the opposite typo: a ")" typed without its matching "(" —
+    // e.g. "3+2)²" instead of "(3+2)²". Scans left to right and prepends
+    // an opening bracket for every closing bracket that has no partner.
+    function autoOpenBrackets(str) {
+        let balance = 0;
+        let missingOpens = 0;
+        for (const ch of str) {
+            if (ch === '(') {
+                balance++;
+            } else if (ch === ')') {
+                balance--;
+                if (balance < 0) {
+                    missingOpens++;
+                    balance = 0;
+                }
+            }
+        }
+        return '('.repeat(missingOpens) + str;
+    }
+
+    // Adds a ° symbol after the numeric angle passed to a direct trig
+    // function (sin/cos/tan) when the calculator is in Degree mode, so the
+    // expression line makes it clear the number is being read as degrees.
+    // Purely visual — only used for display, never for the actual eval string.
+    function annotateDegreesForDisplay(str) {
+        if (isRad) return str;
+        return str.replace(/(?<!⁻¹)(sin|cos|tan)\(([^()]*)\)/g, (match, fn, arg) => `${fn}(${arg}°)`);
+    }
+
+    // JavaScript has no implicit multiplication, so "5sin(30)" or "5(3+2)"
+    // would otherwise throw a syntax error. This inserts the × a person
+    // naturally means in those cases: number/%/) directly followed by a
+    // function name, constant, or "(", and ")" directly followed by a number.
+    function insertImplicitMultiplication(str) {
+        return str
+            .replace(/([0-9)%])(?=(sin⁻¹|cos⁻¹|tan⁻¹|sin|cos|tan|ln|lg|√|π|\())/g, '$1×')
+            .replace(/(\))(?=[0-9])/g, '$1×');
+    }
+
+    function calculate() {
+       try {
+            isPowerMode = false;
+            document.getElementById('powerToggleBtn').classList.remove('active-power');
+
+            // Strip any degree symbol left over from a previous inverse-trig
+            // result so continued typing/calculation still evaluates cleanly.
+            let input = autoCloseBrackets(autoOpenBrackets(resultEl.value.replace(/°/g, '')));
+            input = insertImplicitMultiplication(input);
+            expressionEl.innerText = annotateDegreesForDisplay(input) + ' =';
+
+            // Protect inverse-trigonometric functions before converting
+            // superscript characters. Otherwise cos⁻¹(1÷2) becomes cos**-1(...)
+            // and JavaScript throws a syntax error.
+            const protectedInput = input
+                .replace(/sin⁻¹/g, '__ASIN__')
+                .replace(/cos⁻¹/g, '__ACOS__')
+                .replace(/tan⁻¹/g, '__ATAN__');
+
+            let processedInput = '';
+            for (let i = 0; i < protectedInput.length; i++) {
+                let char = protectedInput[i];
+                if (supToNormalMap[char]) {
+                    if (i === 0 || !supToNormalMap[protectedInput[i-1]]) {
+                        processedInput += '**' + supToNormalMap[char];
+                    } else {
+                        processedInput += supToNormalMap[char];
+                    }
+                } else {
+                    processedInput += char;
+                }
+            }
+
+            let parsed = processedInput
+                .replace(/×/g, '*')
+                .replace(/÷/g, '/')
+                .replace(/π/g, 'Math.PI')
+                .replace(/%/g, '/100')
+                .replace(/√\(/g, 'Math.sqrt(')
+                .replace(/lg\(/g, 'Math.log10(')
+                .replace(/ln\(/g, 'Math.log(')
+                .replace(/sin\(/g, 'customSin(')
+                .replace(/cos\(/g, 'customCos(')
+                .replace(/tan\(/g, 'customTan(')
+                .replace(/__ASIN__\(/g, 'Math.asin(')
+                .replace(/__ACOS__\(/g, 'Math.acos(')
+                .replace(/__ATAN__\(/g, 'Math.atan(')
+                .replace(/(\d+(?:\.\d+)?|\([^()]*\))!/g, (m, g) => `factorial(${g})`);
+
+            // Replace the standalone constant e only, so scientific notation
+            // such as 1e3 and the EE key do not get corrupted.
+            parsed = parsed.replace(/(?<![A-Za-z0-9_.])e(?![A-Za-z0-9_.])/g, 'Math.E');
+
+            // Support calculator-style scientific notation (EE).
+            parsed = parsed.replace(/(\d+(?:\.\d+)?)EE([+-]?\d+)/gi, '$1e$2');
+
+            let evalResult = eval(parsed);
+
+            if (evalResult === 'Undefined') {
+                resultEl.value = 'Undefined';
+                return;
+            }
+
+            if (input.includes('sin⁻¹') || input.includes('cos⁻¹') || input.includes('tan⁻¹')) {
+                isLastResultInverseAngle = true;
+                lastInverseValueRad = evalResult;
+                currentInverseDisplayMode = 'DEG';
+                document.getElementById('invResultBadge').style.display = 'flex';
+                document.getElementById('invModeText').innerText = 'DEG';
+                evalResult = evalResult * (180 / Math.PI);
+            } else {
+                isLastResultInverseAngle = false;
+                document.getElementById('invResultBadge').style.display = 'none';
+            }
+
+            if (typeof evalResult === 'number' && !Number.isInteger(evalResult)) {
+                evalResult = Number(Math.round(evalResult + 'e10') + 'e-10');
+            }
+
+            // Show a ° after the number whenever it's an inverse-trig angle
+            // currently being displayed in Degrees.
+            const displayResult = isLastResultInverseAngle ? evalResult + '°' : evalResult;
+
+            resultEl.value = displayResult;
+            addHistory(input, displayResult);
+            resultEl.focus();
+        } catch (e) {
+            resultEl.value = 'Error';
+        }
+    }
+
+    function toggleInverseResultAngle() {
+        if (!isLastResultInverseAngle || lastInverseValueRad === null) return;
+        
+        let finalVal = 0;
+        if (currentInverseDisplayMode === 'DEG') {
+            currentInverseDisplayMode = 'RAD';
+            finalVal = lastInverseValueRad;
+        } else {
+            currentInverseDisplayMode = 'DEG';
+            finalVal = lastInverseValueRad * (180 / Math.PI);
+        }
+
+        if (typeof finalVal === 'number' && !Number.isInteger(finalVal)) {
+            finalVal = Number(Math.round(finalVal + 'e10') + 'e-10');
+        }
+
+        document.getElementById('invModeText').innerText = currentInverseDisplayMode;
+        resultEl.value = currentInverseDisplayMode === 'DEG' ? finalVal + '°' : finalVal;
+    }
+
+    function addHistory(exp, res, type) {
+        historyData.unshift({ exp: exp, res: res, type: type || 'calc' });
+        if (historyData.length > 30) historyData.pop();
+    }
+
+    function openHistory() {
+        const listContainer = document.getElementById('historyList');
+        listContainer.innerHTML = '';
+        if (historyData.length === 0) {
+            listContainer.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:20px;">No History Yet</div>';
+        } else {
+            historyData.forEach((item, index) => {
+                const icon = item.type === 'convert' ? '🔁 ' : '';
+                listContainer.innerHTML += `
+                    <div class="history-item" onclick="useHistory(${index})">
+                        <div class="history-exp">${icon}${item.exp}</div>
+                        <div class="history-res">= ${item.res}</div>
+                    </div>
+                `;
+            });
+        }
+        document.getElementById('historyModal').style.display = 'flex';
+    }
+
+    function closeHistory() { document.getElementById('historyModal').style.display = 'none'; }
+    function clearHistoryList() { historyData = []; openHistory(); }
+
+    function useHistory(index) {
+        const item = historyData[index];
+        closeHistory();
+        // A conversion entry only makes sense back in the converter, not
+        // pasted into the calculator's input field.
+        if (item.type === 'convert') {
+            openConverter();
+            return;
+        }
+        resultEl.value = item.res;
+        expressionEl.innerText = item.exp + ' =';
+    }
+
+    function clearMemory() { memory = 0; }
+    function recallMemory() { resultEl.value = memory.toString(); resultEl.focus(); }
+    function addMemory() { memory += parseFloat(resultEl.value) || 0; }
+    function subMemory() { memory -= parseFloat(resultEl.value) || 0; }
+
+    /* COMPLETE 150+ CURRENCIES & UNITS FROM YOUR CODE */
+    const currencyFullNames = {
+        USD: "United States Dollar", INR: "Indian Rupee", EUR: "Euro", GBP: "British Pound",
+        AED: "United Arab Emirates Dirham", SAR: "Saudi Riyal", CAD: "Canadian Dollar", AUD: "Australian Dollar",
+        JPY: "Japanese Yen", CNY: "Chinese Yuan", CHF: "Swiss Franc", SGD: "Singapore Dollar",
+        NZD: "New Zealand Dollar", HKD: "Hong Kong Dollar", QAR: "Qatari Riyal", KWD: "Kuwaiti Dinar",
+        BHD: "Bahraini Dinar", OMR: "Omani Rial", PKR: "Pakistani Rupee", BDT: "Bangladeshi Taka",
+        NPR: "Nepalese Rupee", AFN: "Afghan Afghani", ALL: "Albanian Lek", DZD: "Algerian Dinar",
+        AOA: "Angolan Kwanza", ARS: "Argentine Peso", AMD: "Armenian Dram", AWG: "Aruban Florin",
+        AZN: "Azerbaijani Manat", BSD: "Bahamian Dollar", BBD: "Barbadian Dollar", BYN: "Belarusian Ruble",
+        BZD: "Belize Dollar", BMD: "Bermudian Dollar", BTN: "Bhutanese Ngultrum", BOB: "Bolivian Boliviano",
+        BAM: "Bosnia-Herzegovina Mark", BWP: "Botswana Pula", BRL: "Brazilian Real", BND: "Brunei Dollar",
+        BGN: "Bulgarian Lev", BIF: "Burundian Franc", KHR: "Cambodian Riel", CVE: "Cape Verdean Escudo",
+        KYD: "Cayman Islands Dollar", XAF: "Central African CFA Franc", XPF: "CFP Franc", CLP: "Chilean Peso",
+        COP: "Colombian Peso", KMF: "Comorian Franc", CDF: "Congolese Franc", CRC: "Costa Rican Colón",
+        HRK: "Croatian Kuna", CUP: "Cuban Peso", CZK: "Czech Koruna", DKK: "Danish Krone",
+        DJF: "Djiboutian Franc", DOP: "Dominican Peso", XCD: "East Caribbean Dollar", EGP: "Egyptian Pound",
+        ERN: "Eritrean Nakfa", ETB: "Ethiopian Birr", FJD: "Fijian Dollar", GMD: "Gambian Dalasi",
+        GEL: "Georgian Lari", GHS: "Ghanaian Cedi", GIP: "Gibraltar Pound", GTQ: "Guatemalan Quetzal",
+        GNF: "Guinean Franc", GYD: "Guyanaese Dollar", HTG: "Haitian Gourde", HNL: "Honduran Lempira",
+        HUF: "Hungarian Forint", ISK: "Icelandic Króna", IDR: "Indonesian Rupiah", IRR: "Iranian Rial",
+        IQD: "Iraqi Dinar", ILS: "Israeli New Shekel", JMD: "Jamaican Dollar", JOD: "Jordanian Dinar",
+        KZT: "Kazakhstani Tenge", KES: "Kenyan Shilling", KGS: "Kyrgystani Som", LAK: "Lao Kip",
+        LBP: "Lebanese Pound", LSL: "Lesotho Loti", LRD: "Liberian Dollar", LYD: "Libyan Dinar",
+        MOP: "Macanese Pataca", MKD: "Macedonian Denar", MGA: "Malagasy Ariary", MWK: "Malawian Kwacha",
+        MYR: "Malaysian Ringgit", MVR: "Maldivian Rufiyaa", MRU: "Mauritanian Ouguiya", MUR: "Mauritian Rupee",
+        MXN: "Mexican Peso", MDL: "Moldovan Leu", MNT: "Mongolian Tugrik", MAD: "Moroccan Dirham",
+        MZN: "Mozambican Metical", MMK: "Myanmar Kyat", NAD: "Namibian Dollar", NIO: "Nicaraguan Córdoba",
+        NGN: "Nigerian Naira", NOK: "Norwegian Krone", PAB: "Panamanian Balboa", PGK: "Papua New Guinean Kina",
+        PYG: "Paraguayan Guarani", PEN: "Peruvian Sol", PHP: "Philippine Peso", PLN: "Polish Zloty",
+        RON: "Romanian Leu", RUB: "Russian Ruble", RWF: "Rwandan Franc", SHP: "Saint Helena Pound",
+        WST: "Samoan Tala", STN: "São Tomé and Príncipe Dobra", RSD: "Serbian Dinar", SCR: "Seychellois Rupee",
+        SLE: "Sierra Leonean Leone", SLL: "Sierra Leonean Leone", SOS: "Somali Shilling", ZAR: "South African Rand",
+        KRW: "South Korean Won", SSP: "South Sudanese Pound", LKR: "Sri Lankan Rupee", SDG: "Sudanese Pound",
+        SRD: "Surinamese Dollar", SZL: "Swazi Lilangeni", SEK: "Swedish Krona", SYP: "Syrian Pound",
+        TWD: "New Taiwan Dollar", TJS: "Tajikistani Somoni", TTZ: "Tanzanian Shilling", THB: "Thai Baht",
+        TOP: "Tongan Paʻanga", TTD: "Trinidad and Tobago Dollar", TND: "Tunisian Dinar", TRY: "Turkish Lira",
+        TMT: "Turkmenistan Manat", UGX: "Ugandan Shilling", UAH: "Ukrainian Hryvnia", UYU: "Uruguayan Peso",
+        UZS: "Uzbekistani Som", VUV: "Vanuatu Vatu", VES: "Venezuelan Bolívar", VND: "Vietnamese Dong",
+        YER: "Yemeni Rial", ZMW: "Zambian Kwacha", ZWL: "Zimbabwean Dollar"
+    };
+
+    const unitsData = {
+        money: { USD: 1, INR: 83.0, EUR: 0.92, GBP: 0.79, AED: 3.67, SAR: 3.75, CAD: 1.35, AUD: 1.52, JPY: 150.0, CNY: 7.20, CHF: 0.88, SGD: 1.34, NZD: 1.63, HKD: 7.82, QAR: 3.64, KWD: 0.31, BHD: 0.38, OMR: 0.38, PKR: 278.0, BDT: 117.0, NPR: 133.0 },
+        length: {
+            "Meter (m)": 1, "Millimeter (mm)": 1000, "Centimeter (cm)": 100, "Kilometer (km)": 0.001,
+            "Inch (in)": 39.3701, "Foot (ft)": 3.28084, "Yard (Gaj)": 1.09361, "Mile": 0.000621371,
+            "Nautical Mile": 0.000539957, "Micron": 1000000, "Nanometer (nm)": 1000000000
+        },
+        area: {
+            "Square Meter (sq m)": 1, "Square Kilometer (sq km)": 0.000001, "Hectare": 0.0001, "Acre": 0.000247105,
+            "Bigha (Bihar)": 0.000395, "Square Yard (Gaj)": 1.19599, "Katha / Biswa": 0.0079, "Square Foot (sq ft)": 10.7639
+        },
+        weight: {
+            "Kilogram (kg)": 1, "Ton": 0.001, "Quintal": 0.01, "Maund (Man)": 0.02679, "Pound": 2.20462,
+            "Ounce": 35.274, "Tola": 85.735, "Gram (g)": 1000, "Milligram (mg)": 1000000
+        },
+        volume: {
+            "Cubic Meter (m³)": 1, "Liter (L)": 1000, "US Gallon (gal)": 264.172, "Milliliter (mL)": 1000000
+        },
+        temperature: {
+            "Celsius (°C)": "C", "Fahrenheit (°F)": "F", "Kelvin (K)": "K"
+        },
+        angle: {
+            "Degree (°)": 180 / Math.PI, "Radian (rad)": 1
+        },
+        energy: {
+            "Joule (J)": 1, "Kilojoule (kJ)": 0.001, "Calorie (cal)": 0.2390057361,
+            "Kilocalorie (kcal)": 0.0002390057, "Watt-hour (Wh)": 0.0002777778,
+            "Kilowatt-hour (kWh)": 2.777778e-7, "Electronvolt (eV)": 6.241509074e18,
+            "Atmosphere-liter (atm·L)": 0.0098692327
+        },
+        pressure: {
+            "Pascal (Pa)": 1, "Atmosphere (atm)": 9.869233e-6, "Kilopascal (kPa)": 0.001,
+            "Bar": 0.00001, "Millimeter of Mercury (mmHg)": 0.0075006168,
+            "Torr": 0.0075006168, "PSI": 0.0001450377
+        }
+    };
+
+    function openConverter() {
+        document.getElementById('converterModal').style.display = 'flex';
+        updateUnits();
+        fetchLiveRates();
+    }
+
+    function closeConverter() {
+        document.getElementById('converterModal').style.display = 'none';
+    }
+
+    function loadSavedRates() {
+        const savedRates = localStorage.getItem('last_money_rates');
+        if (savedRates) {
+            try {
+                unitsData.money = JSON.parse(savedRates);
+            } catch(e) {}
+        }
+    }
+    loadSavedRates();
+
+    async function fetchLiveRates() {
+        const statusEl = document.getElementById('apiStatus');
+        const lastUpdated = localStorage.getItem('last_money_updated');
+
+        try {
+            let response = await fetch('https://open.er-api.com/v6/latest/USD');
+            let data = await response.json();
+            if(data && data.rates) {
+                unitsData.money = data.rates;
+
+                const now = new Date();
+                const formattedDateTime = now.toLocaleDateString('en-IN', {
+                    day: '2-digit', month: 'short', year: 'numeric'
+                }) + ' at ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                localStorage.setItem('last_money_rates', JSON.stringify(data.rates));
+                localStorage.setItem('last_money_updated', formattedDateTime);
+
+                statusEl.innerHTML = `🟢 Live Rates Active<br><small style="color:#94a3b8">Updated: ${formattedDateTime}</small>`;
+                statusEl.style.color = "#10b981";
+
+                if(document.getElementById('categorySelect').value === 'money') {
+                    updateUnits();
+                }
+            }
+        } catch (e) {
+            if (lastUpdated) {
+                statusEl.innerHTML = `🔴 Offline Mode<br><small style="color:#f59e0b">Last Rates Updated On: ${lastUpdated}</small>`;
+                statusEl.style.color = "#ef4444";
+            } else {
+                statusEl.innerHTML = `🔴 Offline Mode<br><small style="color:#f59e0b">Using Default Rates</small>`;
+                statusEl.style.color = "#ef4444";
+            }
+        }
+    }
+
+    function updateUnits() {
+        const cat = document.getElementById('categorySelect').value;
+        const fromSel = document.getElementById('fromUnit');
+        const toSel = document.getElementById('toUnit');
+        const statusEl = document.getElementById('apiStatus');
+
+        statusEl.style.display = (cat === 'money') ? 'block' : 'none';
+
+        fromSel.innerHTML = '';
+        toSel.innerHTML = '';
+
+        Object.keys(unitsData[cat]).forEach(unit => {
+            let label = unit;
+            if (cat === 'money') {
+                const fullName = currencyFullNames[unit];
+                label = fullName ? `${unit} - ${fullName}` : `${unit}`;
+            }
+            fromSel.innerHTML += `<option value="${unit}">${label}</option>`;
+            toSel.innerHTML += `<option value="${unit}">${label}</option>`;
+        });
+
+        if (cat === 'money') {
+            fromSel.value = "USD";
+            toSel.value = "INR";
+        } else if(toSel.options.length > 1) {
+            toSel.selectedIndex = 1;
+        }
+
+        runConversion();
+    }
+
+    function swapUnits() {
+        const fromSel = document.getElementById('fromUnit');
+        const toSel = document.getElementById('toUnit');
+        const temp = fromSel.value;
+        fromSel.value = toSel.value;
+        toSel.value = temp;
+        runConversion();
+    }
+
+    // Formats a conversion result for display. Very small or very large
+    // numbers (e.g. 1 eV = 1.6×10⁻¹⁹ J) get shown in proper scientific
+    // notation instead of rounding away to "0" with a fixed decimal format.
+    function formatConversionResult(num) {
+        if (!isFinite(num)) return "0";
+        if (num === 0) return "0";
+
+        const absNum = Math.abs(num);
+        if (absNum < 0.000001 || absNum >= 1e15) {
+            const supMap = { '-': '⁻', '+': '', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+            let [mantissa, exponent] = num.toExponential(6).split('e');
+            mantissa = parseFloat(mantissa).toString();
+            const expStr = exponent.split('').map(ch => supMap[ch] !== undefined ? supMap[ch] : ch).join('');
+            return `${mantissa} × 10${expStr}`;
+        }
+
+        return num.toLocaleString('en-US', { maximumFractionDigits: 6 });
+    }
+
+    function runConversion() {
+        const cat = document.getElementById('categorySelect').value;
+        const val = parseFloat(document.getElementById('convertInput').value);
+        const from = document.getElementById('fromUnit').value;
+        const to = document.getElementById('toUnit').value;
+
+        if (isNaN(val)) {
+            document.getElementById('convertedOutput').innerText = "0";
+            return;
+        }
+
+        let result = 0;
+
+        if (cat === 'temperature') {
+            result = convertTemperature(val, from, to);
+        } else {
+            if(!unitsData[cat][from] || !unitsData[cat][to]) return;
+            const baseVal = val / unitsData[cat][from];
+            result = baseVal * unitsData[cat][to];
+        }
+
+        const formattedResult = formatConversionResult(result);
+        document.getElementById('convertedOutput').innerText = `${formattedResult} ${to}`;
+
+        // Log to the shared History panel too, but debounced — otherwise
+        // every keystroke in the amount field would add its own entry.
+        clearTimeout(conversionHistoryTimer);
+        conversionHistoryTimer = setTimeout(() => {
+            addHistory(`${val} ${from} →`, `${formattedResult} ${to}`, 'convert');
+        }, 700);
+    }
+
+    function convertTemperature(val, from, to) {
+        if (from === to) return val;
+        let c = val;
+        if (from === "Fahrenheit (°F)") c = (val - 32) * 5 / 9;
+        else if (from === "Kelvin (K)") c = val - 273.15;
+
+        if (to === "Celsius (°C)") return c;
+        if (to === "Fahrenheit (°F)") return (c * 9 / 5) + 32;
+        if (to === "Kelvin (K)") return c + 273.15;
+        return c;
+    }
+</script>
+
+</body>
+</html>
