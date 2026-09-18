@@ -1513,6 +1513,13 @@ function openCustomerRecords(){
   }
 }
 
+// Builds the Customer Record PDF directly with jsPDF text drawing instead
+// of html2canvas (screenshot-style capture of an off-screen HTML table).
+// html2canvas capturing a position:fixed element parked off-screen has
+// proven unreliable inside the Median webview once the table has many
+// rows — it can silently fail or produce a blank canvas, which is why the
+// button appeared to do nothing. Drawing text straight into the PDF has
+// no such dependency and is not a promise, so it can't ever hang.
 function exportCustomerRecordsPDF(){
   const history = getBillHistory();
   if (history === null){
@@ -1524,65 +1531,65 @@ function exportCustomerRecordsPDF(){
     return;
   }
 
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+  const pageWidth = 297, pageHeight = 210, marginX = 10;
+  const bottomLimit = pageHeight - 15;
+  let y = 18;
+
+  const cols = [
+    { label: 'Sl.No',           x: marginX,       w: 12 },
+    { label: 'Name',            x: marginX + 12,  w: 46 },
+    { label: 'Address',         x: marginX + 58,  w: 68 },
+    { label: 'Contact Number',  x: marginX + 126, w: 30 },
+    { label: 'Time',            x: marginX + 156, w: 44 },
+    { label: 'Bill Number',     x: marginX + 200, w: 30 },
+    { label: 'Total Amount',    x: marginX + 230, w: 40 }
+  ];
+
+  function drawHeader(){
+    pdf.setFontSize(15);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Mittu Hollsaller - Customer Record', pageWidth / 2, y, { align: 'center' });
+    y += 7;
+    pdf.setFontSize(9);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(`Total Bills: ${history.length}  |  Generated: ${formatNow()}`, pageWidth / 2, y, { align: 'center' });
+    y += 8;
+    pdf.setFontSize(10);
+    pdf.setFont(undefined, 'bold');
+    cols.forEach(c => pdf.text(c.label, c.x, y));
+    y += 2;
+    pdf.setLineWidth(0.3);
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 6;
+    pdf.setFont(undefined, 'normal');
+    pdf.setFontSize(9.5);
+  }
+
+  drawHeader();
+
   // history is already newest-first (saveBillToHistory uses unshift), which
   // matches "sabse naya top par, sabse purana sabse neeche" requirement.
-  let rowsHtml = '';
   history.forEach((rec, i) => {
-    const bg = i % 2 === 0 ? '#ffffff' : '#fff8ef';
-    const timeOnly = (rec.dateTime || '').includes(',') ? rec.dateTime.split(',')[1].trim() : (rec.dateTime || '-');
-    rowsHtml += `<tr style="background:${bg};">
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${i + 1}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custName || '-'}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.address || '-'}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custMobile || '-'}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${timeOnly}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.billNo || '-'}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">₹${(rec.total || 0).toFixed(2)}</td>
-    </tr>`;
-  });
-  document.getElementById('crBody').innerHTML = rowsHtml;
-  document.getElementById('crGeneratedOn').textContent = formatNow();
-
-  const capEl = document.getElementById('customerRecordCapture');
-  capEl.style.left = '0px';
-  capEl.style.top = '-9999px';
-
-  return html2canvas(capEl, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
-    capEl.style.left = '-9999px';
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
-    const pageWidth = 210, pageHeight = 297, margin = 8;
-    const imgWidth = pageWidth - margin * 2;
-    const pxPerMm = canvas.width / imgWidth;
-    const pageHeightPx = (pageHeight - margin * 2) * pxPerMm;
-
-    let renderedPx = 0;
-    let firstPage = true;
-    while (renderedPx < canvas.height){
-      const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
-      const sliceCanvas = document.createElement('canvas');
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceHeightPx;
-      sliceCanvas.getContext('2d').drawImage(
-        canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx
-      );
-      const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
-      if (!firstPage) pdf.addPage();
-      firstPage = false;
-      const sliceHeightMm = sliceHeightPx / pxPerMm;
-      pdf.addImage(sliceImgData, 'JPEG', margin, margin, imgWidth, sliceHeightMm, undefined, 'FAST');
-      renderedPx += sliceHeightPx;
+    if (y > bottomLimit){
+      pdf.addPage();
+      y = 18;
+      drawHeader();
     }
-
-    // Upload to Firebase Storage and open via a real hosted URL — this is
-    // what makes it actually open *inside* the app under Median/GoNative.
-    // NOTE: was openPdfInApp() (Firebase Storage upload) — but Firebase now
-    // requires the paid Blaze billing plan just to create a Storage bucket,
-    // so we skip the cloud step entirely and download straight to the
-    // device, exactly like the individual bill PDFs already do reliably
-    // inside the Median app.
-    downloadPDF(pdf, 'Mittu_Customer_Records.pdf');
+    const timeOnly = (rec.dateTime || '').includes(',') ? rec.dateTime.split(',')[1].trim() : (rec.dateTime || '-');
+    pdf.text(String(i + 1), cols[0].x, y);
+    pdf.text((rec.custName || '-').toString(), cols[1].x, y, { maxWidth: cols[1].w - 2 });
+    pdf.text((rec.address || '-').toString(), cols[2].x, y, { maxWidth: cols[2].w - 2 });
+    pdf.text((rec.custMobile || '-').toString(), cols[3].x, y);
+    pdf.text(timeOnly.toString(), cols[4].x, y);
+    pdf.text(String(rec.billNo || '-'), cols[5].x, y);
+    pdf.text('Rs. ' + (parseFloat(rec.total) || 0).toFixed(2), cols[6].x, y);
+    y += 7;
   });
+
+  const stamp = formatNow().replace(/[/,: ]/g, '-');
+  downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
 }
 
 // init
