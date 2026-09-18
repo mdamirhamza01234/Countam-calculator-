@@ -1496,10 +1496,21 @@ function renderSearchResults(){
 // ---------------- CUSTOMER RECORD PDF (all bills, one row each) ----------------
 function openCustomerRecords(){
   closeDrawer();
-  exportCustomerRecordsPDF().catch(e => {
-    console.error('Customer Record PDF failed:', e);
+  try {
+    const result = exportCustomerRecordsPDF();
+    if (result && typeof result.catch === 'function'){
+      result.catch(e => {
+        console.error('Customer Record PDF failed:', e);
+        alert('Customer Record PDF banane mein error aaya: ' + (e && e.message ? e.message : e));
+      });
+    }
+  } catch(e){
+    // Catches errors thrown BEFORE the html2canvas promise is even created
+    // (e.g. a missing element) — without this, such errors were silently
+    // swallowed by the browser and the button looked like it did nothing.
+    console.error('Customer Record PDF failed (sync):', e);
     alert('Customer Record PDF banane mein error aaya: ' + (e && e.message ? e.message : e));
-  });
+  }
 }
 
 function exportCustomerRecordsPDF(){
