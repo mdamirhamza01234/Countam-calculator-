@@ -1136,9 +1136,16 @@ function downloadPDF(pdf, filename){
       const blobUrl = URL.createObjectURL(blob);
       window.median.share.downloadFile({ url: blobUrl, open: true });
       return;
+    } else {
+      // TEMPORARY DIAGNOSTIC — tells us exactly why the native path was
+      // skipped, so we know what to fix. Safe to remove once this is
+      // confirmed working.
+      alert('DEBUG: window.median available? ' + (!!window.median) +
+            ' | window.median.share available? ' + (!!(window.median && window.median.share)));
     }
   } catch(e){
     console.warn('Median native download failed, falling back to data-URI download:', e);
+    alert('DEBUG: median.share.downloadFile threw an error: ' + (e && e.message ? e.message : e));
   }
   try {
     const dataUri = pdf.output('datauristring');
