@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Mittu Hollsaller - Bill Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+  // ---------------- FIREBASE (syncs the QR to the old-phone display) ----------------
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, update, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
+    authDomain: "mittu-billing.firebaseapp.com",
+    databaseURL: "https://mittu-billing-default-rtdb.firebaseio.com",
+    projectId: "mittu-billing",
+    storageBucket: "mittu-billing.firebasestorage.app",
+    messagingSenderId: "9778174452",
+    appId: "1:9778174452:web:99b40c599546a5560541a1"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const fbDb = getDatabase(fbApp);
+  const fbStorage = getStorage(fbApp);
+  const billRef = ref(fbDb, 'currentBill');
+
+  // Uploads a generated PDF (Blob) to Firebase Storage and returns a real,
+  // public HTTPS download URL. Median/GoNative cannot open blob: or data:
+  // URLs inside the app — it needs a real hosted URL to hand to its native
+  // PDF viewer — so this is required to make "open inside the app" work.
+  window.uploadPdfToFirebase = async function(pdfBlob, filename){
+    const path = 'bills/' + Date.now() + '_' + filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const sRef = storageRef(fbStorage, path);
+    await uploadBytes(sRef, pdfBlob, { contentType: 'application/pdf' });
+    return await getDownloadURL(sRef);
+  };
+
+  // Called when the QR is generated on this (billing) phone — pushes the QR
+  // data to Firebase so the old-phone display picks it up instantly.
+  window.pushBillToDisplay = function(billNo, amount, upiUrl){
+    return update(billRef, { billNo, amount, upiUrl, status: 'pending', ts: Date.now() })
+      .catch(err => console.warn('Firebase push failed (display may be offline):', err));
+  };
+
+  // Called when the shopkeeper confirms payment — flips the display to the
+  // Thank You animation without losing the billNo/amount already stored.
+  window.markDisplayPaid = function(){
+    return update(billRef, { status: 'paid', ts: Date.now() })
+      .catch(err => console.warn('Firebase update failed (display may be offline):', err));
+  };
+
+  // Clears the display entirely (back to the welcome screen).
+  window.clearDisplayBill = function(){
+    return remove(billRef)
+      .catch(err => console.warn('Firebase clear failed (display may be offline):', err));
+  };
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #eef1f5;
+    margin: 0;
+    padding: 20px;
+    padding-top: max(20px, env(safe-area-inset-top, 20px));
+    padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    color: #3b1f00;
+  }
+  .app-wrap {
+    max-width: 950px;
+    margin: 0 auto;
+  }
+  h1 {
+    text-align: center;
+    color: #3b1f00;
+    font-size: 22px;
+  }
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .panel h2 {
+    font-size: 16px;
+    margin-top: 0;
+    color: #a04e00;
+    border-bottom: 2px solid #ff9933;
+    padding-bottom: 6px;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px 20px;
+  }
+  label {
+    font-size: 13px;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+  }
+  input[type=text], input[type=number], input[type=date] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cbd3e1;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .field { margin-bottom: 10px; }
+
+  table#itemsTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  #itemsTable th {
+    background: #ffe4c2;
+    padding: 8px;
+    font-size: 13px;
+    text-align: left;
+  }
+  #itemsTable td {
+    padding: 6px;
+    border-bottom: 1px solid #eee;
+  }
+  #itemsTable td input { padding: 6px 8px; font-size: 13px; }
+  .amt-cell { text-align: right; font-weight: 600; padding-right: 10px; }
+  .rm-btn {
+    background: #e63946;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .add-row-btn {
+    margin-top: 10px;
+    background: #a04e00;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .generate-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(90deg,#ff9933,#ff6a00);
+    color: #3b1f00;
+    font-weight: 800;
+    font-size: 17px;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .generate-btn:hover { opacity: .92; }
+  .whatsapp-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(90deg,#25D366,#128C7E);
+    color: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+  .whatsapp-btn:hover { opacity: .92; }
+  .upi-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(90deg,#5f27cd,#a04e00);
+    color: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+  .upi-btn:hover { opacity: .92; }
+  .history-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(90deg,#2c3e50,#a04e00);
+    color: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+  .history-btn:hover { opacity: .92; }
+  .total-preview {
+    text-align: right;
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+
+  /* ---------- INVOICE TEMPLATE (hidden, used for PDF capture) ---------- */
+  #invoiceCapture {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 900px;
+    background: #ffc27d;
+    border: 3px solid #7a3b00;
+    padding: 16px;
+    font-family: Arial, sans-serif;
+    color: #3b1f00;
+  }
+  .inv-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .inv-doctitle {
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+  }
+  .inv-company-block {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .inv-company {
+    font-size: 30px;
+    font-weight: 900;
+    margin-bottom: 2px;
+  }
+  .inv-addr-line {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .inv-info-row {
+    display: flex;
+    border: 2px solid #7a3b00;
+  }
+  .inv-box {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .inv-billing { border-right: 2px solid #7a3b00; }
+  .inv-invinfo { flex: 0.8; }
+  .inv-box-title {
+    font-weight: 800;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .inv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 13px;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  table#invTable {
+    width: 100%;
+    border-collapse: collapse;
+    border: 2px solid #7a3b00;
+    border-top: none;
+    font-size: 13px;
+  }
+  #invTable th {
+    border: 1px solid #7a3b00;
+    padding: 7px;
+    font-size: 12px;
+  }
+  #invTable td {
+    border: 1px solid #a05a1c;
+    padding: 6px 8px;
+    height: 22px;
+  }
+  #invTable td.num { text-align: right; }
+  .inv-total-row td { font-weight: 800; }
+  .inv-words {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 2px;
+    border: 2px solid #7a3b00;
+    border-top: none;
+  }
+  .inv-bottom-row {
+    display: flex;
+    border: 2px solid #7a3b00;
+    border-top: none;
+  }
+  .inv-terms {
+    flex: 1.3;
+    border-right: 2px solid #7a3b00;
+    font-size: 11px;
+    padding: 10px 14px;
+    line-height: 1.6;
+  }
+  .inv-bank {
+    flex: 1;
+    font-size: 12px;
+    padding: 10px 14px;
+    line-height: 1.8;
+  }
+  .inv-sign {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 26px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+/* ---------------- APP TOP BAR + HAMBURGER DRAWER ---------------- */
+body { padding-top: 66px !important; }
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px;
+  padding-top: env(safe-area-inset-top, 0);
+  background: #ffffff;
+  display: flex; align-items: center; gap: 12px;
+  padding-left: 14px; padding-right: 14px;
+  z-index: 9500; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-bottom: 1px solid #eee;
+}
+.hamburger-btn {
+  background: transparent; border: none; color: #16325c;
+  font-size: 22px; width: 38px; height: 38px; border-radius: 8px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.hamburger-btn:active { background: rgba(22,50,92,0.08); }
+.topbar-title {
+  color: #16325c; font-size: 15.5px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1;
+}
+
+.drawer-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 10000;
+}
+.drawer-panel {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 78%; max-width: 300px;
+  background: #fff; transform: translateX(-100%);
+  transition: transform 0.28s ease;
+  box-shadow: 4px 0 18px rgba(0,0,0,0.25);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0);
+}
+.drawer-panel.open { transform: translateX(0); }
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 18px 14px; border-bottom: 1px solid #eee;
+  background: #ffffff;
+}
+.drawer-title { color: #16325c; font-size: 17px; font-weight: 700; }
+.drawer-close {
+  background: #f1f3f6; border: none; color: #16325c;
+  width: 30px; height: 30px; border-radius: 50%; font-size: 15px; cursor: pointer;
+}
+.drawer-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px; font-size: 15.5px; font-weight: 600; color: #3b1f00;
+  cursor: pointer; border-bottom: 1px solid #f5ede0;
+}
+.drawer-item:active { background: #fff3e6; }
+.drawer-icon { font-size: 19px; width: 24px; text-align: center; }
+
+#searchOverlay input#searchBillInput:focus { outline: 2px solid #ff9933; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button class="hamburger-btn" onclick="openDrawer()">☰</button>
+  <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()">
+  <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
+    <div class="drawer-header">
+      <span class="drawer-title">🛒 Mittu Hollsaller</span>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="drawer-item" onclick="startNewBill()">
+      <span class="drawer-icon">➕</span> New Bill Create
+    </div>
+    <div class="drawer-item" onclick="openSearchBill()">
+      <span class="drawer-icon">🔍</span> Search Bill
+    </div>
+    <div class="drawer-item" onclick="openCustomerRecords()">
+      <span class="drawer-icon">🧾</span> Customer Record PDF
+    </div>
+    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();">
+      <span class="drawer-icon">📋</span> Sabhi Bills Ka Record Dekhein
+    </div>
+  </div>
+</div>
+
+<!-- Search Bill overlay -->
+<div id="searchOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
+  <div style="max-width:600px; margin:0 auto; background:#fff; border-radius:10px; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2 style="margin:0; color:#a04e00; font-size:18px;">🔍 Search Bill</h2>
+      <button onclick="closeSearchBill()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
+    </div>
+    <input type="text" id="searchBillInput" placeholder="Naam, mobile number, address ya bill number likhein..." oninput="renderSearchResults()" style="width:100%; padding:10px 12px; border:1px solid #cbd3e1; border-radius:8px; font-size:14px; margin-bottom:14px;">
+    <div id="searchResultsList"></div>
+  </div>
+</div>
+
+<!-- Hidden capture template: full Customer Record PDF (all bills, one row each) -->
+<div id="customerRecordCapture" style="position:fixed; left:-9999px; top:0; width:760px; background:#ffffff; padding:24px; font-family:Arial, sans-serif; color:#1c1c1c;">
+  <div style="text-align:center; margin-bottom:4px;">
+    <div style="font-size:22px; font-weight:800; color:#a04e00;">🛒 Mittu Hollsaller</div>
+    <div style="font-size:14px; color:#666;">Customer Record — All Bills</div>
+    <div style="font-size:11px; color:#999; margin-top:4px;">Generated on: <span id="crGeneratedOn"></span></div>
+  </div>
+  <table style="width:100%; border-collapse:collapse; margin-top:14px; font-size:12.5px;">
+    <thead>
+      <tr style="background:#a04e00; color:#fff;">
+        <th style="padding:7px 8px; text-align:left;">Sl.No</th>
+        <th style="padding:7px 8px; text-align:left;">Name</th>
+        <th style="padding:7px 8px; text-align:left;">Contact Number</th>
+        <th style="padding:7px 8px; text-align:left;">Time</th>
+        <th style="padding:7px 8px; text-align:left;">Bill Number</th>
+        <th style="padding:7px 8px; text-align:right;">Total Amount</th>
+      </tr>
+    </thead>
+    <tbody id="crBody"></tbody>
+  </table>
+</div>
+
+<div class="app-wrap">
+  <div class="panel">
+    <h2>Customer &amp; Bill Details</h2>
+    <div class="grid2">
+      <div class="field">
+        <label>S. No. (Bill No.)</label>
+        <input type="text" id="sno" value="1001" readonly style="background:#fff3e6; font-weight:700; color:#a04e00;">
+      </div>
+      <div class="field">
+        <label>Date &amp; Time (Auto — Live)</label>
+        <input type="text" id="billDateTime" readonly style="background:#fff3e6; font-weight:700; color:#a04e00;">
+      </div>
+      <div class="field">
+        <label>Customer Name</label>
+        <input type="text" id="custName" placeholder="Customer ka naam">
+      </div>
+      <div class="field">
+        <label>Customer Mobile Number (WhatsApp)</label>
+        <input type="tel" id="custMobile" placeholder="10-digit mobile number" maxlength="10">
+      </div>
+      <div class="field">
+        <label>Customer Address</label>
+        <input type="text" id="custAddr" placeholder="Customer ka address">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Items / Particulars (Saman ka naam aur price)</h2>
+    <table id="itemsTable">
+      <thead>
+        <tr>
+          <th style="width:6%">S.No</th>
+          <th>Item Description</th>
+          <th style="width:12%">Qty</th>
+          <th style="width:16%">List Price</th>
+          <th style="width:16%">Amount</th>
+          <th style="width:8%"></th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody"></tbody>
+    </table>
+    <button class="add-row-btn" onclick="addRow()">+ Row Add Karein</button>
+    <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
+  </div>
+
+  <button class="upi-btn" onclick="generateUPIQR()">💳 UPI Payment QR Generate Karein (Full Screen)</button>
+
+  <button class="whatsapp-btn" onclick="sendWhatsApp()">📱 Bill PDF WhatsApp Par Bhejein</button>
+
+  <button class="generate-btn" onclick="generateBill()">📄 GENERATE BILL (PDF Download)</button>
+</div>
+
+<!-- Bill history overlay -->
+<div id="historyOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
+  <div style="max-width:600px; margin:0 auto; background:#fff; border-radius:10px; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2 style="margin:0; color:#a04e00; font-size:18px;">📋 Bill History</h2>
+      <button onclick="closeBillHistory()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
+    </div>
+
+    <div style="background:#fff8e6; border:1px solid #f2d98a; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:#7a5a00;">
+      ⚠️ Agar app/browser ka data kabhi clear ho jaye to yahan ki list khali dikh sakti hai. Isliye time-time par <b>"Backup Save"</b> zaroor dabate rahein — wo ek file phone ke Downloads mein save kar deta hai jo hamesha surakshit rehti hai, aur usi se <b>"Backup Load"</b> se history wapas la sakte hain.
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px;">
+      <button class="add-row-btn" style="flex:1; margin-top:0;" onclick="backupHistoryToFile(false)">💾 Backup Save Karein</button>
+      <button class="add-row-btn" style="flex:1; margin-top:0; background:#1a7a3e;" onclick="triggerRestoreFile()">📂 Backup Load Karein</button>
+    </div>
+    <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;" onchange="restoreHistoryFromFile(event)">
+
+    <div id="historySelectToolbar" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#eef1f5; border-radius:8px; padding:8px 10px; margin-bottom:10px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#a04e00;">
+        <input type="checkbox" id="historySelectAllCheckbox" onclick="toggleSelectAllHistory()" style="width:18px; height:18px;">
+        Sab Select Karein
+      </label>
+      <div style="display:flex; gap:6px;">
+        <button id="historyDeleteSelectedBtn" onclick="deleteSelectedHistory()" style="background:#e63946; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">🗑 Delete Selected (0)</button>
+        <button onclick="cancelHistorySelection()" style="background:#777; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+
+    <div id="historyList"></div>
+    <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()">🗑 Saara History Delete Karein</button>
+  </div>
+</div>
+
+<!-- Full-screen QR overlay for easy scanning -->
+<div id="qrFullscreen" style="display:none; position:fixed; inset:0; background:#3b1f00; z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding:20px; padding-top:max(50px, env(safe-area-inset-top, 50px));">
+  <button onclick="closeQRFullscreen()" style="position:absolute; top:18px; right:18px; background:#e63946; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">✕</button>
+
+  <div style="text-align:center; margin-bottom:6px;">
+    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">MITTU HOLLSALLER</div>
+    <div style="color:#fff; font-size:14px;">Scan &amp; Pay via any UPI App</div>
+  </div>
+
+  <div id="qrcodeDivFull" style="position:relative; background:#fff; padding:16px; border-radius:16px; max-width:90vw; box-sizing:border-box; display:flex; align-items:center; justify-content:center; margin-top:10px;"></div>
+
+  <div style="text-align:center; margin-top:18px;">
+    <p style="color:#ffd54f; font-size:26px; font-weight:800; margin:0;">₹ <span id="upiAmountDisplayFull">0.00</span></p>
+    <p style="color:#fff; font-size:15px; font-weight:600; margin:4px 0 0 0;" id="upiCustNameDisplay"></p>
+    <p style="color:#e6d5c2; font-size:13px; margin:2px 0 0 0;">UPI ID: 7303714309@axl</p>
+  </div>
+
+  <button class="add-row-btn" onclick="downloadQR()" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
+  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:340px; margin-top:14px;">✅ Payment Mil Gaya - Bill WhatsApp Par Bhejein</button>
+</div>
+
+<!-- Hidden invoice template used for PDF capture -->
+<div id="invoiceCapture">
+  <div class="inv-topbar">
+    <span>Page No. 1 of 1</span>
+    <span class="inv-doctitle">INVOICE</span>
+    <span>Original Copy</span>
+  </div>
+
+  <div class="inv-company-block">
+    <div class="inv-company">Mittu Hollsaller</div>
+    <div class="inv-addr-line">Rangra, Bhagalpur, Bihar, 853204, India.</div>
+    <div class="inv-addr-line">Mobile: +91 9540125307</div>
+  </div>
+
+  <div class="inv-info-row">
+    <div class="inv-box inv-billing">
+      <div class="inv-box-title">Billing Details</div>
+      <div><b id="p_cust"></b></div>
+      <div id="p_addr"></div>
+      <div id="p_mobile"></div>
+    </div>
+    <div class="inv-box inv-invinfo">
+      <div class="inv-row"><span>Invoice Number</span><span id="p_sno" style="color:#7a1a00;"></span></div>
+      <div class="inv-row"><span>Invoice Date</span><span id="p_date"></span></div>
+      <div class="inv-row"><span>Time</span><span id="p_time"></span></div>
+    </div>
+  </div>
+
+  <table id="invTable">
+    <thead>
+      <tr><th style="width:8%">Sr</th><th>Item Description</th><th style="width:13%">Qty</th><th style="width:20%">List Price (₹)</th><th style="width:20%">Amount (₹)</th></tr>
+    </thead>
+    <tbody id="p_itemsBody"></tbody>
+    <tr class="inv-total-row"><td colspan="4" style="text-align:right;">Total</td><td class="num" id="p_total"></td></tr>
+  </table>
+
+  <div class="inv-words">Rs. <span id="p_totalWords"></span></div>
+
+  <div class="inv-bottom-row">
+    <div class="inv-box inv-terms">
+      <div class="inv-box-title">Terms and Conditions</div>
+      E &amp; O.E<br>
+      1. Goods once sold will not be taken back.<br>
+      2. Interest @ 18% p.a. will be charged if the payment is not made within the stipulated time.<br>
+      3. Subject to 'Bhagalpur' Jurisdiction only.
+    </div>
+    <div class="inv-box inv-bank">
+      <div class="inv-box-title">Account Details</div>
+      <div>Account Number: </div>
+      <div>Bank: </div>
+      <div>IFSC: </div>
+      <div>Branch: </div>
+      <div>Name: </div>
+    </div>
+  </div>
+
+  <div class="inv-sign">
+    <div>For Mittu Hollsaller</div>
+    <div>________________________<br>Signature</div>
+  </div>
+</div>
+
+<script>
+let rowCount = 0;
+
+function addRow(){
+  rowCount++;
+  const tbody = document.getElementById('itemsBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="text-align:center;">${rowCount}</td>
+    <td><input type="text" class="itemName" placeholder="Saman ka naam" enterkeyhint="next"></td>
+    <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
+    <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
+    <td class="amt-cell"><span class="itemAmt">0.00</span></td>
+    <td><button class="rm-btn" onclick="removeRow(this)">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+  const nameInput = tr.querySelector('.itemName');
+  const qtyInput = tr.querySelector('.itemQty');
+  const rateInput = tr.querySelector('.itemRate');
+
+  qtyInput.addEventListener('input', calcTotal);
+  rateInput.addEventListener('input', calcTotal);
+
+  // Auto-select existing value on focus so the default (1 or 0) disappears
+  // the moment the user starts typing — whether they tapped in or arrived
+  // here via the keyboard's "next" (➡️) button.
+  qtyInput.addEventListener('focus', function(){ this.select(); });
+  rateInput.addEventListener('focus', function(){ this.select(); });
+
+  // Keyboard "next" (➡️) button navigation: Naam -> Qty -> Rate -> next row's Naam
+  nameInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'name'));
+  qtyInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'qty'));
+  rateInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'rate'));
+
+  calcTotal();
+}
+
+function handleFieldEnter(e, type){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const tr = e.target.closest('tr');
+  if(type === 'name'){
+    const qtyInput = tr.querySelector('.itemQty');
+    qtyInput.focus();
+    qtyInput.select();
+  } else if(type === 'qty'){
+    const rateInput = tr.querySelector('.itemRate');
+    rateInput.focus();
+    rateInput.select();
+  } else if(type === 'rate'){
+    const nextTr = tr.nextElementSibling;
+    if(nextTr){
+      nextTr.querySelector('.itemName').focus();
+    } else {
+      addRow();
+      const rows = document.querySelectorAll('#itemsBody tr');
+      rows[rows.length-1].querySelector('.itemName').focus();
+    }
+  }
+}
+
+function removeRow(btn){
+  btn.closest('tr').remove();
+  renumberRows();
+  calcTotal();
+}
+
+function renumberRows(){
+  const rows = document.querySelectorAll('#itemsBody tr');
+  rowCount = rows.length;
+  rows.forEach((r,i) => r.children[0].textContent = i+1);
+}
+
+function calcTotal(){
+  let total = 0;
+  document.querySelectorAll('#itemsBody tr').forEach(tr=>{
+    const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+    const amt = qty * rate;
+    tr.querySelector('.itemAmt').textContent = amt.toFixed(2);
+    total += amt;
+  });
+  document.getElementById('totalPreview').textContent = total.toFixed(2);
+  return total;
+}
+
+// ---------------- AMOUNT IN WORDS (Indian numbering system) ----------------
+function numberToWordsIndian(num){
+  num = Math.floor(num);
+  if(num === 0) return 'Zero';
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+
+  function twoDigits(n){
+    if(n < 20) return a[n];
+    return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '');
+  }
+  function threeDigits(n){
+    let str = '';
+    if(n >= 100){
+      str += a[Math.floor(n/100)] + ' Hundred';
+      n = n % 100;
+      if(n) str += ' ';
+    }
+    if(n) str += twoDigits(n);
+    return str;
+  }
+
+  let result = '';
+  const crore = Math.floor(num / 10000000); num %= 10000000;
+  const lakh = Math.floor(num / 100000); num %= 100000;
+  const thousand = Math.floor(num / 1000); num %= 1000;
+  const hundred = num;
+
+  if(crore) result += threeDigits(crore) + ' Crore ';
+  if(lakh) result += threeDigits(lakh) + ' Lakh ';
+  if(thousand) result += threeDigits(thousand) + ' Thousand ';
+  if(hundred) result += threeDigits(hundred);
+
+  return result.trim();
+}
+
+function amountInWords(total){
+  const rupees = Math.floor(total);
+  const paise = Math.round((total - rupees) * 100);
+  let words = numberToWordsIndian(rupees) + ' Rupees';
+  if(paise > 0){
+    words += ' and ' + numberToWordsIndian(paise) + ' Paise';
+  }
+  return words + ' only';
+}
+
+function generateBill(){
+  // Fill invoice template with entered data
+  const snoInput = document.getElementById('sno');
+  const currentSno = snoInput.value;
+  document.getElementById('p_sno').textContent = ': ' + currentSno;
+  // Live current date & time is stamped automatically at the moment of generation
+  const nowParts = formatNowParts();
+  document.getElementById('p_date').textContent = ': ' + nowParts.date;
+  document.getElementById('p_time').textContent = ': ' + nowParts.time;
+  document.getElementById('p_cust').textContent = document.getElementById('custName').value || 'Customer';
+  document.getElementById('p_addr').textContent = document.getElementById('custAddr').value;
+  document.getElementById('p_mobile').textContent = document.getElementById('custMobile').value ? ('Mobile: ' + document.getElementById('custMobile').value) : '';
+
+  const pBody = document.getElementById('p_itemsBody');
+  pBody.innerHTML = '';
+  let total = 0;
+  const itemList = [];
+  document.querySelectorAll('#itemsBody tr').forEach((tr, i)=>{
+    const name = tr.querySelector('.itemName').value || '-';
+    const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+    const amt = qty * rate;
+    total += amt;
+    itemList.push({ name, qty, rate, amt });
+    const row = document.createElement('tr');
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${name}</td><td class="num">${qty}</td><td class="num">₹${rate.toFixed(2)}</td><td class="num">₹${amt.toFixed(2)}</td>`;
+    pBody.appendChild(row);
+  });
+  // pad empty rows so the printed invoice fills a full A4-looking page
+  // (like a real full-page bill) instead of leaving a short box with lots
+  // of blank white space above/below it in the PDF.
+  const minRows = 28;
+  const existing = document.querySelectorAll('#itemsBody tr').length;
+  for(let i=existing; i<minRows; i++){
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+    pBody.appendChild(row);
+  }
+  document.getElementById('p_total').textContent = '₹' + total.toFixed(2);
+  document.getElementById('p_totalWords').textContent = amountInWords(total);
+
+  // Capture and export as PDF
+  const el = document.getElementById('invoiceCapture');
+  el.style.left = '0px';
+  el.style.top = '-9999px';
+
+  window.lastGeneratedBillNo = currentSno;
+  window.lastGeneratedTotal = total;
+  window.lastGeneratedCustName = document.getElementById('custName').value;
+  window.lastGeneratedItems = itemList;
+
+  // Save this bill into local history (works once opened in a real browser/APK;
+  // Claude's own preview sandbox blocks storage, so history won't persist there)
+  saveBillToHistory({
+    billNo: currentSno,
+    dateTime: `${nowParts.date}, ${nowParts.time}`,
+    custName: document.getElementById('custName').value,
+    custMobile: document.getElementById('custMobile').value,
+    address: document.getElementById('custAddr').value,
+    items: itemList,
+    total: total
+  });
+
+  return html2canvas(el, {scale: 1.5, backgroundColor: '#ffc27d'}).then(canvas => {
+    el.style.left = '-9999px';
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+    const pageWidth = 210;
+    const pageHeight = 297;
+    // Fill the whole page with the same saffron paper color first, so the
+    // margin around the invoice matches the bill's color instead of showing
+    // plain white — while still leaving a proper margin around the bill.
+    pdf.setFillColor(255, 194, 125);
+    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+    const margin = 8;
+    const imgWidth = pageWidth - margin*2;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`);
+
+    // Auto-generate a fresh random bill number for the next bill
+    generateRandomBillNo();
+  });
+}
+
+// ---------------- BILL HISTORY (localStorage) ----------------
+const BILL_HISTORY_KEY = 'mittu_bill_history';
+
+function saveBillToHistory(record){
+  try {
+    const existing = JSON.parse(localStorage.getItem(BILL_HISTORY_KEY) || '[]');
+    existing.unshift(record); // newest first
+    localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(existing));
+  } catch(e){
+    console.warn('Bill history storage not available in this environment:', e);
+  }
+}
+
+function getBillHistory(){
+  try {
+    return JSON.parse(localStorage.getItem(BILL_HISTORY_KEY) || '[]');
+  } catch(e){
+    return null; // storage blocked (e.g. Claude preview sandbox)
+  }
+}
+
+let historySelectionMode = false;
+let historySelectedSet = new Set();
+let historyLongPressTimer = null;
+let historySuppressClick = false;
+
+function openBillHistory(){
+  historySelectionMode = false;
+  historySelectedSet.clear();
+  renderBillHistory();
+  document.getElementById('historyOverlay').style.display = 'flex';
+}
+
+function renderBillHistory(){
+  const history = getBillHistory();
+  const listEl = document.getElementById('historyList');
+  const toolbar = document.getElementById('historySelectToolbar');
+  listEl.innerHTML = '';
+
+  if (history === null){
+    toolbar.style.display = 'none';
+    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Is environment mein storage available nahi hai (Claude preview sandbox). Ye feature file ko real browser ya APK mein khol kar hi kaam karega.</p>';
+    return;
+  }
+  if (history.length === 0){
+    toolbar.style.display = 'none';
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Abhi tak koi bill generate nahi hua hai.</p>';
+    return;
+  }
+
+  toolbar.style.display = historySelectionMode ? 'flex' : 'none';
+  document.getElementById('historySelectAllCheckbox').checked = historySelectedSet.size === history.length;
+  document.getElementById('historyDeleteSelectedBtn').textContent = `🗑 Delete Selected (${historySelectedSet.size})`;
+
+  history.forEach((rec, idx) => {
+    const card = document.createElement('div');
+    const isSelected = historySelectedSet.has(idx);
+    card.style.cssText = `border:1px solid ${isSelected ? '#a04e00' : '#dde3ee'}; border-radius:8px; padding:10px 12px; margin-bottom:10px; background:${isSelected ? '#ffe9d1' : '#fafcff'}; display:flex; gap:10px; align-items:flex-start; cursor:pointer;`;
+    const itemsSummary = (rec.items || []).map(it => `${it.name} (₹${it.amt.toFixed(2)})`).join(', ');
+
+    card.innerHTML = `
+      ${historySelectionMode ? `<input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-top:4px; width:20px; height:20px; flex-shrink:0; pointer-events:none;">` : ''}
+      <div style="flex:1;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; font-weight:700; color:#a04e00;">
+          <span>Bill No. ${rec.billNo}</span>
+          <span style="display:flex; align-items:center; gap:8px;">
+            <span>₹${rec.total.toFixed(2)}</span>
+            ${!historySelectionMode ? `<button data-role="delete" style="background:#e63946; color:#fff; border:none; border-radius:6px; width:26px; height:26px; font-size:13px; cursor:pointer; flex-shrink:0;">🗑</button>` : ''}
+          </span>
+        </div>
+        <div style="font-size:12px; color:#555; margin:4px 0;">${rec.dateTime}</div>
+        <div style="font-size:13px; font-weight:600;">${rec.custName || 'Customer'} ${rec.custMobile ? '('+rec.custMobile+')' : ''}</div>
+        <div style="font-size:12px; color:#777; margin:4px 0;">${itemsSummary}</div>
+        <div style="font-size:11px; color:${historySelectionMode ? '#a04e00' : '#1a7a3e'}; margin-top:6px;">${historySelectionMode ? '☑️ Select karne ke liye tap karein' : '👆 Tap karein - PDF khulega · Delete ke liye dabakar rakhein (hold)'}</div>
+      </div>
+    `;
+
+    const delBtn = card.querySelector('[data-role="delete"]');
+    if(delBtn){
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteHistoryRecord(idx);
+      });
+    }
+
+    // Long-press (hold) detection — works for both touch and mouse
+    const startPress = () => {
+      historyLongPressTimer = setTimeout(() => {
+        historyLongPressTimer = null;
+        historySuppressClick = true;
+        historySelectionMode = true;
+        historySelectedSet.add(idx);
+        renderBillHistory();
+      }, 500);
+    };
+    const cancelPress = () => {
+      if(historyLongPressTimer){ clearTimeout(historyLongPressTimer); historyLongPressTimer = null; }
+    };
+    card.addEventListener('touchstart', startPress, {passive:true});
+    card.addEventListener('touchend', cancelPress);
+    card.addEventListener('touchmove', cancelPress);
+    card.addEventListener('mousedown', startPress);
+    card.addEventListener('mouseup', cancelPress);
+    card.addEventListener('mouseleave', cancelPress);
+
+    card.addEventListener('click', () => {
+      if(historySuppressClick){ historySuppressClick = false; return; }
+      if(historySelectionMode){
+        if(historySelectedSet.has(idx)) historySelectedSet.delete(idx);
+        else historySelectedSet.add(idx);
+        renderBillHistory();
+      } else {
+        redownloadBill(idx);
+      }
+    });
+
+    listEl.appendChild(card);
+  });
+}
+
+function toggleSelectAllHistory(){
+  const history = getBillHistory() || [];
+  const checkbox = document.getElementById('historySelectAllCheckbox');
+  if(checkbox.checked){
+    historySelectedSet = new Set(history.map((_, i) => i));
+  } else {
+    historySelectedSet.clear();
+  }
+  renderBillHistory();
+}
+
+function deleteSelectedHistory(){
+  if(historySelectedSet.size === 0){
+    alert('Pehle kam se kam ek bill select karein.');
+    return;
+  }
+  if(!confirm(`${historySelectedSet.size} bill(s) delete karein? Ye wapas nahi aayega.`)) return;
+  let history = getBillHistory() || [];
+  history = history.filter((_, idx) => !historySelectedSet.has(idx));
+  try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(history)); } catch(e){}
+  historySelectionMode = false;
+  historySelectedSet.clear();
+  renderBillHistory();
+}
+
+function cancelHistorySelection(){
+  historySelectionMode = false;
+  historySelectedSet.clear();
+  renderBillHistory();
+}
+
+function closeBillHistory(){
+  document.getElementById('historyOverlay').style.display = 'none';
+}
+
+function clearBillHistory(){
+  if(confirm('Kya aap sach mein saara bill history delete karna chahte hain? Ye wapas nahi aayega.')){
+    try { localStorage.removeItem(BILL_HISTORY_KEY); } catch(e){}
+    openBillHistory();
+  }
+}
+
+function deleteHistoryRecord(idx){
+  const history = getBillHistory();
+  if(!history || !history[idx]) return;
+  if(confirm(`Bill No. ${history[idx].billNo} ko history se delete karein?`)){
+    history.splice(idx, 1);
+    try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(history)); } catch(e){}
+    openBillHistory();
+  }
+}
+
+// ---------------- PERMANENT FILE BACKUP (survives app/browser data clearing) ----------------
+// Browser storage (localStorage) can get wiped when an app's data is cleared,
+// when a WebView session ends, or when Chrome's site data is reset. A real
+// downloaded file in the phone's Downloads folder does NOT get touched by any
+// of that, so this is the reliable way to keep bills safe long-term.
+
+function backupHistoryToFile(silent){
+  const history = getBillHistory();
+  if(history === null){
+    if(!silent) alert('Is environment mein storage available nahi hai, isliye backup ke liye koi data nahi hai.');
+    return;
+  }
+  if(history.length === 0){
+    if(!silent) alert('Abhi tak koi bill generate nahi hua hai, backup karne ke liye kuch nahi hai.');
+    return;
+  }
+  const stamp = formatNow().replace(/[/,: ]/g, '-');
+  downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
+  if(!silent){
+    alert('Backup file aapke phone ke Downloads folder mein save ho gayi hai. Isse hamesha sambhal kar rakhein - isi file se aap purani history wapas la sakte hain.');
+  }
+}
+
+function triggerRestoreFile(){
+  document.getElementById('restoreFileInput').click();
+}
+
+function restoreHistoryFromFile(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const imported = JSON.parse(e.target.result);
+      if(!Array.isArray(imported)) throw new Error('Invalid file');
+      const existing = getBillHistory() || [];
+      // Merge, avoiding exact duplicate bill numbers + dateTime
+      const existingKeys = new Set(existing.map(r => r.billNo + '|' + r.dateTime));
+      const merged = [...existing];
+      imported.forEach(rec => {
+        const key = rec.billNo + '|' + rec.dateTime;
+        if(!existingKeys.has(key)){
+          merged.push(rec);
+          existingKeys.add(key);
+        }
+      });
+      // newest first
+      merged.sort((a,b) => (b.dateTime || '').localeCompare(a.dateTime || ''));
+      try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(merged)); } catch(e2){}
+      alert(`${imported.length} bills backup file se load ho gaye. Total ab ${merged.length} bills dikh rahe hain.`);
+      openBillHistory();
+    } catch(err){
+      alert('Ye file sahi format mein nahi hai. Kripya wahi backup file select karein jo isi app se pehle save ki thi.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function redownloadBill(idx){
+  const history = getBillHistory();
+  if(!history || !history[idx]) return;
+  const rec = history[idx];
+
+  document.getElementById('p_sno').textContent = ': ' + rec.billNo;
+  const [d, t] = rec.dateTime.split(', ');
+  document.getElementById('p_date').textContent = ': ' + d;
+  document.getElementById('p_time').textContent = ': ' + t;
+  document.getElementById('p_cust').textContent = rec.custName || 'Customer';
+  document.getElementById('p_addr').textContent = rec.address;
+  document.getElementById('p_mobile').textContent = rec.custMobile ? ('Mobile: ' + rec.custMobile) : '';
+
+  const pBody = document.getElementById('p_itemsBody');
+  pBody.innerHTML = '';
+  (rec.items || []).forEach((it, i) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">₹${it.rate.toFixed(2)}</td><td class="num">₹${it.amt.toFixed(2)}</td>`;
+    pBody.appendChild(row);
+  });
+  const minRows = 28;
+  for(let i=(rec.items||[]).length; i<minRows; i++){
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
+    pBody.appendChild(row);
+  }
+  document.getElementById('p_total').textContent = '₹' + rec.total.toFixed(2);
+  document.getElementById('p_totalWords').textContent = amountInWords(rec.total);
+
+  const el = document.getElementById('invoiceCapture');
+  el.style.left = '0px';
+  el.style.top = '-9999px';
+
+  html2canvas(el, {scale: 1.5, backgroundColor: '#ffc27d'}).then(canvas => {
+    el.style.left = '-9999px';
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+    const pageWidth = 210;
+    const pageHeight = 297;
+    pdf.setFillColor(255, 194, 125);
+    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+    const margin = 8;
+    const imgWidth = pageWidth - margin*2;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+    openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
+  });
+}
+
+// ---------------- WEBVIEW-FRIENDLY DOWNLOAD HELPERS ----------------
+// Many simple "HTML to APK" wrapper tools don't implement download handling
+// for blob: URLs (which jsPDF's .save() and Blob-based downloads use by
+// default). Using a data: URI directly on the <a download> link works more
+// reliably across basic WebViews. This is a best-effort fix — some very
+// restrictive WebView wrappers may still block ANY programmatic download,
+// in which case a proper native/Capacitor rebuild is the only real fix.
+
+function downloadPDF(pdf, filename){
+  try {
+    const dataUri = pdf.output('datauristring');
+    const link = document.createElement('a');
+    link.href = dataUri;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch(e){
+    console.warn('data-URI download failed, falling back to default save():', e);
+    pdf.save(filename);
+  }
+}
+
+// Opens a PDF *inside the app* instead of just downloading it. This only
+// works with a real hosted https:// URL — Median/GoNative cannot open
+// blob:/data: URLs in-app (their docs confirm this: "URLs need to be
+// publicly available"). So we upload the PDF to Firebase Storage first to
+// get a real URL, then either hand it to Median's native PDF viewer via
+// the JS Bridge (median.share.downloadFile with open:true), or — outside
+// the wrapped app — just navigate to it, which shows it in the browser's
+// own PDF viewer. If the upload fails (e.g. no internet, or Storage not
+// set up yet), it falls back to a normal local download so it's never
+// completely broken.
+async function openPdfInApp(pdf, filename){
+  try {
+    if (window.uploadPdfToFirebase){
+      const blob = pdf.output('blob');
+      const url = await window.uploadPdfToFirebase(blob, filename);
+      const bridgeDownload = (window.median && window.median.share && window.median.share.downloadFile) ||
+                              (window.gonative && window.gonative.share && window.gonative.share.downloadFile);
+      if (bridgeDownload){
+        bridgeDownload({ url: url, open: true });
+        return;
+      }
+      window.location.href = url;
+      return;
+    }
+  } catch(e){
+    console.warn('Cloud PDF open failed, falling back to local download:', e);
+  }
+  downloadPDF(pdf, filename);
+}
+
+function downloadTextFile(content, filename, mimeType){
+  try {
+    const dataUri = `data:${mimeType};charset=utf-8,${encodeURIComponent(content)}`;
+    const link = document.createElement('a');
+    link.href = dataUri;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch(e){
+    console.warn('data-URI download failed:', e);
+  }
+}
+
+function formatNow(){
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  let h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2,'0');
+  const sec = String(d.getSeconds()).padStart(2,'0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return `${dd}/${mm}/${yy}, ${h}:${min}:${sec} ${ampm}`;
+}
+
+function formatNowParts(){
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  let h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2,'0');
+  const sec = String(d.getSeconds()).padStart(2,'0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return {
+    date: `${dd}/${mm}/${yy}`,
+    time: `${h}:${min}:${sec} ${ampm}`
+  };
+}
+
+function updateLiveClock(){
+  document.getElementById('billDateTime').value = formatNow();
+}
+
+function generateRandomBillNo(){
+  // Random 4-digit bill number so user never has to type it
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  document.getElementById('sno').value = rand;
+}
+
+function toRoman(num){
+  const romanMap = [
+    [1000,'m'],[900,'cm'],[500,'d'],[400,'cd'],[100,'c'],[90,'xc'],
+    [50,'l'],[40,'xl'],[10,'x'],[9,'ix'],[5,'v'],[4,'iv'],[1,'i']
+  ];
+  let result = '';
+  for (const [val, sym] of romanMap){
+    while(num >= val){ result += sym; num -= val; }
+  }
+  return result;
+}
+
+function buildBillMessage(){
+  const custName = window.lastGeneratedCustName || 'Customer';
+  const billNo = window.lastGeneratedBillNo || '';
+  const total = (window.lastGeneratedTotal || 0).toFixed(2);
+  const items = window.lastGeneratedItems || [];
+
+  // Note: WhatsApp/Android auto-highlights a "₹" glued directly to a number
+  // (like ₹330.00) as a tappable amount. Adding a space after ₹ breaks that
+  // pattern so item lines stay plain — while the Total is left glued on
+  // purpose so it's the one that stands out.
+
+  // ---- English section ----
+  let en = '';
+  en += `Namaste ${custName},\n`;
+  en += `Mittu Hollsaller - Bill No. ${billNo}\n`;
+  items.forEach((it, idx) => {
+    en += `${toRoman(idx+1)}. ${it.name} (Qty ${it.qty}, Rate ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
+  });
+  en += `*Total Amount: ₹${total}*\n`;
+  en += `Thank you!`;
+
+  // ---- Hindi section ----
+  let hi = '';
+  hi += `नमस्ते ${custName},\n`;
+  hi += `मित्तू होलसेलर - बिल नं. ${billNo}\n`;
+  items.forEach((it, idx) => {
+    hi += `${toRoman(idx+1)}. ${it.name} (मात्रा ${it.qty}, दर ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
+  });
+  hi += `*कुल राशि: ₹${total}*\n`;
+  hi += `Thank you!`;
+
+  return `${en}\n\n${hi}`;
+}
+
+function sendWhatsApp(){
+  const mobile = document.getElementById('custMobile').value.trim();
+  if(!/^\d{10}$/.test(mobile)){
+    alert('Kripya sahi 10-digit customer mobile number dalein.');
+    return;
+  }
+  // Open the tab immediately (synchronously, inside the click handler) so
+  // Chrome's popup blocker treats it as a direct result of the user's tap.
+  // We fill in the actual WhatsApp URL a moment later once the PDF is ready.
+  const waWindow = window.open('', '_blank');
+  generateBill().then(()=>{
+    const message = buildBillMessage();
+    const waUrl = `https://wa.me/91${mobile}?text=${encodeURIComponent(message)}`;
+    if (waWindow) { waWindow.location.href = waUrl; }
+    else { window.open(waUrl, '_blank'); }
+  });
+}
+
+function buildUpiUrl(total, billNo){
+  const upiId = '7303714309@axl';
+  const payeeName = 'MITTU HOLLSALLER';
+  return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill No '+billNo)}`;
+}
+
+// QR button: ONLY generates and shows the QR full-screen for scanning.
+// It does NOT touch the bill or WhatsApp — that only happens when the
+// shopkeeper manually confirms payment was received (see confirmPaymentAndSend).
+function generateUPIQR(){
+  const total = calcTotal();
+  if(total <= 0){
+    alert('Pehle items add karke bill amount set karein.');
+    return;
+  }
+  const billNo = document.getElementById('sno').value || '';
+  const custName = document.getElementById('custName').value || '';
+  const upiUrl = buildUpiUrl(total, billNo);
+
+  // Send this QR to the old-phone customer display in real time.
+  if (window.pushBillToDisplay) window.pushBillToDisplay(billNo, total.toFixed(2), upiUrl);
+
+  // Size the QR to comfortably fit the screen (with room for the white
+  // padding around it) instead of a fixed size that can overflow on
+  // smaller phones.
+  const qrSize = Math.max(180, Math.min(window.innerWidth - 90, 300));
+
+  const qrDivFull = document.getElementById('qrcodeDivFull');
+  qrDivFull.innerHTML = '';
+  new QRCode(qrDivFull, {
+    text: upiUrl,
+    width: qrSize,
+    height: qrSize,
+    colorDark: '#7a1a00',
+    colorLight: '#ffffff',
+    // High error-correction (up to ~30% of the code can be obscured and it
+    // still scans fine) — this is what lets us safely place a logo badge
+    // in the center without breaking the QR.
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  // Center "MH" logo badge on top of the QR, for a professional look.
+  const logoSize = Math.round(qrSize * 0.26);
+  const logo = document.createElement('div');
+  logo.style.cssText = `
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:${logoSize}px; height:${logoSize}px; background:#fff;
+    border:3px solid #7a1a00; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.25);
+  `;
+  logo.innerHTML = `<span style="font-weight:900; font-style:italic; color:#7a1a00; font-size:${Math.round(logoSize*0.28)}px; letter-spacing:0.5px;">MH</span>`;
+  qrDivFull.appendChild(logo);
+
+  document.getElementById('upiAmountDisplayFull').textContent = total.toFixed(2);
+  document.getElementById('upiCustNameDisplay').textContent = custName ? `Customer: ${custName}` : '';
+  document.getElementById('qrFullscreen').style.display = 'flex';
+}
+
+// Called when the shopkeeper taps "Payment Received" after confirming the
+// UPI payment came in (checked via their own bank/UPI app notification —
+// a webpage cannot detect this automatically since the payment happens in
+// a separate app with no callback to the browser).
+function confirmPaymentAndSend(){
+  const mobile = document.getElementById('custMobile').value.trim();
+  if(!/^\d{10}$/.test(mobile)){
+    alert('WhatsApp bhejne ke liye customer ka 10-digit mobile number dalein.');
+    return;
+  }
+  // Open the tab immediately (synchronously) so Chrome doesn't block it as a popup.
+  const waWindow = window.open('', '_blank');
+  closeQRFullscreen(false);
+
+  // Tell the old-phone display: payment received — play Thank You animation,
+  // then automatically go back to the welcome screen after a few seconds.
+  if (window.markDisplayPaid) window.markDisplayPaid();
+  if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 6000);
+
+  generateBill().then(()=>{
+    downloadQR();
+    const message = buildBillMessage();
+    const waUrl = `https://wa.me/91${mobile}?text=${encodeURIComponent(message)}`;
+    if (waWindow) { waWindow.location.href = waUrl; }
+    else { window.open(waUrl, '_blank'); }
+  });
+}
+
+function closeQRFullscreen(clearDisplay = true){
+  document.getElementById('qrFullscreen').style.display = 'none';
+  // If this close wasn't triggered by a payment confirmation, also clear
+  // the old-phone display so it doesn't keep showing a stale QR.
+  if (clearDisplay && window.clearDisplayBill) window.clearDisplayBill();
+}
+
+function downloadQR(){
+  const qrDiv = document.getElementById('qrcodeDivFull');
+  const billNo = document.getElementById('sno').value || 'bill';
+  // Capture the whole box (QR + the MH logo badge on top of it) so the
+  // downloaded image looks exactly like what's shown on screen, not just
+  // the bare QR without the logo.
+  html2canvas(qrDiv, {scale: 2, backgroundColor: '#ffffff'}).then(canvas => {
+    const link = document.createElement('a');
+    link.download = `Mittu_UPI_QR_${billNo}.png`;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+}
+
+// ---------------- HAMBURGER DRAWER ----------------
+function openDrawer(){
+  document.getElementById('drawerOverlay').style.display = 'block';
+  requestAnimationFrame(() => document.getElementById('drawerPanel').classList.add('open'));
+}
+function closeDrawer(){
+  document.getElementById('drawerPanel').classList.remove('open');
+  setTimeout(() => { document.getElementById('drawerOverlay').style.display = 'none'; }, 260);
+}
+
+// ---------------- NEW BILL ----------------
+function startNewBill(){
+  const hasData = document.getElementById('custName').value.trim() ||
+                   document.getElementById('custMobile').value.trim() ||
+                   document.getElementById('custAddr').value.trim() ||
+                   document.querySelectorAll('#itemsBody tr').length > 1;
+  if (hasData && !confirm('Naya bill shuru karein? Abhi ki details clear ho jayengi.')) {
+    closeDrawer();
+    return;
+  }
+  document.getElementById('custName').value = '';
+  document.getElementById('custMobile').value = '';
+  document.getElementById('custAddr').value = '';
+  document.getElementById('itemsBody').innerHTML = '';
+  rowCount = 0;
+  addRow();
+  generateRandomBillNo();
+  closeDrawer();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ---------------- SEARCH BILL ----------------
+function openSearchBill(){
+  closeDrawer();
+  document.getElementById('searchBillInput').value = '';
+  renderSearchResults();
+  document.getElementById('searchOverlay').style.display = 'block';
+  setTimeout(() => document.getElementById('searchBillInput').focus(), 260);
+}
+function closeSearchBill(){
+  document.getElementById('searchOverlay').style.display = 'none';
+}
+function renderSearchResults(){
+  const query = (document.getElementById('searchBillInput').value || '').trim().toLowerCase();
+  const history = getBillHistory();
+  const listEl = document.getElementById('searchResultsList');
+  listEl.innerHTML = '';
+
+  if (history === null){
+    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Is environment mein storage available nahi hai.</p>';
+    return;
+  }
+  if (history.length === 0){
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Abhi tak koi bill generate nahi hua hai.</p>';
+    return;
+  }
+
+  const matches = history
+    .map((rec, idx) => ({ rec, idx }))
+    .filter(({ rec }) => {
+      if (!query) return true;
+      const hay = [rec.custName, rec.custMobile, rec.address, rec.billNo].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(query);
+    });
+
+  if (matches.length === 0){
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Koi bill match nahi hua.</p>';
+    return;
+  }
+
+  matches.forEach(({ rec, idx }) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid #f0d8b0; border-radius:8px; padding:10px 12px; margin-bottom:10px; background:#fffaf1; cursor:pointer;';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; font-weight:700; color:#a04e00;">
+        <span>Bill No. ${rec.billNo}</span><span>₹${rec.total.toFixed(2)}</span>
+      </div>
+      <div style="font-size:12px; color:#555; margin:4px 0;">${rec.dateTime}</div>
+      <div style="font-size:13px; font-weight:600;">${rec.custName || 'Customer'} ${rec.custMobile ? '(' + rec.custMobile + ')' : ''}</div>
+      <div style="font-size:12px; color:#777;">${rec.address || ''}</div>
+      <div style="font-size:11px; color:#1a7a3e; margin-top:6px;">👆 Tap karein - PDF dubara download hoga</div>
+    `;
+    card.addEventListener('click', () => {
+      closeSearchBill();
+      redownloadBill(idx);
+    });
+    listEl.appendChild(card);
+  });
+}
+
+// ---------------- CUSTOMER RECORD PDF (all bills, one row each) ----------------
+function openCustomerRecords(){
+  closeDrawer();
+  exportCustomerRecordsPDF();
+}
+
+function exportCustomerRecordsPDF(){
+  const history = getBillHistory();
+  if (history === null){
+    alert('Is environment mein storage available nahi hai.');
+    return;
+  }
+  if (history.length === 0){
+    alert('Abhi tak koi bill generate nahi hua hai.');
+    return;
+  }
+
+  // history is already newest-first (saveBillToHistory uses unshift), which
+  // matches "sabse naya top par, sabse purana sabse neeche" requirement.
+  let rowsHtml = '';
+  history.forEach((rec, i) => {
+    const bg = i % 2 === 0 ? '#ffffff' : '#fff8ef';
+    const timeOnly = (rec.dateTime || '').includes(',') ? rec.dateTime.split(',')[1].trim() : (rec.dateTime || '-');
+    rowsHtml += `<tr style="background:${bg};">
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${i + 1}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custName || '-'}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custMobile || '-'}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${timeOnly}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.billNo || '-'}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">₹${(rec.total || 0).toFixed(2)}</td>
+    </tr>`;
+  });
+  document.getElementById('crBody').innerHTML = rowsHtml;
+  document.getElementById('crGeneratedOn').textContent = formatNow();
+
+  const capEl = document.getElementById('customerRecordCapture');
+  capEl.style.left = '0px';
+  capEl.style.top = '-9999px';
+
+  return html2canvas(capEl, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+    capEl.style.left = '-9999px';
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+    const pageWidth = 210, pageHeight = 297, margin = 8;
+    const imgWidth = pageWidth - margin * 2;
+    const pxPerMm = canvas.width / imgWidth;
+    const pageHeightPx = (pageHeight - margin * 2) * pxPerMm;
+
+    let renderedPx = 0;
+    let firstPage = true;
+    while (renderedPx < canvas.height){
+      const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedPx);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceHeightPx;
+      sliceCanvas.getContext('2d').drawImage(
+        canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx
+      );
+      const sliceImgData = sliceCanvas.toDataURL('image/jpeg', 0.92);
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+      const sliceHeightMm = sliceHeightPx / pxPerMm;
+      pdf.addImage(sliceImgData, 'JPEG', margin, margin, imgWidth, sliceHeightMm, undefined, 'FAST');
+      renderedPx += sliceHeightPx;
+    }
+
+    // Upload to Firebase Storage and open via a real hosted URL — this is
+    // what makes it actually open *inside* the app under Median/GoNative.
+    openPdfInApp(pdf, 'Mittu_Customer_Records.pdf');
+  });
+}
+
+// init
+updateLiveClock();
+setInterval(updateLiveClock, 1000);
+generateRandomBillNo();
+addRow();
+</script>
+</body>
+</html>
