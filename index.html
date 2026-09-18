@@ -205,6 +205,60 @@
     margin-top: 12px;
   }
   .history-btn:hover { opacity: .92; }
+  .thermal-print-box {
+    margin-top: 12px;
+    padding: 12px;
+    background: #ffffff;
+    border: 1px solid #d9dee7;
+    border-radius: 8px;
+  }
+  .thermal-print-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #16325c;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .thermal-size-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .thermal-size-btn {
+    flex: 1;
+    border: 1px solid #cbd3e1;
+    background: #f5f7fa;
+    color: #3b1f00;
+    padding: 9px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .thermal-size-btn.active {
+    background: #16325c;
+    color: #fff;
+    border-color: #16325c;
+  }
+  .thermal-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(90deg,#16325c,#2f5f9f);
+    color: #fff;
+    font-weight: 800;
+    font-size: 15px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .thermal-btn:hover { opacity: .92; }
+  .thermal-note {
+    font-size: 11px;
+    color: #777;
+    line-height: 1.45;
+    text-align: center;
+    margin-top: 7px;
+  }
   .total-preview {
     text-align: right;
     font-size: 15px;
@@ -276,6 +330,7 @@
   }
   table#invTable {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     border: 2px solid #7a3b00;
     border-top: none;
@@ -285,13 +340,23 @@
     border: 1px solid #7a3b00;
     padding: 7px;
     font-size: 12px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   #invTable td {
     border: 1px solid #a05a1c;
     padding: 6px 8px;
     height: 22px;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    vertical-align: middle;
   }
-  #invTable td.num { text-align: right; }
+  #invTable td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
   .inv-total-row td { font-weight: 800; }
   .inv-words {
     font-size: 12px;
@@ -327,26 +392,28 @@
     font-weight: 800;
   }
 /* ---------------- APP TOP BAR + HAMBURGER DRAWER ---------------- */
-body { padding-top: 66px !important; }
+body { padding-top: 90px !important; }
 .topbar {
-  position: fixed; top: 0; left: 0; right: 0; height: 56px;
-  padding-top: env(safe-area-inset-top, 0);
-  background: #ffffff;
-  display: flex; align-items: center; gap: 12px;
+  position: fixed; top: 0; left: 0; right: 0;
+  padding-top: calc(env(safe-area-inset-top, 0) + 16px);
+  padding-bottom: 16px;
+  background: #eef1f5;
+  display: flex; align-items: center; gap: 10px;
   padding-left: 14px; padding-right: 14px;
   z-index: 9500; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e2e6ec;
 }
 .hamburger-btn {
   background: transparent; border: none; color: #16325c;
-  font-size: 22px; width: 38px; height: 38px; border-radius: 8px;
+  font-size: 24px; width: 38px; height: 38px; border-radius: 8px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  flex-shrink: 0; align-self: flex-start;
 }
 .hamburger-btn:active { background: rgba(22,50,92,0.08); }
 .topbar-title {
-  color: #16325c; font-size: 15.5px; font-weight: 700;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1;
+  color: #16325c; font-size: 26px; font-weight: 800; letter-spacing: 0.2px;
+  line-height: 1.25; text-align: center; white-space: normal;
+  word-wrap: break-word; min-width: 0; flex: 1;
 }
 
 .drawer-overlay {
@@ -479,10 +546,9 @@ body { padding-top: 66px !important; }
         <tr>
           <th style="width:6%">S.No</th>
           <th>Item Description</th>
-          <th style="width:12%">Qty</th>
-          <th style="width:16%">List Price</th>
-          <th style="width:16%">Amount</th>
-          <th style="width:8%"></th>
+          <th style="width:16%">Qty</th>
+          <th style="width:20%">List Price</th>
+          <th style="width:18%">Amount</th>
         </tr>
       </thead>
       <tbody id="itemsBody"></tbody>
@@ -492,6 +558,16 @@ body { padding-top: 66px !important; }
   </div>
 
   <button class="upi-btn" onclick="generateUPIQR()">💳 UPI Payment QR Generate Karein (Full Screen)</button>
+
+  <div class="thermal-print-box">
+    <div class="thermal-print-title">🖨️ Thermal Printer Bill Print</div>
+    <div class="thermal-size-row">
+      <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
+      <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
+    </div>
+    <button class="thermal-btn" onclick="printThermalBill()">🖨️ Thermal Printer Se Bill Print Karein</button>
+    <div class="thermal-note">Printer ke paper ke hisab se 58mm (2 inch) ya 80mm (3 inch) select karein. Bill white background aur height automatic rahegi.</div>
+  </div>
 
   <button class="whatsapp-btn" onclick="sendWhatsApp()">📱 Bill PDF WhatsApp Par Bhejein</button>
 
@@ -549,8 +625,8 @@ body { padding-top: 66px !important; }
     <p style="color:#e6d5c2; font-size:13px; margin:2px 0 0 0;">UPI ID: 7303714309@axl</p>
   </div>
 
-  <button class="add-row-btn" onclick="downloadQR()" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
   <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:340px; margin-top:14px;">✅ Payment Mil Gaya - Bill WhatsApp Par Bhejein</button>
+  <button class="add-row-btn" onclick="downloadQR()" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
 </div>
 
 <!-- Hidden invoice template used for PDF capture -->
@@ -628,7 +704,6 @@ function addRow(){
     <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
     <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
     <td class="amt-cell"><span class="itemAmt">0.00</span></td>
-    <td><button class="rm-btn" onclick="removeRow(this)">✕</button></td>
   `;
   tbody.appendChild(tr);
   const nameInput = tr.querySelector('.itemName');
@@ -694,11 +769,26 @@ function calcTotal(){
     const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
     const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
     const amt = qty * rate;
-    tr.querySelector('.itemAmt').textContent = amt.toFixed(2);
+    tr.querySelector('.itemAmt').innerHTML = fmtAmountCell(amt.toFixed(2));
     total += amt;
   });
   document.getElementById('totalPreview').textContent = total.toFixed(2);
   return total;
+}
+
+// ---------------- LONG NUMBER AUTO-FIT (no more cut-off amounts) ----------------
+// Jab item ka Qty x Rate bahut bada number ban jaye (jaise ₹9,79,70,404.00),
+// to wo cell ke andar hi chhote font mein fit ho jaye — table se bahar nikal
+// kar "cut" na ho. Chhote amounts ka look bilkul pehle jaisa hi rehta hai.
+function fmtAmountCell(text){
+  const len = String(text).length;
+  let fs = 13;
+  if(len > 10) fs = 11.5;
+  if(len > 13) fs = 10;
+  if(len > 16) fs = 8.5;
+  if(len > 19) fs = 7.5;
+  if(len > 22) fs = 6.5;
+  return `<span style="font-size:${fs}px; white-space:nowrap;">${text}</span>`;
 }
 
 // ---------------- AMOUNT IN WORDS (Indian numbering system) ----------------
@@ -747,6 +837,138 @@ function amountInWords(total){
   return words + ' only';
 }
 
+// Captures #invoiceCapture and writes it into the given jsPDF object,
+// automatically flowing onto extra pages when the item list is long
+// enough that the invoice no longer fits on a single A4 page. Previously
+// the whole invoice was captured as one image and force-fit onto one
+// page, so anything past the page's bottom edge was simply cut off and
+// never shown. This slices the captured canvas at table-row boundaries
+// (so a row is never cut in half) and adds as many pages as needed.
+function renderInvoiceToPdf(pdf, el){
+  /*
+   * A4 PDF pagination:
+   * 1) 1–28 items: keep the classic full-page invoice by adding blank rows.
+   * 2) 29+ items: DO NOT add blank rows. Render the complete invoice as one
+   *    continuous document and slice it into A4 pages at the real page boundary.
+   *    This means page 1 can end at any row, page 2 continues from that exact
+   *    point, and the footer/signature naturally stay with the final content.
+   *    Nothing is resized vertically to force a long bill onto one page.
+   */
+  const MAX_ROWS = 28;
+  const pBody = document.getElementById('p_itemsBody');
+  const allRows = Array.from(pBody.children);
+  const actualRows = allRows.filter(r => r.dataset.realItem === '1');
+
+  // Remove any old/generated blank rows first.
+  allRows.forEach(r => {
+    if(r.dataset.realItem !== '1') r.remove();
+  });
+
+  function addBlankRows(count){
+    for(let i = 0; i < count; i++){
+      const row = document.createElement('tr');
+      row.dataset.blankRow = '1';
+      row.innerHTML = '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>';
+      pBody.appendChild(row);
+    }
+  }
+
+  const wait = (ms=0) => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function captureWholeInvoice(){
+    await wait(30);
+    return html2canvas(el, {
+      scale: 1.5,
+      backgroundColor: '#ffc27d',
+      useCORS: true,
+      logging: false
+    });
+  }
+
+  function addCanvasSliceToPdf(canvas, srcY, srcH, isFirstPage){
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 8;
+    const outW = pageW - margin * 2;
+
+    // The invoice is always scaled by WIDTH. Its height is therefore allowed
+    // to continue over multiple A4 pages without being squeezed.
+    const pxPerMm = canvas.width / outW;
+    const maxSlicePx = Math.floor((pageH - margin * 2) * pxPerMm);
+    const sliceH = Math.min(srcH, maxSlicePx);
+
+    const slice = document.createElement('canvas');
+    slice.width = canvas.width;
+    slice.height = sliceH;
+    const ctx = slice.getContext('2d');
+    ctx.fillStyle = '#ffc27d';
+    ctx.fillRect(0, 0, slice.width, slice.height);
+    ctx.drawImage(
+      canvas,
+      0, srcY, canvas.width, sliceH,
+      0, 0, slice.width, sliceH
+    );
+
+    const renderedH = sliceH / pxPerMm;
+    const data = slice.toDataURL('image/jpeg', 0.92);
+
+    if(!isFirstPage) pdf.addPage();
+    pdf.setFillColor(255, 194, 125);
+    pdf.rect(0, 0, pageW, pageH, 'F');
+    pdf.addImage(data, 'JPEG', margin, margin, outW, renderedH, undefined, 'FAST');
+
+    return sliceH;
+  }
+
+  return (async () => {
+    // Short bill: preserve the original 28-row full-page appearance.
+    if(actualRows.length <= MAX_ROWS){
+      addBlankRows(MAX_ROWS - actualRows.length);
+
+      const canvas = await captureWholeInvoice();
+      const pageW = 210, pageH = 297, margin = 8;
+      const outW = pageW - margin * 2;
+      const pxPerMm = canvas.width / outW;
+      const naturalH = canvas.height / pxPerMm;
+      const maxH = pageH - margin * 2;
+
+      // Fit only when the complete short invoice is slightly taller than the
+      // printable A4 area. This keeps its full-page look without distortion.
+      const fit = Math.min(1, maxH / naturalH);
+      const outH = naturalH * fit;
+      const outWidth = outW * fit;
+      const x = margin + (outW - outWidth) / 2;
+
+      const data = canvas.toDataURL('image/jpeg', 0.92);
+      pdf.setFillColor(255, 194, 125);
+      pdf.rect(0, 0, pageW, pageH, 'F');
+      pdf.addImage(data, 'JPEG', x, margin, outWidth, outH, undefined, 'FAST');
+
+      return pdf;
+    }
+
+    // Long bill: no blank rows. Capture the complete invoice INCLUDING the
+    // footer, then physically cut it at A4 boundaries. This reproduces the
+    // natural PDF flow: e.g. rows 1–38, then 39–84, then 85–100 + footer.
+    const canvas = await captureWholeInvoice();
+    const pageW = 210, pageH = 297, margin = 8;
+    const outW = pageW - margin * 2;
+    const pxPerMm = canvas.width / outW;
+    const maxSlicePx = Math.floor((pageH - margin * 2) * pxPerMm);
+
+    let srcY = 0;
+    let first = true;
+    while(srcY < canvas.height){
+      const remaining = canvas.height - srcY;
+      const used = addCanvasSliceToPdf(canvas, srcY, remaining, first);
+      srcY += used;
+      first = false;
+    }
+
+    return pdf;
+  })();
+}
+
 function generateBill(openFile = true){
   // Fill invoice template with entered data
   const snoInput = document.getElementById('sno');
@@ -772,20 +994,14 @@ function generateBill(openFile = true){
     total += amt;
     itemList.push({ name, qty, rate, amt });
     const row = document.createElement('tr');
-    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${name}</td><td class="num">${qty}</td><td class="num">₹${rate.toFixed(2)}</td><td class="num">₹${amt.toFixed(2)}</td>`;
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${name}</td><td class="num">${qty}</td><td class="num">${fmtAmountCell('₹'+rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+amt.toFixed(2))}</td>`;
     pBody.appendChild(row);
   });
-  // pad empty rows so the printed invoice fills a full A4-looking page
-  // (like a real full-page bill) instead of leaving a short box with lots
-  // of blank white space above/below it in the PDF.
-  const minRows = 28;
-  const existing = document.querySelectorAll('#itemsBody tr').length;
-  for(let i=existing; i<minRows; i++){
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
-    pBody.appendChild(row);
-  }
-  document.getElementById('p_total').textContent = '₹' + total.toFixed(2);
+  // Mark real item rows. renderInvoiceToPdf() handles the A4 layout: short
+  // bills are padded to 28 rows, while long bills continue with only the
+  // actual remaining rows on later pages.
+  Array.from(pBody.children).forEach(row => row.dataset.realItem = '1');
+  document.getElementById('p_total').innerHTML = fmtAmountCell('₹' + total.toFixed(2));
   document.getElementById('p_totalWords').textContent = amountInWords(total);
 
   // Capture and export as PDF
@@ -810,22 +1026,10 @@ function generateBill(openFile = true){
     total: total
   });
 
-  return html2canvas(el, {scale: 1.5, backgroundColor: '#ffc27d'}).then(canvas => {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+  return renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
-    const pageWidth = 210;
-    const pageHeight = 297;
-    // Fill the whole page with the same saffron paper color first, so the
-    // margin around the invoice matches the bill's color instead of showing
-    // plain white — while still leaving a proper margin around the bill.
-    pdf.setFillColor(255, 194, 125);
-    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-    const margin = 8;
-    const imgWidth = pageWidth - margin*2;
-    const imgHeight = canvas.height * imgWidth / canvas.width;
-    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
     downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
     // Auto-generate a fresh random bill number for the next bill
@@ -1081,35 +1285,23 @@ function redownloadBill(idx){
   pBody.innerHTML = '';
   (rec.items || []).forEach((it, i) => {
     const row = document.createElement('tr');
-    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">₹${it.rate.toFixed(2)}</td><td class="num">₹${it.amt.toFixed(2)}</td>`;
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">${fmtAmountCell('₹'+it.rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+it.amt.toFixed(2))}</td>`;
     pBody.appendChild(row);
   });
-  const minRows = 28;
-  for(let i=(rec.items||[]).length; i<minRows; i++){
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>`;
-    pBody.appendChild(row);
-  }
-  document.getElementById('p_total').textContent = '₹' + rec.total.toFixed(2);
+  // Mark actual item rows. renderInvoiceToPdf() will keep 28 rows for a
+  // short bill and will use only actual rows on continuation pages.
+  Array.from(pBody.children).forEach(row => row.dataset.realItem = '1');
+  document.getElementById('p_total').innerHTML = fmtAmountCell('₹' + rec.total.toFixed(2));
   document.getElementById('p_totalWords').textContent = amountInWords(rec.total);
 
   const el = document.getElementById('invoiceCapture');
   el.style.left = '0px';
   el.style.top = '-9999px';
 
-  html2canvas(el, {scale: 1.5, backgroundColor: '#ffc27d'}).then(canvas => {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+  renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
-    const pageWidth = 210;
-    const pageHeight = 297;
-    pdf.setFillColor(255, 194, 125);
-    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-    const margin = 8;
-    const imgWidth = pageWidth - margin*2;
-    const imgHeight = canvas.height * imgWidth / canvas.width;
-    pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
     openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
   });
 }
@@ -1425,6 +1617,130 @@ function downloadQR(){
   });
 }
 
+// ---------------- THERMAL PRINTER (58mm / 80mm) ----------------
+// Browser/Android WebView cannot reliably detect the connected printer's
+// paper width. The user selects 58mm (2 inch) or 80mm (3 inch), and the
+// choice is remembered for the next print.
+let thermalPaperWidth = 58;
+try {
+  const savedThermalWidth = parseInt(localStorage.getItem('mittu_thermal_width') || '58', 10);
+  if(savedThermalWidth === 58 || savedThermalWidth === 80) thermalPaperWidth = savedThermalWidth;
+} catch(e){}
+
+function setThermalWidth(width){
+  thermalPaperWidth = (width === 80) ? 80 : 58;
+  try { localStorage.setItem('mittu_thermal_width', String(thermalPaperWidth)); } catch(e){}
+  document.getElementById('thermal58Btn').classList.toggle('active', thermalPaperWidth === 58);
+  document.getElementById('thermal80Btn').classList.toggle('active', thermalPaperWidth === 80);
+}
+
+function escHtml(value){
+  return String(value ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function buildThermalBillHtml(){
+  const billNo = document.getElementById('sno').value || '';
+  const custName = document.getElementById('custName').value.trim() || 'Customer';
+  const mobile = document.getElementById('custMobile').value.trim();
+  const addr = document.getElementById('custAddr').value.trim();
+  const now = formatNowParts();
+  const rows = [];
+  let total = 0;
+
+  document.querySelectorAll('#itemsBody tr').forEach((tr, i) => {
+    const name = tr.querySelector('.itemName').value.trim();
+    const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+    if(!name && qty === 0 && rate === 0) return;
+    const amt = qty * rate;
+    total += amt;
+    rows.push({i:i+1, name:name || '-', qty, rate, amt});
+  });
+
+  if(rows.length === 0 || total <= 0){
+    return { error: 'Pehle item aur amount wala bill taiyar karein.' };
+  }
+
+  const itemRows = rows.map(it => `
+    <tr>
+      <td class="sr">${it.i}</td>
+      <td class="item">${escHtml(it.name)}</td>
+      <td class="num">${it.qty}</td>
+      <td class="num">${it.rate.toFixed(2)}</td>
+      <td class="num">${it.amt.toFixed(2)}</td>
+    </tr>`).join('');
+
+  return { html: `
+    <div class="receipt">
+      <div class="shop">Mittu Hollsaller</div>
+      <div class="center">Rangra, Bhagalpur, Bihar, 853204, India.</div>
+      <div class="center">Mobile: +91 9540125307</div>
+      <div class="dash"></div>
+      <div class="receipt-head"><span>BILL NO: ${escHtml(billNo)}</span><span>${escHtml(now.date)}</span></div>
+      <div class="receipt-head"><span>Customer: ${escHtml(custName)}</span><span>${escHtml(now.time)}</span></div>
+      ${mobile ? `<div>Mobile: ${escHtml(mobile)}</div>` : ''}
+      ${addr ? `<div>Address: ${escHtml(addr)}</div>` : ''}
+      <div class="dash"></div>
+      <table>
+        <thead><tr><th class="sr">#</th><th class="item">Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <div class="dash"></div>
+      <div class="grand"><span>TOTAL</span><span>₹${total.toFixed(2)}</span></div>
+      <div class="words">${escHtml(amountInWords(total))}</div>
+      <div class="dash"></div>
+      <div class="center thanks">Thank you!</div>
+      <div class="center small">For Mittu Hollsaller</div>
+    </div>` };
+}
+
+function printThermalBill(){
+  setThermalWidth(thermalPaperWidth);
+  const data = buildThermalBillHtml();
+  if(data.error){ alert(data.error); return; }
+
+  const widthMm = thermalPaperWidth;
+  const printWindow = window.open('', '_blank');
+  if(!printWindow){
+    alert('Print window open nahi hua. Browser/WebView mein pop-up allow karein.');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Mittu Bill</title>
+    <style>
+      @page { size: ${widthMm}mm auto; margin: 0; }
+      html,body { margin:0; padding:0; background:#fff; width:${widthMm}mm; }
+      body { font-family: Arial, Helvetica, sans-serif; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .receipt { width:${Math.max(widthMm - 4, 50)}mm; margin:0 auto; padding:2mm 2mm 3mm; background:#fff; box-sizing:border-box; font-size:${widthMm === 58 ? 10 : 11}px; line-height:1.3; overflow-wrap:anywhere; }
+      .shop { text-align:center; font-size:${widthMm === 58 ? 16 : 19}px; font-weight:900; margin-bottom:1mm; }
+      .center { text-align:center; }
+      .small { font-size:9px; }
+      .thanks { font-weight:800; margin-top:1mm; }
+      .dash { border-top:1px dashed #000; margin:1.8mm 0; }
+      .receipt-head { display:flex; justify-content:space-between; gap:4px; font-weight:700; }
+      table { width:100%; border-collapse:collapse; table-layout:fixed; }
+      th,td { padding:1.1mm 0.5mm; border-bottom:1px solid #000; vertical-align:top; }
+      th { font-weight:800; }
+      .sr { width:${widthMm === 58 ? 8 : 9}%; text-align:center; }
+      .item { width:${widthMm === 58 ? 39 : 42}%; text-align:left; word-break:break-word; }
+      th:nth-child(3),td:nth-child(3) { width:${widthMm === 58 ? 13 : 12}%; text-align:right; }
+      th:nth-child(4),td:nth-child(4) { width:${widthMm === 58 ? 19 : 18}%; text-align:right; }
+      th:nth-child(5),td:nth-child(5) { width:${widthMm === 58 ? 21 : 19}%; text-align:right; }
+      .num { text-align:right; white-space:nowrap; }
+      .grand { display:flex; justify-content:space-between; font-size:${widthMm === 58 ? 14 : 16}px; font-weight:900; padding:1mm 0; }
+      .words { font-size:9px; font-weight:700; word-break:break-word; }
+      @media print { body { width:${widthMm}mm; } .receipt { break-inside:avoid; } }
+    </style></head><body>${data.html}</body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 350);
+}
+
 // ---------------- HAMBURGER DRAWER ----------------
 function openDrawer(){
   document.getElementById('drawerOverlay').style.display = 'block';
@@ -1614,11 +1930,22 @@ function exportCustomerRecordsPDF(){
   downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
 }
 
+// Keeps body padding matched to the topbar's real height, since the title
+// now wraps to two lines on narrower screens instead of a fixed single-line bar.
+function fitTopbarPadding(){
+  const topbar = document.querySelector('.topbar');
+  if(topbar) document.body.style.paddingTop = topbar.offsetHeight + 'px';
+}
+window.addEventListener('load', fitTopbarPadding);
+window.addEventListener('resize', fitTopbarPadding);
+
 // init
+setThermalWidth(thermalPaperWidth);
 updateLiveClock();
 setInterval(updateLiveClock, 1000);
 generateRandomBillNo();
 addRow();
+fitTopbarPadding();
 </script>
 </body>
 </html>
