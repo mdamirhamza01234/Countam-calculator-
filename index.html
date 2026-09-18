@@ -434,6 +434,7 @@ body { padding-top: 66px !important; }
       <tr style="background:#a04e00; color:#fff;">
         <th style="padding:7px 8px; text-align:left;">Sl.No</th>
         <th style="padding:7px 8px; text-align:left;">Name</th>
+        <th style="padding:7px 8px; text-align:left;">Address</th>
         <th style="padding:7px 8px; text-align:left;">Contact Number</th>
         <th style="padding:7px 8px; text-align:left;">Time</th>
         <th style="padding:7px 8px; text-align:left;">Bill Number</th>
@@ -1521,6 +1522,7 @@ function exportCustomerRecordsPDF(){
     rowsHtml += `<tr style="background:${bg};">
       <td style="padding:6px 8px; border-bottom:1px solid #eee;">${i + 1}</td>
       <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custName || '-'}</td>
+      <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.address || '-'}</td>
       <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.custMobile || '-'}</td>
       <td style="padding:6px 8px; border-bottom:1px solid #eee;">${timeOnly}</td>
       <td style="padding:6px 8px; border-bottom:1px solid #eee;">${rec.billNo || '-'}</td>
@@ -1563,7 +1565,12 @@ function exportCustomerRecordsPDF(){
 
     // Upload to Firebase Storage and open via a real hosted URL — this is
     // what makes it actually open *inside* the app under Median/GoNative.
-    openPdfInApp(pdf, 'Mittu_Customer_Records.pdf');
+    // NOTE: was openPdfInApp() (Firebase Storage upload) — but Firebase now
+    // requires the paid Blaze billing plan just to create a Storage bucket,
+    // so we skip the cloud step entirely and download straight to the
+    // device, exactly like the individual bill PDFs already do reliably
+    // inside the Median app.
+    downloadPDF(pdf, 'Mittu_Customer_Records.pdf');
   });
 }
 
