@@ -1123,6 +1123,23 @@ function redownloadBill(idx){
 // in which case a proper native/Capacitor rebuild is the only real fix.
 
 function downloadPDF(pdf, filename){
+  // Prefer Median's own native download bridge when running inside the
+  // Median-wrapped app. Unlike a plain <a download> click (which the
+  // webview just treats as a raw data: navigation, with no native
+  // "Download complete" handling), median.share.downloadFile() goes
+  // through Median's real download system — and passing open:true makes
+  // an "Open with" dialog appear automatically the instant the download
+  // finishes, so the user never has to hunt through a file manager.
+  try {
+    if (window.median && window.median.share && window.median.share.downloadFile){
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      window.median.share.downloadFile({ url: blobUrl, open: true });
+      return;
+    }
+  } catch(e){
+    console.warn('Median native download failed, falling back to data-URI download:', e);
+  }
   try {
     const dataUri = pdf.output('datauristring');
     const link = document.createElement('a');
