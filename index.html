@@ -747,7 +747,7 @@ function amountInWords(total){
   return words + ' only';
 }
 
-function generateBill(){
+function generateBill(openFile = true){
   // Fill invoice template with entered data
   const snoInput = document.getElementById('sno');
   const currentSno = snoInput.value;
@@ -826,7 +826,7 @@ function generateBill(){
     const imgWidth = pageWidth - margin*2;
     const imgHeight = canvas.height * imgWidth / canvas.width;
     pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`);
+    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
     // Auto-generate a fresh random bill number for the next bill
     generateRandomBillNo();
@@ -1122,30 +1122,28 @@ function redownloadBill(idx){
 // restrictive WebView wrappers may still block ANY programmatic download,
 // in which case a proper native/Capacitor rebuild is the only real fix.
 
-function downloadPDF(pdf, filename){
+function downloadPDF(pdf, filename, openFile = true){
   // Prefer Median's own native download bridge when running inside the
   // Median-wrapped app. Unlike a plain <a download> click (which the
   // webview just treats as a raw data: navigation, with no native
   // "Download complete" handling), median.share.downloadFile() goes
   // through Median's real download system — and passing open:true makes
   // an "Open with" dialog appear automatically the instant the download
-  // finishes, so the user never has to hunt through a file manager.
+  // finishes. When openFile is false (WhatsApp-send flows), the file is
+  // still saved to Downloads, just without popping the PDF viewer open,
+  // so WhatsApp can come to the foreground uninterrupted.
   try {
     if (window.median && window.median.share && window.median.share.downloadFile){
       const blob = pdf.output('blob');
       const blobUrl = URL.createObjectURL(blob);
-      window.median.share.downloadFile({ url: blobUrl, open: true });
+      window.median.share.downloadFile({ url: blobUrl, open: openFile });
       return;
     } else {
-      // TEMPORARY DIAGNOSTIC — tells us exactly why the native path was
-      // skipped, so we know what to fix. Safe to remove once this is
-      // confirmed working.
-      alert('DEBUG: window.median available? ' + (!!window.median) +
-            ' | window.median.share available? ' + (!!(window.median && window.median.share)));
+      // Native bridge not available (e.g. running in a normal browser) —
+      // fall through to the data-URI download below.
     }
   } catch(e){
     console.warn('Median native download failed, falling back to data-URI download:', e);
-    alert('DEBUG: median.share.downloadFile threw an error: ' + (e && e.message ? e.message : e));
   }
   try {
     const dataUri = pdf.output('datauristring');
@@ -1309,7 +1307,7 @@ function sendWhatsApp(){
   // Chrome's popup blocker treats it as a direct result of the user's tap.
   // We fill in the actual WhatsApp URL a moment later once the PDF is ready.
   const waWindow = window.open('', '_blank');
-  generateBill().then(()=>{
+  generateBill(false).then(()=>{
     const message = buildBillMessage();
     const waUrl = `https://wa.me/91${mobile}?text=${encodeURIComponent(message)}`;
     if (waWindow) { waWindow.location.href = waUrl; }
@@ -1395,7 +1393,7 @@ function confirmPaymentAndSend(){
   if (window.markDisplayPaid) window.markDisplayPaid();
   if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 6000);
 
-  generateBill().then(()=>{
+  generateBill(false).then(()=>{
     downloadQR();
     const message = buildBillMessage();
     const waUrl = `https://wa.me/91${mobile}?text=${encodeURIComponent(message)}`;
