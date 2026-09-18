@@ -1150,7 +1150,16 @@ async function openPdfInApp(pdf, filename){
   try {
     if (window.uploadPdfToFirebase){
       const blob = pdf.output('blob');
-      const url = await window.uploadPdfToFirebase(blob, filename);
+      // Race the cloud upload against a timeout — if the network/Firebase
+      // is slow, unreachable, or storage rules reject the write, the
+      // upload promise can otherwise hang indefinitely with nothing
+      // downloading and no error shown. After 7s we give up and fall
+      // back to a normal local download instead of leaving the button
+      // looking "stuck".
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Cloud upload timed out')), 7000)
+      );
+      const url = await Promise.race([window.uploadPdfToFirebase(blob, filename), timeout]);
       const bridgeDownload = (window.median && window.median.share && window.median.share.downloadFile) ||
                               (window.gonative && window.gonative.share && window.gonative.share.downloadFile);
       if (bridgeDownload){
@@ -1486,7 +1495,10 @@ function renderSearchResults(){
 // ---------------- CUSTOMER RECORD PDF (all bills, one row each) ----------------
 function openCustomerRecords(){
   closeDrawer();
-  exportCustomerRecordsPDF();
+  exportCustomerRecordsPDF().catch(e => {
+    console.error('Customer Record PDF failed:', e);
+    alert('Customer Record PDF banane mein error aaya: ' + (e && e.message ? e.message : e));
+  });
 }
 
 function exportCustomerRecordsPDF(){
