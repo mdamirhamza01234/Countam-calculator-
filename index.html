@@ -1136,8 +1136,6 @@ function downloadPDF(pdf, filename, openFile = true){
     if (window.median && window.median.share && window.median.share.downloadFile){
       const blob = pdf.output('blob');
       const blobUrl = URL.createObjectURL(blob);
-      console.log('DEBUG downloadPDF: calling median.share.downloadFile with open =', openFile);
-      alert('DEBUG: downloadPDF called with open=' + openFile);
       window.median.share.downloadFile({ url: blobUrl, open: openFile });
       return;
     } else {
