@@ -12,7 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
@@ -38,8 +38,33 @@
     if(btn) { btn.disabled = true; btn.innerHTML = '<span class="google-spinner"></span> Google par ja rahe hain...'; }
     if(errorEl) errorEl.textContent = '';
     try {
-      // Vercel-hosted web app: use popup to avoid mobile Chrome redirect/storage loops.
-      await signInWithPopup(fbAuth, googleProvider);
+      const medianGoogle =
+        (window.median && window.median.socialLogin && window.median.socialLogin.google) ||
+        (window.gonative && window.gonative.socialLogin && window.gonative.socialLogin.google);
+
+      if (medianGoogle && typeof medianGoogle.login === 'function') {
+        // Median app ke andar: native Google Sign-In use karo (Chrome nahi khulega).
+        const result = await new Promise((resolve, reject) => {
+          let done = false;
+          const finish = (data) => { if(done) return; done = true; resolve(data); };
+          try {
+            const maybePromise = medianGoogle.login({ callback: finish });
+            if (maybePromise && typeof maybePromise.then === 'function') {
+              maybePromise.then(finish).catch(e => { if(!done){ done = true; reject(e); } });
+            }
+          } catch(e) { reject(e); }
+          setTimeout(() => { if(!done){ done = true; reject(new Error('Google login timeout. Dobara try karein.')); } }, 120000);
+        });
+
+        if (!result || result.success === false || !result.idToken) {
+          throw new Error((result && (result.error || result.message)) || 'Google login cancel ya fail ho gaya.');
+        }
+        const credential = GoogleAuthProvider.credential(result.idToken);
+        await signInWithCredential(fbAuth, credential);
+      } else {
+        // Normal browser: popup login.
+        await signInWithPopup(fbAuth, googleProvider);
+      }
     } catch(err) {
       console.error('Google sign-in failed:', err);
       if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
