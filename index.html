@@ -2371,56 +2371,62 @@ function buildRawBtEscPos(payload){
 }
 
 function sendBillToRawBT(payload){
-  // RawBT supports the rawbt:base64,<data> URL scheme for ESC/POS bytes.
-  // This branch is Android-only; laptops keep using the existing browser print fallback.
+  // Android + RawBT only. Desktop/laptop must continue to use browser print.
   if(!/Android/i.test(navigator.userAgent || '')) return false;
-  try{
-    // Double-tap / dobara trigger se bachne ke liye 4 second ka lock.
-    if (window.__rawbtBusy) return true;
-    window.__rawbtBusy = true;
-    setTimeout(() => { window.__rawbtBusy = false; }, 4000);
+  if(window.__rawbtBusy) return true;
 
+  try{
+    window.__rawbtBusy = true;
     const bytes = buildRawBtEscPos(payload);
     const base64 = bytesToBase64(bytes);
     const rawbtUrl = 'rawbt:base64,' + base64;
 
-    // Temporary anchor click se RawBT launch hota hai. Isse current page ki
-    // history mein print page add nahi hota aur Back par print dialog dobara
-    // trigger nahi hota.
+    // Use a normal same-page anchor for the Android custom scheme. RawBT
+    // handles this scheme as a no-history print activity. No window.open(),
+    // window.print(), iframe, or print-preview page is created here.
     const link = document.createElement('a');
     link.href = rawbtUrl;
     link.style.display = 'none';
-    link.setAttribute('aria-hidden', 'true');
     document.body.appendChild(link);
     link.click();
-    setTimeout(() => { try { link.remove(); } catch(e){} }, 1500);
+    setTimeout(() => {
+      try { link.remove(); } catch(e) {}
+      window.__rawbtBusy = false;
+    }, 2500);
     return true;
   }catch(e){
+    window.__rawbtBusy = false;
     console.warn('RawBT bridge failed:', e);
     return false;
   }
 }
 
 function printThermalBill(){
+  // Android: never enter the browser print() fallback. This is the important
+  // guard that prevents the printer/browser popup from appearing again.
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  if(isAndroid && window.__thermalPrintBusy) return;
+  if(isAndroid) window.__thermalPrintBusy = true;
+
   setThermalWidth(thermalPaperWidth);
   const payload = buildNativeThermalPrintPayload();
-  if(payload.error){ alert(payload.error); return; }
+  if(payload.error){
+    if(isAndroid) window.__thermalPrintBusy = false;
+    alert(payload.error);
+    return;
+  }
 
   // 1) Native Android printer bridge — keep this for a future/native APK.
-  if(sendBillToNativePrinter(payload)) return;
+  if(sendBillToNativePrinter(payload)){
+    if(isAndroid) setTimeout(() => { window.__thermalPrintBusy = false; }, 2500);
+    return;
+  }
 
   // 2) Android + RawBT — direct ESC/POS print without browser print preview.
   if(sendBillToRawBT(payload)) return;
 
-  // Android par browser print dialog bilkul nahi kholna. Native bridge aur
-  // RawBT dono na milne par clear message dikhayenge. Laptop/desktop par
-  // purana browser-print fallback bana rahega.
-  if(/Android/i.test(navigator.userAgent || '')){
-    alert('Direct print ke liye RawBT app ya native printer bridge zaroori hai. RawBT install karke Bluetooth printer connect karein.');
-    return;
-  }
-
-  // 3) Laptop/desktop browser fallback — yahan normal print preview allowed hai.
+  // 3) Existing browser fallback — kept so the same HTML continues to work
+  // on laptop/desktop browsers and when no Android printer bridge is available.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
