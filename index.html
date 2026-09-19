@@ -937,7 +937,7 @@
 <div id="historyOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
   <div style="max-width:600px; margin:0 auto; background:#fff; border-radius:10px; padding:18px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h2 style="margin:0; color:#a04e00; font-size:18px;">📋 Bill History</h2>
+      <h2 style="margin:0; color:#a04e00; font-size:18px;">🕘 Recent Bills</h2>
       <button onclick="closeBillHistory()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
     </div>
 
@@ -954,6 +954,8 @@
     restoreHistoryFromFile() below still only successfully restores from a
     valid JSON backup file, and shows a friendly error for anything else. -->
     <input type="file" id="restoreFileInput" accept=".json,application/json,.pdf,application/pdf" style="display:none;" onchange="restoreHistoryFromFile(event)">
+
+    <div style="font-size:12px; color:#666; margin:0 0 10px 2px;">Recent bill par tap karein — wahi customer, address aur saare saman/quantity/rate ke saath form dobara bhar jayega.</div>
 
     <div id="historySelectToolbar" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#eef1f5; border-radius:8px; padding:8px 10px; margin-bottom:10px;">
       <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#a04e00;">
@@ -1494,23 +1496,25 @@ function renderBillHistory(){
   history.forEach((rec, idx) => {
     const card = document.createElement('div');
     const isSelected = historySelectedSet.has(idx);
-    card.style.cssText = `border:1px solid ${isSelected ? '#a04e00' : '#dde3ee'}; border-radius:8px; padding:10px 12px; margin-bottom:10px; background:${isSelected ? '#ffe9d1' : '#fafcff'}; display:flex; gap:10px; align-items:flex-start; cursor:pointer;`;
-    const itemsSummary = (rec.items || []).map(it => `${it.name} (₹${it.amt.toFixed(2)})`).join(', ');
+    card.style.cssText = `border:1px solid ${isSelected ? '#a04e00' : '#e1e5eb'}; border-radius:12px; padding:11px 12px; margin-bottom:8px; background:${isSelected ? '#ffe9d1' : '#fff'}; display:flex; gap:10px; align-items:center; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04);`;
+    const customerName = String(rec.custName || 'Customer').trim();
+    const shortName = customerName.length > 18 ? customerName.slice(0,18).trim() + '…' : customerName;
+    const itemCount = (rec.items || []).filter(it => String(it.name || '').trim()).length;
 
     card.innerHTML = `
-      ${historySelectionMode ? `<input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-top:4px; width:20px; height:20px; flex-shrink:0; pointer-events:none;">` : ''}
-      <div style="flex:1;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; font-weight:700; color:#a04e00;">
-          <span>Bill No. ${rec.billNo}</span>
-          <span style="display:flex; align-items:center; gap:8px;">
-            <span>₹${rec.total.toFixed(2)}</span>
-            ${!historySelectionMode ? `<button data-role="delete" style="background:#e63946; color:#fff; border:none; border-radius:6px; width:26px; height:26px; font-size:13px; cursor:pointer; flex-shrink:0;">🗑</button>` : ''}
-          </span>
+      ${historySelectionMode ? `<input type="checkbox" ${isSelected ? 'checked' : ''} style="margin-top:2px; width:20px; height:20px; flex-shrink:0; pointer-events:none;">` : ''}
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="min-width:0;">
+            <div style="font-size:14px; font-weight:800; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${shortName}</div>
+            <div style="font-size:11px; color:#777; margin-top:3px;">Bill ${rec.billNo || ''} · ${rec.dateTime || ''}${itemCount ? ' · ' + itemCount + ' item' + (itemCount > 1 ? 's' : '') : ''}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <span style="font-size:15px; font-weight:900; color:#1a7a3e;">₹${Number(rec.total || 0).toFixed(2)}</span>
+            ${!historySelectionMode ? `<button data-role="delete" aria-label="Delete bill" style="background:#e63946; color:#fff; border:none; border-radius:7px; width:28px; height:28px; font-size:13px; cursor:pointer; flex-shrink:0;">🗑</button>` : ''}
+          </div>
         </div>
-        <div style="font-size:12px; color:#555; margin:4px 0;">${rec.dateTime}</div>
-        <div style="font-size:13px; font-weight:600;">${rec.custName || 'Customer'} ${rec.custMobile ? '('+rec.custMobile+')' : ''}</div>
-        <div style="font-size:12px; color:#777; margin:4px 0;">${itemsSummary}</div>
-        <div style="font-size:11px; color:${historySelectionMode ? '#a04e00' : '#1a7a3e'}; margin-top:6px;">${historySelectionMode ? '☑️ Select karne ke liye tap karein' : '👆 Tap karein - PDF khulega · Delete ke liye dabakar rakhein (hold)'}</div>
+        ${rec.custMobile ? `<div style="font-size:11px; color:#888; margin-top:4px;">📱 ${rec.custMobile}</div>` : ''}
       </div>
     `;
 
@@ -1549,7 +1553,7 @@ function renderBillHistory(){
         else historySelectedSet.add(idx);
         renderBillHistory();
       } else {
-        redownloadBill(idx);
+        restoreBillToForm(idx);
       }
     });
 
@@ -1676,6 +1680,56 @@ function restoreHistoryFromFile(event){
   };
   reader.readAsText(file);
   event.target.value = '';
+}
+
+function restoreBillToForm(idx){
+  const history = getBillHistory();
+  if(!history || !history[idx]) return;
+  const rec = history[idx];
+
+  // Restore the exact bill-entry fields so the user can continue/edit it.
+  document.getElementById('sno').value = rec.billNo || '';
+  document.getElementById('custName').value = rec.custName || '';
+  document.getElementById('custMobile').value = rec.custMobile || '';
+  document.getElementById('custAddr').value = rec.address || '';
+
+  const tbody = document.getElementById('itemsBody');
+  tbody.innerHTML = '';
+  rowCount = 0;
+  (rec.items || []).forEach(it => {
+    rowCount++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:center;">${rowCount}</td>
+      <td><input type="text" class="itemName" placeholder="Saman ka naam" enterkeyhint="next" value=""></td>
+      <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
+      <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
+      <td class="amt-cell"><span class="itemAmt">0.00</span></td>
+    `;
+    tbody.appendChild(tr);
+    const nameInput = tr.querySelector('.itemName');
+    const qtyInput = tr.querySelector('.itemQty');
+    const rateInput = tr.querySelector('.itemRate');
+    nameInput.value = it.name || '';
+    qtyInput.value = Number(it.qty ?? 1);
+    rateInput.value = Number(it.rate ?? 0);
+    qtyInput.addEventListener('input', calcTotal);
+    rateInput.addEventListener('input', calcTotal);
+    qtyInput.addEventListener('focus', function(){ this.select(); });
+    rateInput.addEventListener('focus', function(){ this.select(); });
+    nameInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'name'));
+    qtyInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'qty'));
+    rateInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'rate'));
+  });
+
+  // Always keep at least one editable row, just like a new bill.
+  if(!tbody.children.length) addRow();
+  calcTotal();
+
+  closeBillHistory();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const nameField = document.getElementById('custName');
+  if(nameField) setTimeout(() => nameField.focus(), 250);
 }
 
 function redownloadBill(idx){
