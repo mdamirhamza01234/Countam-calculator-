@@ -2384,15 +2384,16 @@ function sendBillToRawBT(payload){
     const base64 = bytesToBase64(bytes);
     const rawbtUrl = 'rawbt:base64,' + base64;
 
-    // window.location.href se page ki navigation pending reh jati thi, jisse
-    // RawBT se wapas aane par WebView ye navigation dobara chala deta tha aur
-    // print dialog bar-bar khul jata tha. Hidden iframe se page ka navigation
-    // touch nahi hota, isliye back aane par kuch dobara nahi chalta.
-    const frame = document.createElement('iframe');
-    frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;left:-9999px;';
-    frame.src = rawbtUrl;
-    document.body.appendChild(frame);
-    setTimeout(() => { try { frame.remove(); } catch(e){} }, 5000);
+    // Temporary anchor click se RawBT launch hota hai. Isse current page ki
+    // history mein print page add nahi hota aur Back par print dialog dobara
+    // trigger nahi hota.
+    const link = document.createElement('a');
+    link.href = rawbtUrl;
+    link.style.display = 'none';
+    link.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => { try { link.remove(); } catch(e){} }, 1500);
     return true;
   }catch(e){
     console.warn('RawBT bridge failed:', e);
@@ -2411,8 +2412,15 @@ function printThermalBill(){
   // 2) Android + RawBT — direct ESC/POS print without browser print preview.
   if(sendBillToRawBT(payload)) return;
 
-  // 3) Existing browser fallback — kept so the same HTML continues to work
-  // on laptop/desktop browsers and when no Android printer bridge is available.
+  // Android par browser print dialog bilkul nahi kholna. Native bridge aur
+  // RawBT dono na milne par clear message dikhayenge. Laptop/desktop par
+  // purana browser-print fallback bana rahega.
+  if(/Android/i.test(navigator.userAgent || '')){
+    alert('Direct print ke liye RawBT app ya native printer bridge zaroori hai. RawBT install karke Bluetooth printer connect karein.');
+    return;
+  }
+
+  // 3) Laptop/desktop browser fallback — yahan normal print preview allowed hai.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
