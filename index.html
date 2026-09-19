@@ -2375,9 +2375,24 @@ function sendBillToRawBT(payload){
   // This branch is Android-only; laptops keep using the existing browser print fallback.
   if(!/Android/i.test(navigator.userAgent || '')) return false;
   try{
+    // Double-tap / dobara trigger se bachne ke liye 4 second ka lock.
+    if (window.__rawbtBusy) return true;
+    window.__rawbtBusy = true;
+    setTimeout(() => { window.__rawbtBusy = false; }, 4000);
+
     const bytes = buildRawBtEscPos(payload);
     const base64 = bytesToBase64(bytes);
-    window.location.href = 'rawbt:base64,' + base64;
+    const rawbtUrl = 'rawbt:base64,' + base64;
+
+    // window.location.href se page ki navigation pending reh jati thi, jisse
+    // RawBT se wapas aane par WebView ye navigation dobara chala deta tha aur
+    // print dialog bar-bar khul jata tha. Hidden iframe se page ka navigation
+    // touch nahi hota, isliye back aane par kuch dobara nahi chalta.
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;left:-9999px;';
+    frame.src = rawbtUrl;
+    document.body.appendChild(frame);
+    setTimeout(() => { try { frame.remove(); } catch(e){} }, 5000);
     return true;
   }catch(e){
     console.warn('RawBT bridge failed:', e);
