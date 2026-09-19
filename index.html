@@ -515,7 +515,7 @@
   <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
-      <span class="pencil-icon">✎</span>
+      <span class="pencil-icon">📝</span>
     </button>
   </div>
 </div>
@@ -1940,17 +1940,138 @@ function sendBillToNativePrinter(payload){
   return false;
 }
 
+function bytesToBase64(bytes){
+  let binary = '';
+  const chunkSize = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunkSize){
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+function buildRawBtEscPos(payload){
+  const width = payload.paperWidthMm === 80 ? 48 : 32;
+  const out = [];
+  const push = s => out.push(String(s));
+  const line = () => push('-'.repeat(width) + '\n');
+  const right = (value, len) => {
+    value = String(value);
+    return value.length >= len ? value.slice(-len) : ' '.repeat(len - value.length) + value;
+  };
+  const left = (value, len) => {
+    value = String(value);
+    return value.length >= len ? value.slice(0, len) : value + ' '.repeat(len - value.length);
+  };
+  const wrap = (value, len) => {
+    const words = String(value || '').split(/\s+/);
+    const lines = [];
+    let current = '';
+    for(const word of words){
+      if(!word) continue;
+      const candidate = current ? current + ' ' + word : word;
+      if(candidate.length <= len){
+        current = candidate;
+      } else {
+        if(current) lines.push(current);
+        let rest = word;
+        while(rest.length > len){
+          lines.push(rest.slice(0, len));
+          rest = rest.slice(len);
+        }
+        current = rest;
+      }
+    }
+    if(current) lines.push(current);
+    return lines.length ? lines : [''];
+  };
+
+  // ESC/POS initialize
+  push('\x1B\x40');
+  push('\x1B\x61\x01');
+  push('\x1B\x45\x01');
+  push('\x1D\x21\x11');
+  push('Mittu Hollsaller\n');
+  push('\x1D\x21\x00');
+  push('\x1B\x45\x00');
+  push('Rangra, Bhagalpur, Bihar, 853204, India.\n');
+  push('Mobile: +91 9540125307\n');
+  line();
+
+  push('\x1B\x61\x00');
+  const half = Math.floor(width / 2);
+  push(left('BILL NO: ' + payload.billNo, half) + right(payload.date, width - half) + '\n');
+  push(left('Customer: ' + payload.customer.name, half) + right(payload.time, width - half) + '\n');
+  if(payload.customer.mobile) push('Mobile: ' + payload.customer.mobile + '\n');
+  if(payload.customer.address) wrap('Address: ' + payload.customer.address, width).forEach(x => push(x + '\n'));
+  line();
+
+  // Keep the columns inside the selected paper width.
+  const itemWidth = payload.paperWidthMm === 80 ? 18 : 10;
+  const amountWidth = payload.paperWidthMm === 80 ? 11 : 7;
+  const qtyWidth = payload.paperWidthMm === 80 ? 5 : 4;
+  const rateWidth = payload.paperWidthMm === 80 ? 8 : 6;
+  push(left('#', 3) + left('Item', itemWidth) + right('Qty', qtyWidth) + right('Rate', rateWidth) + right('Amount', amountWidth) + '\n');
+  line();
+
+  for(const item of payload.items){
+    // Replace symbols that commonly fail on non-Unicode ESC/POS code pages.
+    const name = String(item.name || '-').replace(/[₹]/g, 'Rs.');
+    const itemLines = wrap(name, itemWidth);
+    itemLines.forEach((itemLine, index) => {
+      if(index === 0){
+        push(left(String(item.sr), 3) + left(itemLine, itemWidth) + right(item.qty, qtyWidth) + right(Number(item.rate).toFixed(2), rateWidth) + right(Number(item.amount).toFixed(2), amountWidth) + '\n');
+      } else {
+        push(' '.repeat(3) + itemLine + '\n');
+      }
+    });
+  }
+
+  line();
+  push('\x1B\x45\x01');
+  push(left('TOTAL', width - 12) + right('Rs.' + Number(payload.total).toFixed(2), 12) + '\n');
+  push('\x1B\x45\x00');
+  wrap(payload.totalWords, width).forEach(x => push(x + '\n'));
+  line();
+  push('\x1B\x61\x01');
+  push('\x1B\x45\x01');
+  push('Thank you!\n');
+  push('\x1B\x45\x00');
+  push('For Mittu Hollsaller\n');
+  push('\n\n\n');
+  // ESC/POS full cut
+  push('\x1D\x56\x00');
+
+  return new TextEncoder().encode(out.join(''));
+}
+
+function sendBillToRawBT(payload){
+  // RawBT supports the rawbt:base64,<data> URL scheme for ESC/POS bytes.
+  // This branch is Android-only; laptops keep using the existing browser print fallback.
+  if(!/Android/i.test(navigator.userAgent || '')) return false;
+  try{
+    const bytes = buildRawBtEscPos(payload);
+    const base64 = bytesToBase64(bytes);
+    window.location.href = 'rawbt:base64,' + base64;
+    return true;
+  }catch(e){
+    console.warn('RawBT bridge failed:', e);
+    return false;
+  }
+}
+
 function printThermalBill(){
   setThermalWidth(thermalPaperWidth);
   const payload = buildNativeThermalPrintPayload();
   if(payload.error){ alert(payload.error); return; }
 
-  // First choice: native Android printer bridge. This is the path that gives
-  // the Vyapar-style "tap print -> printer immediately prints" experience.
+  // 1) Native Android printer bridge — keep this for a future/native APK.
   if(sendBillToNativePrinter(payload)) return;
 
-  // Browser fallback is intentionally kept so the existing HTML still works
-  // when opened outside the Android APK. It does NOT claim to be direct print.
+  // 2) Android + RawBT — direct ESC/POS print without browser print preview.
+  if(sendBillToRawBT(payload)) return;
+
+  // 3) Existing browser fallback — kept so the same HTML continues to work
+  // on laptop/desktop browsers and when no Android printer bridge is available.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
