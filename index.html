@@ -2371,28 +2371,47 @@ function buildRawBtEscPos(payload){
 }
 
 function sendBillToRawBT(payload){
-  // Android + RawBT only. Desktop/laptop must continue to use browser print.
+  // Android + RawBT only. Launch exactly once for this button press.
   if(!/Android/i.test(navigator.userAgent || '')) return false;
-  if(window.__rawbtBusy) return true;
-
   try{
+    // If RawBT/app switch is already in progress, do not launch it again.
+    if(window.__rawbtBusy) return true;
     window.__rawbtBusy = true;
+
     const bytes = buildRawBtEscPos(payload);
     const base64 = bytesToBase64(bytes);
     const rawbtUrl = 'rawbt:base64,' + base64;
 
-    // Use a normal same-page anchor for the Android custom scheme. RawBT
-    // handles this scheme as a no-history print activity. No window.open(),
-    // window.print(), iframe, or print-preview page is created here.
+    // Use a short-lived launcher. Keeping an iframe alive for several seconds
+    // can cause some Android WebViews to retry its custom URL when returning
+    // from RawBT. Remove it quickly and clear the lock as soon as the app/page
+    // becomes visible again, so the next bill can be printed normally.
     const link = document.createElement('a');
     link.href = rawbtUrl;
     link.style.display = 'none';
+    link.setAttribute('aria-hidden', 'true');
     document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      try { link.remove(); } catch(e) {}
+
+    let cleaned = false;
+    const cleanup = () => {
+      if(cleaned) return;
+      cleaned = true;
+      try { link.remove(); } catch(e){}
       window.__rawbtBusy = false;
-    }, 2500);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+    const onVisibility = () => {
+      if(document.visibilityState === 'visible') cleanup();
+    };
+    const onPageShow = () => cleanup();
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+
+    link.click();
+    // Do not leave the custom-scheme launcher in the DOM.
+    setTimeout(cleanup, 1200);
     return true;
   }catch(e){
     window.__rawbtBusy = false;
@@ -2402,31 +2421,25 @@ function sendBillToRawBT(payload){
 }
 
 function printThermalBill(){
-  // Android: never enter the browser print() fallback. This is the important
-  // guard that prevents the printer/browser popup from appearing again.
-  const isAndroid = /Android/i.test(navigator.userAgent || '');
-  if(isAndroid && window.__thermalPrintBusy) return;
-  if(isAndroid) window.__thermalPrintBusy = true;
-
   setThermalWidth(thermalPaperWidth);
   const payload = buildNativeThermalPrintPayload();
-  if(payload.error){
-    if(isAndroid) window.__thermalPrintBusy = false;
-    alert(payload.error);
-    return;
-  }
+  if(payload.error){ alert(payload.error); return; }
 
   // 1) Native Android printer bridge — keep this for a future/native APK.
-  if(sendBillToNativePrinter(payload)){
-    if(isAndroid) setTimeout(() => { window.__thermalPrintBusy = false; }, 2500);
-    return;
-  }
+  if(sendBillToNativePrinter(payload)) return;
 
   // 2) Android + RawBT — direct ESC/POS print without browser print preview.
   if(sendBillToRawBT(payload)) return;
 
-  // 3) Existing browser fallback — kept so the same HTML continues to work
-  // on laptop/desktop browsers and when no Android printer bridge is available.
+  // Android par browser print dialog bilkul nahi kholna. Native bridge aur
+  // RawBT dono na milne par clear message dikhayenge. Laptop/desktop par
+  // purana browser-print fallback bana rahega.
+  if(/Android/i.test(navigator.userAgent || '')){
+    alert('Direct print ke liye RawBT app ya native printer bridge zaroori hai. RawBT install karke Bluetooth printer connect karein.');
+    return;
+  }
+
+  // 3) Laptop/desktop browser fallback — yahan normal print preview allowed hai.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
