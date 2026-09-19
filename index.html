@@ -2266,203 +2266,32 @@ function sendBillToNativePrinter(payload){
   return false;
 }
 
-function bytesToBase64(bytes){
-  let binary = '';
-  const chunkSize = 0x8000;
-  for(let i = 0; i < bytes.length; i += chunkSize){
-    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
-  }
-  return btoa(binary);
-}
-
-function buildRawBtEscPos(payload){
-  const width = payload.paperWidthMm === 80 ? 48 : 32;
-  const out = [];
-  const push = s => out.push(String(s));
-  const line = () => push('-'.repeat(width) + '\n');
-  const right = (value, len) => {
-    value = String(value);
-    return value.length >= len ? value.slice(-len) : ' '.repeat(len - value.length) + value;
-  };
-  const left = (value, len) => {
-    value = String(value);
-    return value.length >= len ? value.slice(0, len) : value + ' '.repeat(len - value.length);
-  };
-  const wrap = (value, len) => {
-    const words = String(value || '').split(/\s+/);
-    const lines = [];
-    let current = '';
-    for(const word of words){
-      if(!word) continue;
-      const candidate = current ? current + ' ' + word : word;
-      if(candidate.length <= len){
-        current = candidate;
-      } else {
-        if(current) lines.push(current);
-        let rest = word;
-        while(rest.length > len){
-          lines.push(rest.slice(0, len));
-          rest = rest.slice(len);
-        }
-        current = rest;
-      }
-    }
-    if(current) lines.push(current);
-    return lines.length ? lines : [''];
-  };
-
-  // ESC/POS initialize
-  push('\x1B\x40');
-  push('\x1B\x61\x01');
-  push('\x1B\x45\x01');
-  push('\x1D\x21\x11');
-  push('Mittu Hollsaller\n');
-  push('\x1D\x21\x00');
-  push('\x1B\x45\x00');
-  push('Rangra, Bhagalpur, Bihar, 853204, India.\n');
-  push('Mobile: +91 9540125307\n');
-  line();
-
-  push('\x1B\x61\x00');
-  const half = Math.floor(width / 2);
-  push(left('BILL NO: ' + payload.billNo, half) + right(payload.date, width - half) + '\n');
-  push(left('Customer: ' + payload.customer.name, half) + right(payload.time, width - half) + '\n');
-  if(payload.customer.mobile) push('Mobile: ' + payload.customer.mobile + '\n');
-  if(payload.customer.address) wrap('Address: ' + payload.customer.address, width).forEach(x => push(x + '\n'));
-  line();
-
-  // Keep the columns inside the selected paper width.
-  const itemWidth = payload.paperWidthMm === 80 ? 18 : 10;
-  const amountWidth = payload.paperWidthMm === 80 ? 11 : 7;
-  const qtyWidth = payload.paperWidthMm === 80 ? 5 : 4;
-  const rateWidth = payload.paperWidthMm === 80 ? 8 : 6;
-  push(left('#', 3) + left('Item', itemWidth) + right('Qty', qtyWidth) + right('Rate', rateWidth) + right('Amount', amountWidth) + '\n');
-  line();
-
-  for(const item of payload.items){
-    // Replace symbols that commonly fail on non-Unicode ESC/POS code pages.
-    const name = String(item.name || '-').replace(/[₹]/g, 'Rs.');
-    const itemLines = wrap(name, itemWidth);
-    itemLines.forEach((itemLine, index) => {
-      if(index === 0){
-        push(left(String(item.sr), 3) + left(itemLine, itemWidth) + right(item.qty, qtyWidth) + right(Number(item.rate).toFixed(2), rateWidth) + right(Number(item.amount).toFixed(2), amountWidth) + '\n');
-      } else {
-        push(' '.repeat(3) + itemLine + '\n');
-      }
-    });
-  }
-
-  line();
-  push('\x1B\x45\x01');
-  push(left('TOTAL', width - 12) + right('Rs.' + Number(payload.total).toFixed(2), 12) + '\n');
-  push('\x1B\x45\x00');
-  wrap(payload.totalWords, width).forEach(x => push(x + '\n'));
-  line();
-  push('\x1B\x61\x01');
-  push('\x1B\x45\x01');
-  push('Thank you!\n');
-  push('\x1B\x45\x00');
-  push('For Mittu Hollsaller\n');
-  push('\n\n\n');
-  // ESC/POS full cut
-  push('\x1D\x56\x00');
-
-  return new TextEncoder().encode(out.join(''));
-}
-
-function sendBillToMharmal(payload){
-  // Android + Mharmal Printer WebSocket bridge.
-  // Mharmal Printer listens on ws://localhost:22300 and accepts raw ESC/POS bytes.
-  if(!/Android/i.test(navigator.userAgent || '')) return false;
-  if(window.__mharmalBusy) return true;
-
-  window.__mharmalBusy = true;
-  let finished = false;
-  let socket = null;
-
-  const finish = (showError) => {
-    if(finished) return;
-    finished = true;
-    try { if(socket && socket.readyState === WebSocket.OPEN) socket.close(); } catch(e) {}
-    window.__mharmalBusy = false;
-    if(showError){
-      alert('Mharmal Printer se connection nahi ho saka. Mharmal Printer app mein WebSocket service START karein aur printer connected rakhein.');
-    }
-  };
-
-  try{
-    const bytes = buildRawBtEscPos(payload);
-    socket = new WebSocket('ws://localhost:22300');
-    socket.binaryType = 'arraybuffer';
-
-    const timeout = setTimeout(() => finish(true), 5000);
-
-    socket.onopen = () => {
-      try{
-        // Send the complete ESC/POS job as raw binary bytes.
-        socket.send(bytes.buffer);
-        // Give the bridge a short moment to hand the job to Android's printer
-        // service, then close this job connection. No custom URL, iframe,
-        // browser history entry, or delayed re-launch is used.
-        setTimeout(() => {
-          clearTimeout(timeout);
-          finish(false);
-        }, 250);
-      }catch(e){
-        clearTimeout(timeout);
-        finish(true);
-      }
-    };
-
-    socket.onerror = () => {
-      clearTimeout(timeout);
-      finish(true);
-    };
-
-    socket.onclose = () => {
-      clearTimeout(timeout);
-      if(!finished) finish(false);
-    };
-
-    return true;
-  }catch(e){
-    finish(true);
-    console.warn('Mharmal WebSocket bridge failed:', e);
-    return true;
-  }
-}
-
 function printThermalBill(){
-  // Android: never enter the browser print() fallback. This is the important
-  // guard that prevents the printer/browser popup from appearing again.
-  const isAndroid = /Android/i.test(navigator.userAgent || '');
-  if(isAndroid && window.__thermalPrintBusy) return;
-  if(isAndroid) window.__thermalPrintBusy = true;
+  // Prevent accidental double-taps from creating duplicate print jobs.
+  if(window.__thermalPrintBusy) return;
+  window.__thermalPrintBusy = true;
+  setTimeout(() => { window.__thermalPrintBusy = false; }, 1800);
 
   setThermalWidth(thermalPaperWidth);
   const payload = buildNativeThermalPrintPayload();
   if(payload.error){
-    if(isAndroid) window.__thermalPrintBusy = false;
+    window.__thermalPrintBusy = false;
     alert(payload.error);
     return;
   }
 
-  // 1) Native Android printer bridge — keep this for a future/native APK.
-  if(sendBillToNativePrinter(payload)){
-    if(isAndroid) setTimeout(() => { window.__thermalPrintBusy = false; }, 2500);
-    return;
-  }
+  // 1) Native Android printer bridge — direct ESC/POS printing.
+  // The native Android wrapper should expose one of the methods below.
+  if(sendBillToNativePrinter(payload)) return;
 
-  // 2) Android + Mharmal Printer — direct ESC/POS print via WebSocket.
-  if(sendBillToMharmal(payload)) return;
-
-  // 3) Existing browser fallback — kept so the same HTML continues to work
-  // on laptop/desktop browsers and when no Android printer bridge is available.
+  // 2) Existing browser fallback — keeps the same HTML working on
+  // laptop/desktop browsers and on Android when no native bridge exists.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
   if(!printWindow){
-    alert('Direct printer bridge nahi mila. Browser/WebView mein pop-up allow karein, ya app ko native thermal-printer bridge ke saath chalayein.');
+    window.__thermalPrintBusy = false;
+    alert('Printer bridge nahi mila. Browser mein pop-up allow karein, ya app ko native thermal-printer bridge ke saath chalayein.');
     return;
   }
 
