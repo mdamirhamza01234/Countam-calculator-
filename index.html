@@ -12,7 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
@@ -38,8 +38,8 @@
     if(btn) { btn.disabled = true; btn.innerHTML = '<span class="google-spinner"></span> Google par ja rahe hain...'; }
     if(errorEl) errorEl.textContent = '';
     try {
-      // Redirect is preferred for mobile browsers/devices.
-      await signInWithRedirect(fbAuth, googleProvider);
+      // Vercel-hosted web app: use popup to avoid mobile Chrome redirect/storage loops.
+      await signInWithPopup(fbAuth, googleProvider);
     } catch(err) {
       console.error('Google sign-in failed:', err);
       if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
@@ -47,11 +47,6 @@
     }
   };
 
-  getRedirectResult(fbAuth).catch(err => {
-    console.error('Google redirect result error:', err);
-    const errorEl = document.getElementById('loginError');
-    if(errorEl) errorEl.textContent = 'Google login error: ' + (err?.message || 'Unknown error');
-  });
 
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
