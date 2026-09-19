@@ -2370,76 +2370,94 @@ function buildRawBtEscPos(payload){
   return new TextEncoder().encode(out.join(''));
 }
 
-function sendBillToRawBT(payload){
-  // Android + RawBT only. Launch exactly once for this button press.
+function sendBillToMharmal(payload){
+  // Android + Mharmal Printer WebSocket bridge.
+  // Mharmal Printer listens on ws://localhost:22300 and accepts raw ESC/POS bytes.
   if(!/Android/i.test(navigator.userAgent || '')) return false;
+  if(window.__mharmalBusy) return true;
+
+  window.__mharmalBusy = true;
+  let finished = false;
+  let socket = null;
+
+  const finish = (showError) => {
+    if(finished) return;
+    finished = true;
+    try { if(socket && socket.readyState === WebSocket.OPEN) socket.close(); } catch(e) {}
+    window.__mharmalBusy = false;
+    if(showError){
+      alert('Mharmal Printer se connection nahi ho saka. Mharmal Printer app mein WebSocket service START karein aur printer connected rakhein.');
+    }
+  };
+
   try{
-    // If RawBT/app switch is already in progress, do not launch it again.
-    if(window.__rawbtBusy) return true;
-    window.__rawbtBusy = true;
-
     const bytes = buildRawBtEscPos(payload);
-    const base64 = bytesToBase64(bytes);
-    const rawbtUrl = 'rawbt:base64,' + base64;
+    socket = new WebSocket('ws://localhost:22300');
+    socket.binaryType = 'arraybuffer';
 
-    // Use a short-lived launcher. Keeping an iframe alive for several seconds
-    // can cause some Android WebViews to retry its custom URL when returning
-    // from RawBT. Remove it quickly and clear the lock as soon as the app/page
-    // becomes visible again, so the next bill can be printed normally.
-    const link = document.createElement('a');
-    link.href = rawbtUrl;
-    link.style.display = 'none';
-    link.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(link);
+    const timeout = setTimeout(() => finish(true), 5000);
 
-    let cleaned = false;
-    const cleanup = () => {
-      if(cleaned) return;
-      cleaned = true;
-      try { link.remove(); } catch(e){}
-      window.__rawbtBusy = false;
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('pageshow', onPageShow);
+    socket.onopen = () => {
+      try{
+        // Send the complete ESC/POS job as raw binary bytes.
+        socket.send(bytes.buffer);
+        // Give the bridge a short moment to hand the job to Android's printer
+        // service, then close this job connection. No custom URL, iframe,
+        // browser history entry, or delayed re-launch is used.
+        setTimeout(() => {
+          clearTimeout(timeout);
+          finish(false);
+        }, 250);
+      }catch(e){
+        clearTimeout(timeout);
+        finish(true);
+      }
     };
-    const onVisibility = () => {
-      if(document.visibilityState === 'visible') cleanup();
+
+    socket.onerror = () => {
+      clearTimeout(timeout);
+      finish(true);
     };
-    const onPageShow = () => cleanup();
 
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('pageshow', onPageShow);
+    socket.onclose = () => {
+      clearTimeout(timeout);
+      if(!finished) finish(false);
+    };
 
-    link.click();
-    // Do not leave the custom-scheme launcher in the DOM.
-    setTimeout(cleanup, 1200);
     return true;
   }catch(e){
-    window.__rawbtBusy = false;
-    console.warn('RawBT bridge failed:', e);
-    return false;
+    finish(true);
+    console.warn('Mharmal WebSocket bridge failed:', e);
+    return true;
   }
 }
 
 function printThermalBill(){
+  // Android: never enter the browser print() fallback. This is the important
+  // guard that prevents the printer/browser popup from appearing again.
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  if(isAndroid && window.__thermalPrintBusy) return;
+  if(isAndroid) window.__thermalPrintBusy = true;
+
   setThermalWidth(thermalPaperWidth);
   const payload = buildNativeThermalPrintPayload();
-  if(payload.error){ alert(payload.error); return; }
-
-  // 1) Native Android printer bridge — keep this for a future/native APK.
-  if(sendBillToNativePrinter(payload)) return;
-
-  // 2) Android + RawBT — direct ESC/POS print without browser print preview.
-  if(sendBillToRawBT(payload)) return;
-
-  // Android par browser print dialog bilkul nahi kholna. Native bridge aur
-  // RawBT dono na milne par clear message dikhayenge. Laptop/desktop par
-  // purana browser-print fallback bana rahega.
-  if(/Android/i.test(navigator.userAgent || '')){
-    alert('Direct print ke liye RawBT app ya native printer bridge zaroori hai. RawBT install karke Bluetooth printer connect karein.');
+  if(payload.error){
+    if(isAndroid) window.__thermalPrintBusy = false;
+    alert(payload.error);
     return;
   }
 
-  // 3) Laptop/desktop browser fallback — yahan normal print preview allowed hai.
+  // 1) Native Android printer bridge — keep this for a future/native APK.
+  if(sendBillToNativePrinter(payload)){
+    if(isAndroid) setTimeout(() => { window.__thermalPrintBusy = false; }, 2500);
+    return;
+  }
+
+  // 2) Android + Mharmal Printer — direct ESC/POS print via WebSocket.
+  if(sendBillToMharmal(payload)) return;
+
+  // 3) Existing browser fallback — kept so the same HTML continues to work
+  // on laptop/desktop browsers and when no Android printer bridge is available.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
