@@ -10,8 +10,9 @@
 <script type="module">
   // ---------------- FIREBASE (syncs the QR to the old-phone display) ----------------
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, update, remove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
@@ -26,7 +27,190 @@
   const fbApp = initializeApp(firebaseConfig);
   const fbDb = getDatabase(fbApp);
   const fbStorage = getStorage(fbApp);
+  const fbAuth = getAuth(fbApp);
+  const googleProvider = new GoogleAuthProvider();
   const billRef = ref(fbDb, 'currentBill');
+
+  // ---------------- GOOGLE LOGIN ----------------
+  window.signInWithGoogle = async function(){
+    const btn = document.getElementById('googleLoginBtn');
+    const errorEl = document.getElementById('loginError');
+    if(btn) { btn.disabled = true; btn.innerHTML = '<span class="google-spinner"></span> Google par ja rahe hain...'; }
+    if(errorEl) errorEl.textContent = '';
+    try {
+      // Redirect is preferred for mobile browsers/devices.
+      await signInWithRedirect(fbAuth, googleProvider);
+    } catch(err) {
+      console.error('Google sign-in failed:', err);
+      if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
+      if(btn) { btn.disabled = false; btn.innerHTML = '<svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg> Continue with Google'; }
+    }
+  };
+
+  getRedirectResult(fbAuth).catch(err => {
+    console.error('Google redirect result error:', err);
+    const errorEl = document.getElementById('loginError');
+    if(errorEl) errorEl.textContent = 'Google login error: ' + (err?.message || 'Unknown error');
+  });
+
+  onAuthStateChanged(fbAuth, (user) => {
+    window.currentFirebaseUser = user || null;
+    const loginScreen = document.getElementById('loginScreen');
+    if(user) {
+      if(loginScreen) loginScreen.style.display = 'none';
+      document.body.classList.remove('auth-required');
+      // Give the normal (non-module) app script time to load, then restore
+      // this user's cloud bill history and merge it with localStorage.
+      setTimeout(() => {
+        if(typeof window.restoreBillHistoryFromFirebase === 'function') {
+          window.restoreBillHistoryFromFirebase().catch(err =>
+            console.warn('Firebase bill history restore failed:', err)
+          );
+        }
+      }, 0);
+    } else {
+      if(loginScreen) loginScreen.style.display = 'flex';
+      document.body.classList.add('auth-required');
+    }
+  });
+
+  // ---------------- ACCOUNT ACTIONS ----------------
+  window.logoutMittuAccount = async function(){
+    try {
+      await signOut(fbAuth);
+      closeDrawer();
+    } catch(err) {
+      console.error('Logout failed:', err);
+      alert('Logout nahi ho paya. Kripya dobara try karein.');
+    }
+  };
+
+  window.deleteMittuAccount = async function(){
+    const user = fbAuth.currentUser || window.currentFirebaseUser;
+    if(!user) {
+      alert('Pehle Google account se login karein.');
+      return;
+    }
+
+    const ok = confirm(
+      '⚠️ Account Delete Karein?\n\n' +
+      'Isse is Google account ki Firebase Bill History aur customer data permanently delete ho jayega.\n' +
+      'Phone ke local bill records bhi delete ho jayenge.\n\n' +
+      'Ye action undo nahi kiya ja sakta.\n\nKya aap sach mein Account Delete karna chahte hain?'
+    );
+    if(!ok) return;
+
+    try {
+      // Delete this user's cloud bill history first.
+      await remove(ref(fbDb, 'users/' + user.uid));
+
+      // Delete this phone's local copy too.
+      try {
+        localStorage.removeItem('mittu_bill_history_' + user.uid);
+        localStorage.removeItem('mittu_bill_history');
+      } catch(e) {}
+
+      // Finally delete the Firebase Authentication account.
+      await deleteUser(user);
+
+      window.currentFirebaseUser = null;
+      closeDrawer();
+      alert('Account aur Firebase mein saved customer/bill data delete ho gaya hai.');
+    } catch(err) {
+      console.error('Account deletion failed:', err);
+      if(err && (err.code === 'auth/requires-recent-login' || err.code === 'auth/user-token-expired')) {
+        alert('Security ke liye Google account se recent login zaroori hai.\n\nPehle Logout karke dobara Google se Login karein, phir Account Delete karein.');
+      } else {
+        alert('Account delete nahi ho paya: ' + (err?.message || 'Unknown error'));
+      }
+    }
+  };
+
+  // ---------------- USER BILL HISTORY CLOUD SYNC ----------------
+  // Each Google account gets its own Firebase UID folder. localStorage remains
+  // the fast/offline copy on the current phone, while Firebase keeps the
+  // cloud copy so the same account can restore bills on another phone.
+  function firebaseBillPath(uid){
+    return ref(fbDb, 'users/' + uid + '/bills');
+  }
+
+  function firebaseBillKey(record){
+    return encodeURIComponent(String(record.billNo || '') + '|' + String(record.dateTime || ''))
+      .replace(/\./g, '%2E');
+  }
+
+  window.saveBillToFirebase = async function(record){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user || !record) return false;
+    await set(ref(fbDb, 'users/' + user.uid + '/bills/' + firebaseBillKey(record)), record);
+    return true;
+  };
+
+  window.deleteBillFromFirebase = async function(record){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user || !record) return false;
+    await remove(ref(fbDb, 'users/' + user.uid + '/bills/' + firebaseBillKey(record)));
+    return true;
+  };
+
+  window.clearBillHistoryFromFirebase = async function(){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user) return false;
+    await remove(firebaseBillPath(user.uid));
+    return true;
+  };
+
+  window.restoreBillHistoryFromFirebase = async function(){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user) return false;
+
+    const snap = await get(firebaseBillPath(user.uid));
+    const cloud = snap.exists() ? Object.values(snap.val() || {}) : [];
+
+    // The app keeps a local copy too. If this is the first login on this
+    // device, migrate the old pre-login history into this user's local key.
+    const userKey = 'mittu_bill_history_' + user.uid;
+    let local = [];
+    try {
+      const scoped = localStorage.getItem(userKey);
+      if(scoped) local = JSON.parse(scoped) || [];
+      else {
+        const legacy = localStorage.getItem('mittu_bill_history');
+        if(legacy) {
+          local = JSON.parse(legacy) || [];
+          if(local.length) localStorage.setItem(userKey, JSON.stringify(local));
+          localStorage.removeItem('mittu_bill_history');
+        }
+      }
+    } catch(e) {
+      local = [];
+    }
+
+    const byKey = new Map();
+    cloud.forEach(rec => { if(rec) byKey.set(firebaseBillKey(rec), rec); });
+    local.forEach(rec => { if(rec) byKey.set(firebaseBillKey(rec), rec); });
+    const merged = Array.from(byKey.values()).sort((a,b) =>
+      String(b.dateTime || '').localeCompare(String(a.dateTime || ''))
+    );
+
+    try { localStorage.setItem(userKey, JSON.stringify(merged)); } catch(e) {}
+
+    // If cloud was empty but local history existed, upload the local history.
+    if(cloud.length === 0 && merged.length){
+      await Promise.all(merged.map(rec =>
+        set(ref(fbDb, 'users/' + user.uid + '/bills/' + firebaseBillKey(rec)), rec)
+      ));
+    } else {
+      // Also upload any local-only bills that were merged in.
+      const cloudKeys = new Set(cloud.map(firebaseBillKey));
+      await Promise.all(merged.filter(rec => !cloudKeys.has(firebaseBillKey(rec))).map(rec =>
+        set(ref(fbDb, 'users/' + user.uid + '/bills/' + firebaseBillKey(rec)), rec)
+      ));
+    }
+
+    window.dispatchEvent(new CustomEvent('mittuFirebaseBillHistoryReady'));
+    return merged;
+  };
 
   // Uploads a generated PDF (Blob) to Firebase Storage and returns a real,
   // public HTTPS download URL. Median/GoNative cannot open blob: or data:
@@ -70,6 +254,75 @@
     padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
     color: #3b1f00;
   }
+  /* ---------------- GOOGLE LOGIN SCREEN ---------------- */
+  body.auth-required { overflow: hidden; }
+  #loginScreen {
+    position: fixed; inset: 0; z-index: 20000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background: #faf9f7;
+    overflow-y: auto;
+  }
+  .login-card {
+    width: 100%; max-width: 430px;
+    background: #fff; border: 1px solid #e8e6e3;
+    border-radius: 22px; padding: 38px 30px 30px;
+    box-shadow: 0 10px 35px rgba(0,0,0,.07);
+    text-align: center;
+  }
+  .login-logo {
+    width: 58px; height: 58px; margin: 0 auto 18px;
+    border-radius: 16px; background: #16325c;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 29px;
+  }
+  .login-title {
+    margin: 0; color: #222; font-size: 28px; font-weight: 750;
+    letter-spacing: -.4px;
+  }
+  .login-subtitle {
+    margin: 10px 0 25px; color: #666; font-size: 14px; line-height: 1.5;
+  }
+  #googleLoginBtn {
+    width: 100%; min-height: 54px; border: 0;
+    border-radius: 999px; background: #171717; color: #fff;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 13px;
+    box-shadow: none;
+    transition: transform .12s ease, background .12s ease;
+  }
+  #googleLoginBtn:active { background: #000; transform: scale(.99); }
+  #googleLoginBtn:disabled { opacity: .7; cursor: wait; }
+  .google-logo { width: 22px; height: 22px; display: block; flex: 0 0 22px; }
+  .google-spinner {
+    width: 18px; height: 18px; border: 2px solid #ddd;
+    border-top-color: #4285f4; border-radius: 50%;
+    animation: googleSpin .8s linear infinite;
+  }
+  @keyframes googleSpin { to { transform: rotate(360deg); } }
+  .login-or {
+    display: flex; align-items: center; gap: 14px; margin: 24px 0 18px;
+    color: #888; font-size: 15px; font-weight: 500;
+  }
+  .login-or::before, .login-or::after {
+    content: ''; height: 1px; background: #d9d7d4; flex: 1;
+  }
+  .login-email {
+    width: 100%; min-height: 54px; padding: 0 18px;
+    border: 1px solid #ddd9d5; border-radius: 14px;
+    background: #fff; color: #333; text-align: center;
+    font-size: 16px; outline: none;
+  }
+  .login-email::placeholder { color: #888; }
+  .login-email:focus { border-color: #b9b5b0; box-shadow: 0 0 0 3px rgba(0,0,0,.04); }
+  .login-terms {
+    margin: 18px 0 0; color: #888; font-size: 11px; line-height: 1.55;
+  }
+  #loginError {
+    min-height: 18px; margin-top: 14px; color: #c62828;
+    font-size: 12px; line-height: 1.4; word-break: break-word;
+  }
+
   .app-wrap {
     max-width: 950px;
     margin: 0 auto;
@@ -510,6 +763,22 @@
 </style>
 </head>
 <body>
+<!-- Google Login: billing app is shown only after Firebase Authentication succeeds. -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">🛒</div>
+    <h1 class="login-title">Welcome to Mittu Billing</h1>
+    <p class="login-subtitle">Bill Generator use karne ke liye apne Google account se continue karein.</p>
+    <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
+      <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg>
+      Continue with Google
+    </button>
+    <div class="login-or">OR</div>
+    <input class="login-email" type="email" inputmode="email" autocomplete="email" placeholder="Enter your email" aria-label="Enter your email">
+    <div class="login-terms">Continue karke aap app ke login terms aur privacy rules ko accept karte hain.</div>
+    <div id="loginError" role="alert"></div>
+  </div>
+</div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
   <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
@@ -537,6 +806,12 @@
     </div>
     <div class="drawer-item" onclick="closeDrawer(); openBillHistory();">
       <span class="drawer-icon">📋</span> Sabhi Bills Ka Record Dekhein
+    </div>
+    <div class="drawer-item" onclick="logoutMittuAccount()">
+      <span class="drawer-icon">🚪</span> Log Out
+    </div>
+    <div class="drawer-item" onclick="deleteMittuAccount()" style="color:#d62828;">
+      <span class="drawer-icon">🗑️</span> Account Delete Karein
     </div>
   </div>
 </div>
@@ -693,7 +968,8 @@
     <p style="color:#e6d5c2; font-size:13px; margin:2px 0 0 0;">UPI ID: 7303714309@axl</p>
   </div>
 
-  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:340px; margin-top:14px;">✅ Payment Mil Gaya - Bill WhatsApp Par Bhejein</button>
+  <button class="thermal-btn" onclick="closeQRFullscreen(); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:14px;">🖨️ Bill Print Karein</button>
+  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;">📱 WhatsApp Pe Bill Bhejen</button>
   <button class="add-row-btn" onclick="downloadQR(false)" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
 </div>
 
@@ -1121,14 +1397,28 @@ function generateBill(openFile = true){
   });
 }
 
-// ---------------- BILL HISTORY (localStorage) ----------------
+// ---------------- BILL HISTORY (localStorage + Firebase cloud) ----------------
 const BILL_HISTORY_KEY = 'mittu_bill_history';
+
+function getBillHistoryStorageKey(){
+  const user = window.currentFirebaseUser;
+  return user && user.uid ? ('mittu_bill_history_' + user.uid) : BILL_HISTORY_KEY;
+}
 
 function saveBillToHistory(record){
   try {
-    const existing = JSON.parse(localStorage.getItem(BILL_HISTORY_KEY) || '[]');
-    existing.unshift(record); // newest first
-    localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(existing));
+    const key = getBillHistoryStorageKey();
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    // Avoid duplicate entries if the same bill is generated/restored twice.
+    const recordKey = String(record.billNo || '') + '|' + String(record.dateTime || '');
+    const filtered = existing.filter(r => (String(r.billNo || '') + '|' + String(r.dateTime || '')) !== recordKey);
+    filtered.unshift(record); // newest first
+    localStorage.setItem(key, JSON.stringify(filtered));
+    if(window.saveBillToFirebase){
+      window.saveBillToFirebase(record).catch(err =>
+        console.warn('Firebase bill history save failed; local copy is still safe:', err)
+      );
+    }
   } catch(e){
     console.warn('Bill history storage not available in this environment:', e);
   }
@@ -1136,11 +1426,17 @@ function saveBillToHistory(record){
 
 function getBillHistory(){
   try {
-    return JSON.parse(localStorage.getItem(BILL_HISTORY_KEY) || '[]');
+    return JSON.parse(localStorage.getItem(getBillHistoryStorageKey()) || '[]');
   } catch(e){
     return null; // storage blocked (e.g. Claude preview sandbox)
   }
 }
+
+// When cloud history arrives after Google login, refresh the open history UI.
+window.addEventListener('mittuFirebaseBillHistoryReady', () => {
+  const overlay = document.getElementById('historyOverlay');
+  if(overlay && overlay.style.display !== 'none') renderBillHistory();
+});
 
 let historySelectionMode = false;
 let historySelectedSet = new Set();
@@ -1259,8 +1555,12 @@ function deleteSelectedHistory(){
   }
   if(!confirm(`${historySelectedSet.size} bill(s) delete karein? Ye wapas nahi aayega.`)) return;
   let history = getBillHistory() || [];
+  const deletedRecords = history.filter((_, idx) => historySelectedSet.has(idx));
   history = history.filter((_, idx) => !historySelectedSet.has(idx));
-  try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(history)); } catch(e){}
+  try { localStorage.setItem(getBillHistoryStorageKey(), JSON.stringify(history)); } catch(e){}
+  deletedRecords.forEach(rec => {
+    if(window.deleteBillFromFirebase) window.deleteBillFromFirebase(rec).catch(err => console.warn('Firebase delete failed:', err));
+  });
   historySelectionMode = false;
   historySelectedSet.clear();
   renderBillHistory();
@@ -1278,7 +1578,8 @@ function closeBillHistory(){
 
 function clearBillHistory(){
   if(confirm('Kya aap sach mein saara bill history delete karna chahte hain? Ye wapas nahi aayega.')){
-    try { localStorage.removeItem(BILL_HISTORY_KEY); } catch(e){}
+    try { localStorage.removeItem(getBillHistoryStorageKey()); } catch(e){}
+    if(window.clearBillHistoryFromFirebase) window.clearBillHistoryFromFirebase().catch(err => console.warn('Firebase history clear failed:', err));
     openBillHistory();
   }
 }
@@ -1287,8 +1588,10 @@ function deleteHistoryRecord(idx){
   const history = getBillHistory();
   if(!history || !history[idx]) return;
   if(confirm(`Bill No. ${history[idx].billNo} ko history se delete karein?`)){
+    const deletedRecord = history[idx];
     history.splice(idx, 1);
-    try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(history)); } catch(e){}
+    try { localStorage.setItem(getBillHistoryStorageKey(), JSON.stringify(history)); } catch(e){}
+    if(window.deleteBillFromFirebase) window.deleteBillFromFirebase(deletedRecord).catch(err => console.warn('Firebase delete failed:', err));
     openBillHistory();
   }
 }
@@ -1341,7 +1644,10 @@ function restoreHistoryFromFile(event){
       });
       // newest first
       merged.sort((a,b) => (b.dateTime || '').localeCompare(a.dateTime || ''));
-      try { localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(merged)); } catch(e2){}
+      try { localStorage.setItem(getBillHistoryStorageKey(), JSON.stringify(merged)); } catch(e2){}
+      if(window.saveBillToFirebase){
+        merged.forEach(rec => window.saveBillToFirebase(rec).catch(err => console.warn('Firebase backup sync failed:', err)));
+      }
       alert(`${imported.length} bills backup file se load ho gaye. Total ab ${merged.length} bills dikh rahe hain.`);
       openBillHistory();
     } catch(err){
