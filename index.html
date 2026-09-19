@@ -629,8 +629,8 @@
       <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
       <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
     </div>
-    <button class="thermal-btn" onclick="printThermalBill()">🖨️ Thermal Printer Se Bill Print Karein</button>
-    <div class="thermal-note">Printer ke paper ke hisab se 58mm (2 inch) ya 80mm (3 inch) select karein. Bill white background aur height automatic rahegi.</div>
+    <button class="thermal-btn" onclick="printThermalBill()">🖨️ Bill Direct Thermal Printer Par Print Karein</button>
+    <div class="thermal-note">58mm (2 inch) ya 80mm (3 inch) select karein. Android app ke native printer bridge se direct print hoga; normal browser mein fallback print dialog khulega.</div>
   </div>
 
   <button class="whatsapp-btn" onclick="sendWhatsApp()">📱 Bill PDF WhatsApp Par Bhejein</button>
@@ -1857,15 +1857,105 @@ function buildThermalBillHtml(){
     </div>` };
 }
 
+function buildNativeThermalPrintPayload(){
+  const data = buildThermalBillHtml();
+  if(data.error) return data;
+
+  const rows = [];
+  let total = 0;
+  document.querySelectorAll('#itemsBody tr').forEach((tr, i) => {
+    const name = tr.querySelector('.itemName').value.trim();
+    const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+    if(!name && qty === 0 && rate === 0) return;
+    const amt = qty * rate;
+    total += amt;
+    rows.push({
+      sr: i + 1,
+      name: name || '-',
+      qty: qty,
+      rate: rate,
+      amount: amt
+    });
+  });
+
+  const now = formatNowParts();
+  return {
+    type: 'mittu_thermal_bill',
+    version: 1,
+    paperWidthMm: thermalPaperWidth,
+    billNo: document.getElementById('sno').value || '',
+    date: now.date,
+    time: now.time,
+    customer: {
+      name: document.getElementById('custName').value.trim() || 'Customer',
+      mobile: document.getElementById('custMobile').value.trim(),
+      address: document.getElementById('custAddr').value.trim()
+    },
+    shop: {
+      name: 'Mittu Hollsaller',
+      address: 'Rangra, Bhagalpur, Bihar, 853204, India.',
+      mobile: '+91 9540125307'
+    },
+    items: rows,
+    total: total,
+    totalWords: amountInWords(total),
+    cutPaper: true
+  };
+}
+
+function sendBillToNativePrinter(payload){
+  // Native Android wrapper contract.
+  // The APK should expose ONE of these methods and send the JSON to its
+  // Bluetooth/Wi-Fi ESC/POS printer layer. No PDF is involved here.
+  const json = JSON.stringify(payload);
+
+  try {
+    if(window.MittuPrinter && typeof window.MittuPrinter.printBill === 'function'){
+      window.MittuPrinter.printBill(json);
+      return true;
+    }
+  } catch(e){
+    console.warn('MittuPrinter bridge failed:', e);
+  }
+
+  try {
+    if(window.AndroidThermalPrinter && typeof window.AndroidThermalPrinter.printBill === 'function'){
+      window.AndroidThermalPrinter.printBill(json);
+      return true;
+    }
+  } catch(e){
+    console.warn('AndroidThermalPrinter bridge failed:', e);
+  }
+
+  try {
+    if(window.AndroidPrinter && typeof window.AndroidPrinter.printThermalBill === 'function'){
+      window.AndroidPrinter.printThermalBill(json);
+      return true;
+    }
+  } catch(e){
+    console.warn('AndroidPrinter bridge failed:', e);
+  }
+
+  return false;
+}
+
 function printThermalBill(){
   setThermalWidth(thermalPaperWidth);
-  const data = buildThermalBillHtml();
-  if(data.error){ alert(data.error); return; }
+  const payload = buildNativeThermalPrintPayload();
+  if(payload.error){ alert(payload.error); return; }
 
+  // First choice: native Android printer bridge. This is the path that gives
+  // the Vyapar-style "tap print -> printer immediately prints" experience.
+  if(sendBillToNativePrinter(payload)) return;
+
+  // Browser fallback is intentionally kept so the existing HTML still works
+  // when opened outside the Android APK. It does NOT claim to be direct print.
+  const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
   const printWindow = window.open('', '_blank');
   if(!printWindow){
-    alert('Print window open nahi hua. Browser/WebView mein pop-up allow karein.');
+    alert('Direct printer bridge nahi mila. Browser/WebView mein pop-up allow karein, ya app ko native thermal-printer bridge ke saath chalayein.');
     return;
   }
 
@@ -1897,9 +1987,7 @@ function printThermalBill(){
     </style></head><body>${data.html}</body></html>`);
   printWindow.document.close();
   printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 350);
+  setTimeout(() => { printWindow.print(); }, 350);
 }
 
 // ---------------- HAMBURGER DRAWER ----------------
