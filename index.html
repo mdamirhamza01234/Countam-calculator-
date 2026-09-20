@@ -757,7 +757,7 @@
   background: #fff; transform: translateX(-100%);
   transition: transform 0.28s ease;
   box-shadow: 4px 0 18px rgba(0,0,0,0.25);
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; overflow-y: auto;
   padding-top: env(safe-area-inset-top, 0);
 }
 .drawer-panel.open { transform: translateX(0); }
@@ -778,6 +778,16 @@
 }
 .drawer-item:active { background: #fff3e6; }
 .drawer-icon { font-size: 19px; width: 24px; text-align: center; }
+.drawer-recents-title { padding:18px 18px 8px; font-size:17px; font-weight:800; color:#222; border-top:1px solid #eee; margin-top:4px; }
+.drawer-recents-list { padding:0 10px 18px; }
+.drawer-recent-row { display:flex; align-items:center; gap:10px; padding:11px 8px; border-radius:9px; cursor:pointer; }
+.drawer-recent-row:active { background:#f1f1f1; }
+.drawer-recent-avatar { width:34px; height:34px; border-radius:50%; background:#eef1f5; color:#333; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; flex:0 0 34px; }
+.drawer-recent-main { min-width:0; flex:1; }
+.drawer-recent-name { font-size:14px; font-weight:700; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-recent-meta { font-size:11px; color:#777; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-recent-amount { font-size:14px; font-weight:800; color:#1a7a3e; white-space:nowrap; }
+.drawer-recent-empty { padding:8px 8px 16px; font-size:12px; color:#888; }
 
 #searchOverlay input#searchBillInput:focus { outline: 2px solid #ff9933; }
 </style>
@@ -821,9 +831,6 @@
     <div class="drawer-item" onclick="openSearchBill()">
       <span class="drawer-icon">🔍</span> Search Bill
     </div>
-    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();">
-      <span class="drawer-icon">🕘</span> Recents
-    </div>
     <div class="drawer-item" onclick="openCustomerRecords()">
       <span class="drawer-icon">🧾</span> Customer Record PDF
     </div>
@@ -836,6 +843,8 @@
     <div class="drawer-item" onclick="deleteMittuAccount()" style="color:#d62828;">
       <span class="drawer-icon">🗑️</span> Account Delete Karein
     </div>
+    <div class="drawer-recents-title">Recents</div>
+    <div id="drawerRecentsList" class="drawer-recents-list"></div>
   </div>
 </div>
 
@@ -1439,6 +1448,7 @@ function saveBillToHistory(record){
     const filtered = existing.filter(r => (String(r.billNo || '') + '|' + String(r.dateTime || '')) !== recordKey);
     filtered.unshift(record); // newest first
     localStorage.setItem(key, JSON.stringify(filtered));
+    if(typeof renderDrawerRecents === 'function') renderDrawerRecents();
     if(window.saveBillToFirebase){
       window.saveBillToFirebase(record).catch(err =>
         console.warn('Firebase bill history save failed; local copy is still safe:', err)
@@ -2383,8 +2393,39 @@ function printThermalBill(){
   setTimeout(() => { printWindow.print(); }, 350);
 }
 
+// ---------------- DRAWER RECENTS (ChatGPT-style) ----------------
+function renderDrawerRecents(){
+  const el = document.getElementById('drawerRecentsList');
+  if(!el) return;
+  const history = getBillHistory();
+  if(!Array.isArray(history) || history.length === 0){
+    el.innerHTML = '<div class="drawer-recent-empty">Abhi koi recent bill nahi hai.</div>';
+    return;
+  }
+  el.innerHTML = '';
+  history.slice(0, 8).forEach((rec, idx) => {
+    const row = document.createElement('div');
+    row.className = 'drawer-recent-row';
+    const fullName = String(rec.custName || 'Customer').trim() || 'Customer';
+    const shortName = fullName.length > 24 ? fullName.slice(0,24).trim() + '…' : fullName;
+    const words = fullName.split(/\s+/).filter(Boolean);
+    const initials = ((words[0] || 'C')[0] + (words.length > 1 ? words[1][0] : (words[0] || 'C')[1] || '')).toUpperCase();
+    let time = String(rec.dateTime || '').trim();
+    if(time.includes(',')) time = time.split(',').pop().trim();
+    if(time.includes('·')) time = time.split('·').pop().trim();
+    const amount = '₹' + Number(rec.total || 0).toFixed(2);
+    row.innerHTML = `<div class="drawer-recent-avatar">${initials}</div><div class="drawer-recent-main"><div class="drawer-recent-name">${shortName}</div><div class="drawer-recent-meta">${time || ('Bill ' + (rec.billNo || ''))}</div></div><div class="drawer-recent-amount">${amount}</div>`;
+    row.onclick = () => {
+      closeDrawer();
+      setTimeout(() => { if(typeof restoreBillToForm === 'function') restoreBillToForm(idx); }, 280);
+    };
+    el.appendChild(row);
+  });
+}
+
 // ---------------- HAMBURGER DRAWER ----------------
 function openDrawer(){
+  renderDrawerRecents();
   document.getElementById('drawerOverlay').style.display = 'block';
   requestAnimationFrame(() => document.getElementById('drawerPanel').classList.add('open'));
 }
