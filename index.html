@@ -114,7 +114,7 @@
 
     const ok = confirm(
       'Delete Account?\n\n' +
-      'This will permanently delete this Google account's Firebase bill history and customer data.\n' +
+      'This will permanently delete this Google account\'s Firebase bill history and customer data.\n' +
       'Local bill records on this phone will also be deleted.\n\n' +
       'This action cannot be undone.\n\nAre you sure you want to delete the account?'
     );
@@ -1716,7 +1716,7 @@ function backupHistoryToFile(silent){
   const stamp = formatNow().replace(/[/,: ]/g, '-');
   downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
   if(!silent){
-    alert('The backup file has been saved to your phone's Downloads folder. Keep it safe — you can use this file to restore your previous history.');
+    alert('The backup file has been saved to your phone\'s Downloads folder. Keep it safe — you can use this file to restore your previous history.');
   }
 }
 
@@ -2169,7 +2169,7 @@ function generateUPIQR(){
 function confirmPaymentAndSend(){
   const mobile = document.getElementById('custMobile').value.trim();
   if(!/^\d{10}$/.test(mobile)){
-    alert('Enter the customer's 10-digit mobile number to send via WhatsApp.');
+    alert('Enter the customer\'s 10-digit mobile number to send via WhatsApp.');
     return;
   }
   // Open the tab immediately (synchronously) so Chrome doesn't block it as a popup.
