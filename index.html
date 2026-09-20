@@ -862,7 +862,7 @@
 </div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
-  <div class="topbar-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Hollsaller - Bill Generator</div>
+  <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
       <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
@@ -2120,7 +2120,7 @@ function generateUPIQR(){
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 2px 6px rgba(0,0,0,0.25);
   `;
-  logo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(logoSize*0.28)}px; letter-spacing:0.5px;">🛒</span>`;
+  logo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(logoSize*0.40)}px; letter-spacing:0.5px;">🛒</span>`;
   qrDivFull.appendChild(logo);
 
   document.getElementById('upiAmountDisplayFull').textContent = total.toFixed(2);
@@ -2153,7 +2153,7 @@ function generateUPIQR(){
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 2px 6px rgba(0,0,0,0.25);
   `;
-  dlLogo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(dlLogoSize*0.28)}px; letter-spacing:0.5px;">🛒</span>`;
+  dlLogo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(dlLogoSize*0.40)}px; letter-spacing:0.5px;">🛒</span>`;
   qrDivDownload.appendChild(dlLogo);
 
   document.getElementById('qrDownloadAmount').textContent = '₹ ' + total.toFixed(2);
