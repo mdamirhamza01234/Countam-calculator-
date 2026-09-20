@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>Hamza Hollsaller - Bill Generator</title>
+<title>Mittu Hollsaller - Bill Generator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -12,7 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
@@ -73,30 +73,71 @@
   };
 
   // ---------------- EMAIL + PASSWORD LOGIN ----------------
-  // ---------------- LINK A PASSWORD TO THE CURRENT (E.G. GOOGLE) ACCOUNT ----------------
-  window.setMittuAccountPassword = async function(){
+  // ---------------- SET / CHANGE LOGIN PASSWORD (MODAL) ----------------
+  window.openSetPasswordModal = function(mandatory){
     const user = fbAuth.currentUser || window.currentFirebaseUser;
+    if(!user || !user.email) return;
+    const emailEl = document.getElementById('setPasswordEmail');
+    const p1 = document.getElementById('setPasswordInput1');
+    const p2 = document.getElementById('setPasswordInput2');
+    const errorEl = document.getElementById('setPasswordError');
+    const skipBtn = document.getElementById('setPasswordSkipBtn');
+    const overlay = document.getElementById('setPasswordOverlay');
+    if(emailEl) emailEl.textContent = user.email;
+    if(p1) p1.value = '';
+    if(p2) p2.value = '';
+    if(errorEl) errorEl.textContent = '';
+    if(skipBtn) skipBtn.style.display = mandatory ? 'none' : 'block';
+    if(overlay) overlay.style.display = 'flex';
+  };
+
+  window.closeSetPasswordModal = function(){
+    const overlay = document.getElementById('setPasswordOverlay');
+    if(overlay) overlay.style.display = 'none';
+  };
+
+  window.submitSetPasswordModal = async function(){
+    const user = fbAuth.currentUser || window.currentFirebaseUser;
+    const p1 = document.getElementById('setPasswordInput1');
+    const p2 = document.getElementById('setPasswordInput2');
+    const errorEl = document.getElementById('setPasswordError');
+    const btn = document.getElementById('setPasswordSaveBtn');
+    const password1 = (p1 && p1.value) || '';
+    const password2 = (p2 && p2.value) || '';
+    if(errorEl) errorEl.textContent = '';
     if(!user || !user.email){
-      alert('Pehle Google account se login karein, uske baad hi password set kar sakte hain.');
+      if(errorEl) errorEl.textContent = 'Pehle Google account se login karein.';
       return;
     }
-    const password = window.prompt('Apni email (' + user.email + ') ke liye ek naya password set karein (kam se kam 6 characters):');
-    if(!password) return;
-    if(password.length < 6){
-      alert('Password kam se kam 6 characters ka hona chahiye.');
+    if(!password1 || password1.length < 6){
+      if(errorEl) errorEl.textContent = 'Password kam se kam 6 characters ka hona chahiye.';
       return;
     }
+    if(password1 !== password2){
+      if(errorEl) errorEl.textContent = 'Dono password same nahi hain.';
+      return;
+    }
+    if(btn){ btn.disabled = true; btn.textContent = 'Please wait...'; }
     try {
-      const credential = EmailAuthProvider.credential(user.email, password);
-      await linkWithCredential(user, credential);
-      alert('Password set ho gaya! Ab aap "' + user.email + '" aur is password se bhi login kar sakte hain.');
-    } catch(err){
-      console.error('Set password failed:', err);
-      if(err && err.code === 'auth/provider-already-linked'){
-        alert('Is account ke liye password pehle se set hai. Password badalne ke liye pehle purana password se login karke fir se try karein.');
+      const hasPasswordProvider = (user.providerData || []).some(p => p.providerId === 'password');
+      if(hasPasswordProvider){
+        await updatePassword(user, password1);
       } else {
-        alert('Password set nahi ho paya: ' + (err?.message || 'Unknown error'));
+        const credential = EmailAuthProvider.credential(user.email, password1);
+        await linkWithCredential(user, credential);
       }
+      window.closeSetPasswordModal();
+    } catch(err){
+      console.error('Set/change password failed:', err);
+      if(errorEl){
+        if(err && err.code === 'auth/requires-recent-login'){
+          errorEl.textContent = 'Security ke liye pehle dobara Google se login karein, uske baad password badlein.';
+        } else {
+          errorEl.textContent = 'Password save nahi ho paya: ' + (err?.message || 'Unknown error');
+        }
+      }
+    } finally {
+      if(btn){ btn.disabled = false; btn.textContent = 'Save Password'; }
     }
   };
 
@@ -145,11 +186,11 @@
       console.error('Email/password sign-in failed:', err);
       if(errorEl){
         if(err && err.code === 'auth/email-already-in-use' && err.__ambiguousWrongPassword){
-          errorEl.textContent = 'Ye email pehle se registered hai lekin diya gaya password galat hai. Agar ye account Google se banaya tha, "Continue with Google" use karein. Agar isi app ke password se banaya tha, sahi password daalein — ya Google se login karke Account menu mein "Set Password" se naya password banayein.';
+          errorEl.textContent = 'Ye email pehle se registered hai lekin diya gaya password galat hai. Agar ye account Google se banaya tha, "Continue with Google" use karein. Agar isi app ke password se banaya tha, sahi password daalein — ya Google se login karke Account menu mein "Change Login Password" se naya password banayein.';
         } else if(err && err.code === 'auth/email-already-in-use'){
           errorEl.textContent = 'Ye email pehle se Google account se registered hai. Kripya "Continue with Google" se login karein.';
         } else if(err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential')){
-          errorEl.textContent = 'Ye password sahi nahi hai. Aapka Gmail password yahan tabhi chalega jab aapne is email ko app ke andar "Set Password" se link kiya ho — warna sirf wahi password chalega jo aapne khud "Set Password" (Account menu) se banaya tha. Agar password bhool gaye ho ya kabhi set nahi kiya, pehle "Continue with Google" se login karke Account menu mein "Set Password" se naya password banayein.';
+          errorEl.textContent = 'Ye password sahi nahi hai. Aapka Gmail password yahan tabhi chalega jab aapne is email ko app ke andar "Change Login Password" se link kiya ho — warna sirf wahi password chalega jo aapne khud "Change Login Password" (Account menu) se banaya tha. Agar password bhool gaye ho ya kabhi set nahi kiya, pehle "Continue with Google" se login karke Account menu mein "Change Login Password" se naya password banayein.';
         } else {
           errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
         }
@@ -161,13 +202,18 @@
     }
   };
 
-
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
     const loginScreen = document.getElementById('loginScreen');
     if(user) {
       if(loginScreen) loginScreen.style.display = 'none';
       document.body.classList.remove('auth-required');
+      // Force a login password to be created if this account (e.g. signed in via
+      // Google) doesn't have one linked yet.
+      const hasPasswordProvider = (user.providerData || []).some(p => p.providerId === 'password');
+      if(!hasPasswordProvider && user.email){
+        window.openSetPasswordModal(true);
+      }
       // Give the normal (non-module) app script time to load, then restore
       // this user's cloud bill history and merge it with localStorage.
       setTimeout(() => {
@@ -438,6 +484,31 @@
   }
   #loginError {
     min-height: 18px; margin-top: 14px; color: #c62828;
+    font-size: 12px; line-height: 1.4; word-break: break-word;
+  }
+
+  #setPasswordOverlay {
+    display: none; position: fixed; inset: 0; z-index: 10060;
+    background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  #setPasswordOverlay .login-card { max-width: 380px; text-align: left; }
+  #setPasswordOverlay h2 { margin: 0 0 8px; font-size: 20px; font-weight: 800; color: #222; }
+  #setPasswordOverlay p { margin: 0 0 20px; color: #666; font-size: 13px; line-height: 1.55; }
+  #setPasswordInput2 { margin-top: 10px; }
+  #setPasswordSaveBtn {
+    width: 100%; min-height: 50px; margin-top: 14px; border: 0;
+    border-radius: 999px; background: #171717; color: #fff;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  #setPasswordSaveBtn:active { background: #000; }
+  #setPasswordSaveBtn:disabled { opacity: .6; cursor: wait; }
+  #setPasswordSkipBtn {
+    width: 100%; min-height: 42px; margin-top: 8px; border: 0;
+    background: transparent; color: #888; font-size: 13px; cursor: pointer;
+  }
+  #setPasswordError {
+    min-height: 18px; margin-top: 10px; color: #c62828;
     font-size: 12px; line-height: 1.4; word-break: break-word;
   }
 
@@ -946,7 +1017,7 @@
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo">🛒</div>
-    <h1 class="login-title">Welcome to Hamza Billing</h1>
+    <h1 class="login-title">Welcome to Mittu Billing</h1>
     <p class="login-subtitle">To use the Bill Generator, please continue with your Google account.</p>
     <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
       <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg>
@@ -960,9 +1031,21 @@
     <div id="loginError" role="alert"></div>
   </div>
 </div>
+<!-- Mandatory/optional login-password creation modal (linked to the Firebase account). -->
+<div id="setPasswordOverlay">
+  <div class="login-card">
+    <h2>Create Login Password</h2>
+    <p>Apni email (<strong id="setPasswordEmail"></strong>) ke liye ek login password banayein — isse aap kisi bhi device se seedhe email + password se bhi login kar sakenge.</p>
+    <input id="setPasswordInput1" class="login-email" type="password" placeholder="Naya login password" autocomplete="new-password" aria-label="Naya login password">
+    <input id="setPasswordInput2" class="login-email" type="password" placeholder="Password dobara likhein" autocomplete="new-password" aria-label="Password confirm karein" onkeydown="if(event.key==='Enter'){ event.preventDefault(); window.submitSetPasswordModal(); }">
+    <button id="setPasswordSaveBtn" type="button" onclick="window.submitSetPasswordModal()">Save Password</button>
+    <button id="setPasswordSkipBtn" type="button" onclick="window.closeSetPasswordModal()">Cancel</button>
+    <div id="setPasswordError" role="alert"></div>
+  </div>
+</div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
-  <div class="topbar-title">🛒 Hamza Hollsaller - Bill Generator</div>
+  <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
       <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
@@ -973,7 +1056,7 @@
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()">
   <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
     <div class="drawer-header">
-      <span class="drawer-title">🛒 Hamza Hollsaller</span>
+      <span class="drawer-title">🛒 Mittu Hollsaller</span>
       <div class="drawer-header-actions">
         <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
         <button class="drawer-close" onclick="closeDrawer()">✕</button>
@@ -1002,7 +1085,7 @@
       <button class="drawer-close" onclick="closeAccountSheet()">✕</button>
     </div>
     <button class="account-option" onclick="switchMittuAccount()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Account Change / Switch Account</button>
-    <button class="account-option" onclick="setMittuAccountPassword(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Set Password (Email + Password se bhi login karein)</button>
+    <button class="account-option" onclick="window.openSetPasswordModal(false); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Change Login Password</button>
     <button class="account-option" onclick="logoutMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/><path d="M14 21h5a2 2 0 0 0 2-2"/></svg> Log Out</button>
     <button class="account-option delete" onclick="deleteMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Account</button>
   </div>
@@ -1023,7 +1106,7 @@
 <!-- Hidden capture template: full Customer Record PDF (all bills, one row each) -->
 <div id="customerRecordCapture" style="position:fixed; left:-9999px; top:0; width:760px; background:#ffffff; padding:24px; font-family:Arial, sans-serif; color:#1c1c1c;">
   <div style="text-align:center; margin-bottom:4px;">
-    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Hamza Hollsaller</div>
+    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Hollsaller</div>
     <div style="font-size:14px; color:#666;">Customer Record — All Bills</div>
     <div style="font-size:11px; color:#999; margin-top:4px;">Generated on: <span id="crGeneratedOn"></span></div>
   </div>
@@ -1150,7 +1233,7 @@
   <button onclick="closeQRFullscreen()" style="position:absolute; top:18px; right:18px; background:#e63946; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">✕</button>
 
   <div style="text-align:center; margin-bottom:6px;">
-    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">HAMZA HOLLSALLER</div>
+    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">MITTU HOLLSALLER</div>
     <div style="color:#fff; font-size:14px;">Scan &amp; Pay via any UPI App</div>
   </div>
 
@@ -1176,12 +1259,12 @@
 separate from the on-screen qrFullscreen view above so the on-screen dark
 theme isn't affected. downloadQR() captures this instead of the plain QR. -->
 <div id="qrDownloadCard" style="position:fixed; left:-9999px; top:0; width:375px; background:#ffffff; border:8px solid #f5a623; border-radius:28px; padding:30px 24px 26px; font-family:Arial, sans-serif; text-align:center; box-sizing:border-box;">
-  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">HAMZA<br>HOLLSALLER</div>
+  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">MITTU<br>HOLLSALLER</div>
   <div style="width:90px; height:4px; background:#f5a623; margin:16px auto 24px; border-radius:2px;"></div>
   <div style="border:2px solid #0c1f4a; border-radius:16px; padding:14px; display:inline-block; background:#fff;">
     <div id="qrcodeDivDownload" style="position:relative; width:260px; height:260px;"></div>
   </div>
-  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Hamza</div>
+  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Mittu</div>
   <div style="margin-top:18px; font-size:17px; font-weight:700; color:#e65100;">Total Amount is</div>
   <div id="qrDownloadAmount" style="font-size:36px; font-weight:900; color:#e65100; margin-top:2px;">₹ 0.00</div>
   <div id="qrDownloadExtra" style="margin-top:16px;"></div>
@@ -1196,7 +1279,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-company-block">
-    <div class="inv-company">Hamza Hollsaller</div>
+    <div class="inv-company">Mittu Hollsaller</div>
     <div class="inv-addr-line">Rangra, Bhagalpur, Bihar, 853204, India.</div>
     <div class="inv-addr-line">Mobile: +91 9540125307</div>
   </div>
@@ -1244,7 +1327,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-sign">
-    <div>For Hamza Hollsaller</div>
+    <div>For Mittu Hollsaller</div>
     <div>________________________<br>Signature</div>
   </div>
 </div>
@@ -1588,7 +1671,7 @@ function generateBill(openFile = true){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   return renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    downloadPDF(pdf, `Hamza_Bill_${currentSno || 'bill'}.pdf`, openFile);
+    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
     // Auto-generate a fresh random bill number for the next bill
     generateRandomBillNo();
@@ -1815,7 +1898,7 @@ function backupHistoryToFile(silent){
     return;
   }
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadTextFile(JSON.stringify(history, null, 2), `Hamza_Bill_History_Backup_${stamp}.json`, 'application/json');
+  downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
   if(!silent){
     alert('The backup file has been saved in your phone\'s Downloads folder. Keep it safe always - you can use this file to restore the old history anytime.');
   }
@@ -1944,7 +2027,7 @@ function redownloadBill(idx){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    openPdfInApp(pdf, `Hamza_Bill_${rec.billNo}.pdf`);
+    openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
   });
 }
 
@@ -2111,7 +2194,7 @@ function buildBillMessage(){
   // ---- English section ----
   let en = '';
   en += `Namaste ${custName},\n`;
-  en += `Hamza Hollsaller - Bill No. ${billNo}\n`;
+  en += `Mittu Hollsaller - Bill No. ${billNo}\n`;
   items.forEach((it, idx) => {
     en += `${toRoman(idx+1)}. ${it.name} (Qty ${it.qty}, Rate ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
@@ -2121,7 +2204,7 @@ function buildBillMessage(){
   // ---- Hindi section ----
   let hi = '';
   hi += `नमस्ते ${custName},\n`;
-  hi += `हमज़ा होलसेलर - बिल नं. ${billNo}\n`;
+  hi += `मित्तू होलसेलर - बिल नं. ${billNo}\n`;
   items.forEach((it, idx) => {
     hi += `${toRoman(idx+1)}. ${it.name} (मात्रा ${it.qty}, दर ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
@@ -2151,7 +2234,7 @@ function sendWhatsApp(){
 
 function buildUpiUrl(total, billNo){
   const upiId = '7303714309@axl';
-  const payeeName = 'HAMZA HOLLSALLER';
+  const payeeName = 'MITTU HOLLSALLER';
   return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill No '+billNo)}`;
 }
 
@@ -2311,7 +2394,7 @@ function downloadQR(openFile = true){
   // on-screen fullscreen QR — capturing after it's hidden produces a
   // blank/failed image.
   return html2canvas(qrDiv, {scale: 2, backgroundColor: '#ffffff'}).then(canvas => {
-    const filename = `Hamza_UPI_QR_${billNo}.png`;
+    const filename = `Mittu_UPI_QR_${billNo}.png`;
     return new Promise(resolve => {
       canvas.toBlob(blob => {
         try {
@@ -2401,7 +2484,7 @@ function buildThermalBillHtml(){
 
   return { html: `
     <div class="receipt">
-      <div class="shop">Hamza Hollsaller</div>
+      <div class="shop">Mittu Hollsaller</div>
       <div class="center">Rangra, Bhagalpur, Bihar, 853204, India.</div>
       <div class="center">Mobile: +91 9540125307</div>
       <div class="dash"></div>
@@ -2419,7 +2502,7 @@ function buildThermalBillHtml(){
       <div class="words">${escHtml(amountInWords(total))}</div>
       <div class="dash"></div>
       <div class="center thanks">Thank you!</div>
-      <div class="center small">For Hamza Hollsaller</div>
+      <div class="center small">For Mittu Hollsaller</div>
     </div>` };
 }
 
@@ -2459,7 +2542,7 @@ function buildNativeThermalPrintPayload(){
       address: document.getElementById('custAddr').value.trim()
     },
     shop: {
-      name: 'Hamza Hollsaller',
+      name: 'Mittu Hollsaller',
       address: 'Rangra, Bhagalpur, Bihar, 853204, India.',
       mobile: '+91 9540125307'
     },
@@ -2536,7 +2619,7 @@ function printThermalBill(){
   }
 
   printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Hamza Bill</title>
+  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Mittu Bill</title>
     <style>
       @page { size: ${widthMm}mm auto; margin: 0; }
       html,body { margin:0; padding:0; background:#fff; width:${widthMm}mm; }
@@ -2768,7 +2851,7 @@ function exportCustomerRecordsPDF(){
   function drawHeader(){
     pdf.setFontSize(15);
     pdf.setFont(undefined, 'bold');
-    pdf.text('Hamza Hollsaller - Customer Record', pageWidth / 2, y, { align: 'center' });
+    pdf.text('Mittu Hollsaller - Customer Record', pageWidth / 2, y, { align: 'center' });
     y += 7;
     pdf.setFontSize(9);
     pdf.setFont(undefined, 'normal');
@@ -2807,7 +2890,7 @@ function exportCustomerRecordsPDF(){
   });
 
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadPDF(pdf, `Hamza_Customer_Records_${stamp}.pdf`);
+  downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
 }
 
 // init
