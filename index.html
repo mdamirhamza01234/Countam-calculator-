@@ -881,7 +881,7 @@
     </div>
     <div class="drawer-item" onclick="startNewBill()"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span> New Bill Create</div>
     <div class="drawer-item" onclick="openSearchBill()"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span> Search Bill</div>
-    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> Sabhi Bills Ka Record Dekhein</div>
+    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> View All Bills Record</div>
     <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span> Customer Record PDF</button>
     <div class="drawer-recents-title">Recents</div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
@@ -903,7 +903,7 @@
     </div>
     <button class="account-option" onclick="switchMittuAccount()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Account Change / Switch Account</button>
     <button class="account-option" onclick="logoutMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/><path d="M14 21h5a2 2 0 0 0 2-2"/></svg> Log Out</button>
-    <button class="account-option delete" onclick="deleteMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Account Delete Karein</button>
+    <button class="account-option delete" onclick="deleteMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Account</button>
   </div>
 </div>
 
@@ -914,7 +914,7 @@
       <h2 style="margin:0; color:#a04e00; font-size:18px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg> Search Bill</h2>
       <button onclick="closeSearchBill()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
     </div>
-    <input type="text" id="searchBillInput" placeholder="Naam, mobile number, address ya bill number likhein..." oninput="renderSearchResults()" style="width:100%; padding:10px 12px; border:1px solid #cbd3e1; border-radius:8px; font-size:14px; margin-bottom:14px;">
+    <input type="text" id="searchBillInput" placeholder="Enter name, mobile number, address or bill number..." oninput="renderSearchResults()" style="width:100%; padding:10px 12px; border:1px solid #cbd3e1; border-radius:8px; font-size:14px; margin-bottom:14px;">
     <div id="searchResultsList"></div>
   </div>
 </div>
@@ -956,7 +956,7 @@
       </div>
       <div class="field">
         <label>Customer Name</label>
-        <input type="text" id="custName" placeholder="Customer ka naam">
+        <input type="text" id="custName" placeholder="Customer name">
       </div>
       <div class="field">
         <label>Customer Mobile Number (WhatsApp)</label>
@@ -964,13 +964,13 @@
       </div>
       <div class="field">
         <label>Customer Address</label>
-        <input type="text" id="custAddr" placeholder="Customer ka address">
+        <input type="text" id="custAddr" placeholder="Customer address">
       </div>
     </div>
   </div>
 
   <div class="panel">
-    <h2>Items / Particulars (Saman ka naam aur price)</h2>
+    <h2>Items / Particulars (Item name and price)</h2>
     <table id="itemsTable">
       <thead>
         <tr>
@@ -983,11 +983,11 @@
       </thead>
       <tbody id="itemsBody"></tbody>
     </table>
-    <button class="add-row-btn" onclick="addRow()">+ Row Add Karein</button>
+    <button class="add-row-btn" onclick="addRow()">+ Add Row</button>
     <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
   </div>
 
-  <button class="upi-btn" onclick="generateUPIQR()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> UPI Payment QR Generate Karein (Full Screen)</button>
+  <button class="upi-btn" onclick="generateUPIQR()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> Generate UPI Payment QR (Full Screen)</button>
 
   <div class="thermal-print-box">
     <div class="thermal-print-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Thermal Printer Bill Print</div>
@@ -995,11 +995,11 @@
       <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
       <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
     </div>
-    <button class="thermal-btn" onclick="printThermalBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Bill Direct Thermal Printer Par Print Karein</button>
-    <div class="thermal-note">58mm (2 inch) ya 80mm (3 inch) select karein. Android app ke native printer bridge se direct print hoga; normal browser mein fallback print dialog khulega.</div>
+    <button class="thermal-btn" onclick="printThermalBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Print Bill Directly on Thermal Printer</button>
+    <div class="thermal-note">Select 58mm (2 inch) or 80mm (3 inch). It will print directly via the Android app's native printer bridge; a fallback print dialog will open in a normal browser.</div>
   </div>
 
-  <button class="whatsapp-btn" onclick="sendWhatsApp()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Bill PDF WhatsApp Par Bhejein</button>
+  <button class="whatsapp-btn" onclick="sendWhatsApp()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Send Bill PDF via WhatsApp</button>
 
   <button class="generate-btn" onclick="generateBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
 </div>
@@ -1013,12 +1013,12 @@
     </div>
 
     <div style="background:#fff8e6; border:1px solid #f2d98a; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:#7a5a00;">
-      <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2L12 3z"/><path d="M12 9v5M12 17h.01"/></svg> Agar app/browser ka data kabhi clear ho jaye to yahan ki list khali dikh sakti hai. Isliye time-time par <b>"Backup Save"</b> zaroor dabate rahein — wo ek file phone ke Downloads mein save kar deta hai jo hamesha surakshit rehti hai, aur usi se <b>"Backup Load"</b> se history wapas la sakte hain.
+      <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2L12 3z"/><path d="M12 9v5M12 17h.01"/></svg> If the app/browser data ever gets cleared, this list may appear empty. So make sure to tap <b>"Save Backup"</b> from time to time — it saves a file in your phone's Downloads folder that always stays safe, and you can use <b>"Load Backup"</b> to bring that history back.
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:14px;">
-      <button class="add-row-btn" style="flex:1; margin-top:0;" onclick="backupHistoryToFile(false)"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg> Backup Save Karein</button>
-      <button class="add-row-btn" style="flex:1; margin-top:0; background:#1a7a3e;" onclick="triggerRestoreFile()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Backup Load Karein</button>
+      <button class="add-row-btn" style="flex:1; margin-top:0;" onclick="backupHistoryToFile(false)"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg> Save Backup</button>
+      <button class="add-row-btn" style="flex:1; margin-top:0; background:#1a7a3e;" onclick="triggerRestoreFile()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Load Backup</button>
     </div>
     <!-- Accepts both JSON (the actual backup format) and PDF (so bill PDFs
     show up in the picker too, in case the user wants to browse those) —
@@ -1026,12 +1026,12 @@
     valid JSON backup file, and shows a friendly error for anything else. -->
     <input type="file" id="restoreFileInput" accept=".json,application/json,.pdf,application/pdf" style="display:none;" onchange="restoreHistoryFromFile(event)">
 
-    <div style="font-size:12px; color:#666; margin:0 0 10px 2px;">Recent bill par tap karein — wahi customer, address aur saare saman/quantity/rate ke saath form dobara bhar jayega.</div>
+    <div style="font-size:12px; color:#666; margin:0 0 10px 2px;">Tap a recent bill — the form will be refilled with the same customer, address, and all items/quantity/rate.</div>
 
     <div id="historySelectToolbar" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#eef1f5; border-radius:8px; padding:8px 10px; margin-bottom:10px;">
       <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#a04e00;">
         <input type="checkbox" id="historySelectAllCheckbox" onclick="toggleSelectAllHistory()" style="width:18px; height:18px;">
-        Sab Select Karein
+        Select All
       </label>
       <div style="display:flex; gap:6px;">
         <button id="historyDeleteSelectedBtn" onclick="deleteSelectedHistory()" style="background:#e63946; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Selected (0)</button>
@@ -1040,7 +1040,7 @@
     </div>
 
     <div id="historyList"></div>
-    <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Saara History Delete Karein</button>
+    <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete All History</button>
   </div>
 </div>
 
@@ -1065,9 +1065,9 @@
     <button type="button" class="thermal-size-btn active" id="qrThermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
     <button type="button" class="thermal-size-btn" id="qrThermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
   </div>
-  <button class="thermal-btn" onclick="if (window.markDisplayPaid) window.markDisplayPaid(); if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 4500); closeQRFullscreen(false); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:10px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Payment hogaya Bill Print Karein</button>
-  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Payment hogaya Bill WhatsApp pe bhejen</button>
-  <button class="add-row-btn" onclick="downloadQR(false)" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
+  <button class="thermal-btn" onclick="if (window.markDisplayPaid) window.markDisplayPaid(); if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 4500); closeQRFullscreen(false); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:10px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Payment Done, Print Bill</button>
+  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Payment Done, Send Bill via WhatsApp</button>
+  <button class="add-row-btn" onclick="downloadQR(false)" style="margin-top:14px; max-width:340px;">⬇ Download QR Image</button>
 </div>
 
 <!-- Hidden styled "receipt card" used ONLY for the downloaded QR image
@@ -1157,7 +1157,7 @@ function addRow(){
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td style="text-align:center;">${rowCount}</td>
-    <td><input type="text" class="itemName" placeholder="Saman ka naam" enterkeyhint="next"></td>
+    <td><input type="text" class="itemName" placeholder="Item name" enterkeyhint="next"></td>
     <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
     <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
     <td class="amt-cell"><span class="itemAmt">0.00</span></td>
@@ -1556,12 +1556,12 @@ function renderBillHistory(){
 
   if (history === null){
     toolbar.style.display = 'none';
-    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Is environment mein storage available nahi hai (Claude preview sandbox). Ye feature file ko real browser ya APK mein khol kar hi kaam karega.</p>';
+    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Storage is not available in this environment (Claude preview sandbox). This feature will only work when the file is opened in a real browser or APK.</p>';
     return;
   }
   if (history.length === 0){
     toolbar.style.display = 'none';
-    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Abhi tak koi bill generate nahi hua hai.</p>';
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">No bill has been generated yet.</p>';
     return;
   }
 
@@ -1651,10 +1651,10 @@ function toggleSelectAllHistory(){
 
 function deleteSelectedHistory(){
   if(historySelectedSet.size === 0){
-    alert('Pehle kam se kam ek bill select karein.');
+    alert('Please select at least one bill first.');
     return;
   }
-  if(!confirm(`${historySelectedSet.size} bill(s) delete karein? Ye wapas nahi aayega.`)) return;
+  if(!confirm(`Delete ${historySelectedSet.size} bill(s)? This cannot be undone.`)) return;
   let history = getBillHistory() || [];
   const deletedRecords = history.filter((_, idx) => historySelectedSet.has(idx));
   history = history.filter((_, idx) => !historySelectedSet.has(idx));
@@ -1678,7 +1678,7 @@ function closeBillHistory(){
 }
 
 function clearBillHistory(){
-  if(confirm('Kya aap sach mein saara bill history delete karna chahte hain? Ye wapas nahi aayega.')){
+  if(confirm('Are you sure you want to delete the entire bill history? This cannot be undone.')){
     try { localStorage.removeItem(getBillHistoryStorageKey()); } catch(e){}
     if(window.clearBillHistoryFromFirebase) window.clearBillHistoryFromFirebase().catch(err => console.warn('Firebase history clear failed:', err));
     openBillHistory();
@@ -1688,7 +1688,7 @@ function clearBillHistory(){
 function deleteHistoryRecord(idx){
   const history = getBillHistory();
   if(!history || !history[idx]) return;
-  if(confirm(`Bill No. ${history[idx].billNo} ko history se delete karein?`)){
+  if(confirm(`Delete Bill No. ${history[idx].billNo} from history?`)){
     const deletedRecord = history[idx];
     history.splice(idx, 1);
     try { localStorage.setItem(getBillHistoryStorageKey(), JSON.stringify(history)); } catch(e){}
@@ -1706,17 +1706,17 @@ function deleteHistoryRecord(idx){
 function backupHistoryToFile(silent){
   const history = getBillHistory();
   if(history === null){
-    if(!silent) alert('Is environment mein storage available nahi hai, isliye backup ke liye koi data nahi hai.');
+    if(!silent) alert('Storage is not available in this environment, so there is no data to back up.');
     return;
   }
   if(history.length === 0){
-    if(!silent) alert('Abhi tak koi bill generate nahi hua hai, backup karne ke liye kuch nahi hai.');
+    if(!silent) alert('No bill has been generated yet, so there is nothing to back up.');
     return;
   }
   const stamp = formatNow().replace(/[/,: ]/g, '-');
   downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
   if(!silent){
-    alert('Backup file aapke phone ke Downloads folder mein save ho gayi hai. Isse hamesha sambhal kar rakhein - isi file se aap purani history wapas la sakte hain.');
+    alert('The backup file has been saved in your phone\'s Downloads folder. Keep it safe always - you can use this file to restore the old history anytime.');
   }
 }
 
@@ -1749,10 +1749,10 @@ function restoreHistoryFromFile(event){
       if(window.saveBillToFirebase){
         merged.forEach(rec => window.saveBillToFirebase(rec).catch(err => console.warn('Firebase backup sync failed:', err)));
       }
-      alert(`${imported.length} bills backup file se load ho gaye. Total ab ${merged.length} bills dikh rahe hain.`);
+      alert(`${imported.length} bills were loaded from the backup file. A total of ${merged.length} bills are now showing.`);
       openBillHistory();
     } catch(err){
-      alert('Ye file sahi format mein nahi hai. Kripya wahi backup file select karein jo isi app se pehle save ki thi.');
+      alert('This file is not in the correct format. Please select the same backup file that was previously saved from this app.');
     }
   };
   reader.readAsText(file);
@@ -1778,7 +1778,7 @@ function restoreBillToForm(idx){
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="text-align:center;">${rowCount}</td>
-      <td><input type="text" class="itemName" placeholder="Saman ka naam" enterkeyhint="next" value=""></td>
+      <td><input type="text" class="itemName" placeholder="Item name" enterkeyhint="next" value=""></td>
       <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
       <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
       <td class="amt-cell"><span class="itemAmt">0.00</span></td>
@@ -2033,7 +2033,7 @@ function buildBillMessage(){
 function sendWhatsApp(){
   const mobile = document.getElementById('custMobile').value.trim();
   if(!/^\d{10}$/.test(mobile)){
-    alert('Kripya sahi 10-digit customer mobile number dalein.');
+    alert('Please enter a valid 10-digit customer mobile number.');
     return;
   }
   // Open the tab immediately (synchronously, inside the click handler) so
@@ -2060,7 +2060,7 @@ function buildUpiUrl(total, billNo){
 function generateUPIQR(){
   const total = calcTotal();
   if(total <= 0){
-    alert('Pehle items add karke bill amount set karein.');
+    alert('Please add items first to set the bill amount.');
     return;
   }
   const billNo = document.getElementById('sno').value || '';
@@ -2169,7 +2169,7 @@ function generateUPIQR(){
 function confirmPaymentAndSend(){
   const mobile = document.getElementById('custMobile').value.trim();
   if(!/^\d{10}$/.test(mobile)){
-    alert('WhatsApp bhejne ke liye customer ka 10-digit mobile number dalein.');
+    alert('Please enter the customer\'s 10-digit mobile number to send via WhatsApp.');
     return;
   }
   // Open the tab immediately (synchronously) so Chrome doesn't block it as a popup.
@@ -2286,7 +2286,7 @@ function buildThermalBillHtml(){
   });
 
   if(rows.length === 0 || total <= 0){
-    return { error: 'Pehle item aur amount wala bill taiyar karein.' };
+    return { error: 'Please prepare a bill with items and amount first.' };
   }
 
   const itemRows = rows.map(it => `
@@ -2430,7 +2430,7 @@ function printThermalBill(){
   const printWindow = window.open('', '_blank');
   if(!printWindow){
     window.__thermalPrintBusy = false;
-    alert('Printer bridge nahi mila. Browser mein pop-up allow karein, ya app ko native thermal-printer bridge ke saath chalayein.');
+    alert('Printer bridge not found. Allow pop-ups in the browser, or run the app with a native thermal-printer bridge.');
     return;
   }
 
@@ -2471,7 +2471,7 @@ function renderDrawerRecents(){
   if(!el) return;
   const history = getBillHistory();
   if(!Array.isArray(history) || history.length === 0){
-    el.innerHTML = '<div class="drawer-recent-empty">Abhi koi recent bill nahi hai.</div>';
+    el.innerHTML = '<div class="drawer-recent-empty">No recent bills yet.</div>';
     return;
   }
   el.innerHTML = '';
@@ -2536,7 +2536,7 @@ function startNewBill(){
                    document.getElementById('custMobile').value.trim() ||
                    document.getElementById('custAddr').value.trim() ||
                    document.querySelectorAll('#itemsBody tr').length > 1;
-  if (hasData && !confirm('Naya bill shuru karein? Abhi ki details clear ho jayengi.')) {
+  if (hasData && !confirm('Start a new bill? The current details will be cleared.')) {
     closeDrawer();
     return;
   }
@@ -2569,11 +2569,11 @@ function renderSearchResults(){
   listEl.innerHTML = '';
 
   if (history === null){
-    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Is environment mein storage available nahi hai.</p>';
+    listEl.innerHTML = '<p style="text-align:center; color:#e63946; padding:20px;">Storage is not available in this environment.</p>';
     return;
   }
   if (history.length === 0){
-    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Abhi tak koi bill generate nahi hua hai.</p>';
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">No bill has been generated yet.</p>';
     return;
   }
 
@@ -2586,7 +2586,7 @@ function renderSearchResults(){
     });
 
   if (matches.length === 0){
-    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Koi bill match nahi hua.</p>';
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">No matching bill found.</p>';
     return;
   }
 
@@ -2600,7 +2600,7 @@ function renderSearchResults(){
       <div style="font-size:12px; color:#555; margin:4px 0;">${rec.dateTime}</div>
       <div style="font-size:13px; font-weight:600;">${rec.custName || 'Customer'} ${rec.custMobile ? '(' + rec.custMobile + ')' : ''}</div>
       <div style="font-size:12px; color:#777;">${rec.address || ''}</div>
-      <div style="font-size:11px; color:#1a7a3e; margin-top:6px;"><svg class="pro-icon pro-icon-small" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V6a2 2 0 0 1 4 0v6"/><path d="M12 11V5a2 2 0 0 1 4 0v7"/><path d="M16 12V8a2 2 0 0 1 4 0v6c0 5-3 7-7 7h-1c-3 0-4-2-6-5l-2-3a2 2 0 0 1 3-2l1 1"/></svg> Tap karein - PDF dubara download hoga</div>
+      <div style="font-size:11px; color:#1a7a3e; margin-top:6px;"><svg class="pro-icon pro-icon-small" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V6a2 2 0 0 1 4 0v6"/><path d="M12 11V5a2 2 0 0 1 4 0v7"/><path d="M16 12V8a2 2 0 0 1 4 0v6c0 5-3 7-7 7h-1c-3 0-4-2-6-5l-2-3a2 2 0 0 1 3-2l1 1"/></svg> Tap to download the PDF again</div>
     `;
     card.addEventListener('click', () => {
       closeSearchBill();
@@ -2618,7 +2618,7 @@ function openCustomerRecords(){
     if (result && typeof result.catch === 'function'){
       result.catch(e => {
         console.error('Customer Record PDF failed:', e);
-        alert('Customer Record PDF banane mein error aaya: ' + (e && e.message ? e.message : e));
+        alert('An error occurred while creating the Customer Record PDF: ' + (e && e.message ? e.message : e));
       });
     }
   } catch(e){
@@ -2626,7 +2626,7 @@ function openCustomerRecords(){
     // (e.g. a missing element) — without this, such errors were silently
     // swallowed by the browser and the button looked like it did nothing.
     console.error('Customer Record PDF failed (sync):', e);
-    alert('Customer Record PDF banane mein error aaya: ' + (e && e.message ? e.message : e));
+    alert('An error occurred while creating the Customer Record PDF: ' + (e && e.message ? e.message : e));
   }
 }
 
@@ -2640,11 +2640,11 @@ function openCustomerRecords(){
 function exportCustomerRecordsPDF(){
   const history = getBillHistory();
   if (history === null){
-    alert('Is environment mein storage available nahi hai.');
+    alert('Storage is not available in this environment.');
     return;
   }
   if (history.length === 0){
-    alert('Abhi tak koi bill generate nahi hua hai.');
+    alert('No bill has been generated yet.');
     return;
   }
 
