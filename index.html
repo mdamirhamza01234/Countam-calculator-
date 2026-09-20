@@ -436,6 +436,24 @@
     margin-top: 10px;
   }
   .generate-btn:hover { opacity: .92; }
+  .pro-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+    vertical-align: -4px;
+    flex: 0 0 18px;
+  }
+  .account-option {
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .whatsapp-btn .pro-icon {
+    width: 19px;
+    height: 19px;
+    vertical-align: -5px;
+    margin-right: 5px;
+  }
   .whatsapp-btn {
     display: block;
     width: 100%;
@@ -771,6 +789,24 @@
   background: #f1f3f6; border: none; color: #16325c;
   width: 30px; height: 30px; border-radius: 50%; font-size: 15px; cursor: pointer;
 }
+.drawer-header-actions { display:flex; align-items:center; gap:8px; }
+.drawer-search-btn { width:34px; height:34px; border-radius:50%; border:1px solid #e3e6eb; background:#f5f6f8; color:#222; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.drawer-account-spacer { flex:1; min-height:8px; }
+.drawer-account-btn { margin:8px 14px 14px; padding:10px; border:0; border-radius:12px; background:#f5f5f5; display:flex; align-items:center; gap:11px; text-align:left; cursor:pointer; }
+.drawer-account-avatar { width:38px; height:38px; border-radius:50%; background:#6f42c1; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex:0 0 38px; }
+.drawer-account-text { min-width:0; flex:1; }
+.drawer-account-name { font-size:14px; font-weight:800; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-account-email { font-size:11px; color:#777; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drawer-account-chevron { font-size:22px; color:#777; }
+.account-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10020; align-items:flex-end; justify-content:center; }
+.account-sheet { width:100%; max-width:430px; background:#fff; border-radius:18px 18px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom,0)); box-shadow:0 -8px 30px rgba(0,0,0,.2); }
+.account-sheet-head { display:flex; align-items:center; gap:12px; padding:4px 2px 14px; border-bottom:1px solid #eee; }
+.account-sheet-avatar { width:46px; height:46px; border-radius:50%; background:#6f42c1; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; }
+.account-sheet-name { font-weight:800; font-size:15px; color:#222; }
+.account-sheet-email { font-size:12px; color:#777; margin-top:3px; }
+.account-option { width:100%; border:0; background:#fff; padding:15px 8px; display:flex; align-items:center; gap:12px; font-size:15px; font-weight:600; color:#2b2b2b; text-align:left; border-bottom:1px solid #f1f1f1; cursor:pointer; }
+.account-option:active { background:#f6f6f6; }
+.account-option.delete { color:#d62828; }
 .drawer-item {
   display: flex; align-items: center; gap: 14px;
   padding: 16px 20px; font-size: 15.5px; font-weight: 600; color: #3b1f00;
@@ -788,6 +824,8 @@
 .drawer-recent-meta { font-size:11px; color:#777; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .drawer-recent-amount { font-size:14px; font-weight:800; color:#1a7a3e; white-space:nowrap; }
 .drawer-recent-empty { padding:8px 8px 16px; font-size:12px; color:#888; }
+.drawer-recent-seeall { padding:12px 8px 16px; font-size:14px; color:#666; cursor:pointer; }
+.drawer-recent-seeall:active { background:#f5f5f5; border-radius:8px; }
 
 #searchOverlay input#searchBillInput:focus { outline: 2px solid #ff9933; }
 </style>
@@ -823,28 +861,36 @@
   <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
     <div class="drawer-header">
       <span class="drawer-title">🛒 Mittu Hollsaller</span>
-      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      <div class="drawer-header-actions">
+        <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search">🔍</button>
+        <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      </div>
     </div>
-    <div class="drawer-item" onclick="startNewBill()">
-      <span class="drawer-icon">➕</span> New Bill Create
-    </div>
-    <div class="drawer-item" onclick="openSearchBill()">
-      <span class="drawer-icon">🔍</span> Search Bill
-    </div>
-    <div class="drawer-item" onclick="openCustomerRecords()">
-      <span class="drawer-icon">🧾</span> Customer Record PDF
-    </div>
-    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();">
-      <span class="drawer-icon">📋</span> Sabhi Bills Ka Record Dekhein
-    </div>
-    <div class="drawer-item" onclick="logoutMittuAccount()">
-      <span class="drawer-icon">🚪</span> Log Out
-    </div>
-    <div class="drawer-item" onclick="deleteMittuAccount()" style="color:#d62828;">
-      <span class="drawer-icon">🗑️</span> Account Delete Karein
-    </div>
+    <div class="drawer-item" onclick="startNewBill()"><span class="drawer-icon">➕</span> New Bill Create</div>
+    <div class="drawer-item" onclick="openSearchBill()"><span class="drawer-icon">🔍</span> Search Bill</div>
     <div class="drawer-recents-title">Recents</div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
+    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon">📋</span> Sabhi Bills Ka Record Dekhein</div>
+    <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🧾</span> Customer Record PDF</button>
+    <div class="drawer-account-spacer"></div>
+    <button class="drawer-account-btn" onclick="openAccountSheet()">
+      <div class="drawer-account-avatar" id="drawerAccountAvatar">NA</div>
+      <div class="drawer-account-text"><div class="drawer-account-name" id="drawerAccountName">My Account</div><div class="drawer-account-email" id="drawerAccountEmail"></div></div>
+      <div class="drawer-account-chevron">›</div>
+    </button>
+  </div>
+</div>
+
+<div class="account-overlay" id="accountOverlay" onclick="closeAccountSheet()">
+  <div class="account-sheet" onclick="event.stopPropagation()">
+    <div class="account-sheet-head">
+      <div class="account-sheet-avatar" id="accountSheetAvatar">NA</div>
+      <div style="min-width:0;flex:1;"><div class="account-sheet-name" id="accountSheetName">My Account</div><div class="account-sheet-email" id="accountSheetEmail"></div></div>
+      <button class="drawer-close" onclick="closeAccountSheet()">✕</button>
+    </div>
+    <button class="account-option" onclick="switchMittuAccount()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Account Change / Switch Account</button>
+    <button class="account-option" onclick="logoutMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/><path d="M14 21h5a2 2 0 0 0 2-2"/></svg> Log Out</button>
+    <button class="account-option delete" onclick="deleteMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Account Delete Karein</button>
   </div>
 </div>
 
@@ -940,7 +986,7 @@
     <div class="thermal-note">58mm (2 inch) ya 80mm (3 inch) select karein. Android app ke native printer bridge se direct print hoga; normal browser mein fallback print dialog khulega.</div>
   </div>
 
-  <button class="whatsapp-btn" onclick="sendWhatsApp()">📱 Bill PDF WhatsApp Par Bhejein</button>
+  <button class="whatsapp-btn" onclick="sendWhatsApp()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Bill PDF WhatsApp Par Bhejein</button>
 
   <button class="generate-btn" onclick="generateBill()">📄 GENERATE BILL (PDF Download)</button>
 </div>
@@ -1003,7 +1049,7 @@
   </div>
 
   <button class="thermal-btn" onclick="closeQRFullscreen(); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:14px;">🖨️ Bill Print Karein</button>
-  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;">📱 WhatsApp Pe Bill Bhejen</button>
+  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> WhatsApp Pe Bill Bhejen</button>
   <button class="add-row-btn" onclick="downloadQR(false)" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
 </div>
 
@@ -2421,10 +2467,34 @@ function renderDrawerRecents(){
     };
     el.appendChild(row);
   });
+  const seeAll = document.createElement('div');
+  seeAll.className = 'drawer-recent-seeall';
+  seeAll.textContent = 'See all…';
+  seeAll.onclick = () => { closeDrawer(); openBillHistory(); };
+  el.appendChild(seeAll);
 }
+
+function getCurrentAccountInfo(){
+  const u = window.currentFirebaseUser || (typeof fbAuth !== 'undefined' ? fbAuth.currentUser : null);
+  const name = (u && (u.displayName || u.email)) || 'My Account';
+  const email = (u && u.email) || '';
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]) : String(parts[0] || 'NA').slice(0,2);
+  return {name, email, initials: initials.toUpperCase()};
+}
+function refreshDrawerAccount(){
+  const a=getCurrentAccountInfo();
+  ['drawerAccountAvatar','accountSheetAvatar'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=a.initials;});
+  ['drawerAccountName','accountSheetName'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=a.name;});
+  ['drawerAccountEmail','accountSheetEmail'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=a.email;});
+}
+function openAccountSheet(){refreshDrawerAccount();document.getElementById('accountOverlay').style.display='flex';}
+function closeAccountSheet(){document.getElementById('accountOverlay').style.display='none';}
+function switchMittuAccount(){closeAccountSheet();try{if(typeof signOut==='function'&&typeof fbAuth!=='undefined')signOut(fbAuth);}catch(e){}}
 
 // ---------------- HAMBURGER DRAWER ----------------
 function openDrawer(){
+  refreshDrawerAccount();
   renderDrawerRecents();
   document.getElementById('drawerOverlay').style.display = 'block';
   requestAnimationFrame(() => document.getElementById('drawerPanel').classList.add('open'));
