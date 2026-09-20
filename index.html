@@ -12,7 +12,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
@@ -72,52 +72,46 @@
     }
   };
 
-  // ---------------- EMAIL (PASSWORDLESS LINK) LOGIN ----------------
-  window.signInWithEmailLinkFlow = async function(){
-    const input = document.getElementById('loginEmailInput');
+  // ---------------- EMAIL + PASSWORD LOGIN ----------------
+  window.signInWithEmailPasswordFlow = async function(){
+    const emailInput = document.getElementById('loginEmailInput');
+    const passInput = document.getElementById('loginPasswordInput');
+    const btn = document.getElementById('emailLoginBtn');
     const errorEl = document.getElementById('loginError');
-    const email = ((input && input.value) || '').trim();
+    const email = ((emailInput && emailInput.value) || '').trim();
+    const password = (passInput && passInput.value) || '';
     if(errorEl) { errorEl.style.color = ''; errorEl.textContent = ''; }
     if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
       if(errorEl) errorEl.textContent = 'Sahi email address daalein.';
       return;
     }
-    const actionCodeSettings = {
-      url: window.location.origin + window.location.pathname,
-      handleCodeInApp: true
-    };
-    if(input) input.disabled = true;
-    try {
-      await sendSignInLinkToEmail(fbAuth, email, actionCodeSettings);
-      window.localStorage.setItem('mittuEmailForSignIn', email);
-      if(errorEl){
-        errorEl.style.color = '#1a7a3a';
-        errorEl.textContent = 'Login link ' + email + ' par bhej diya gaya hai. Apna email check karke us link par tap karein.';
-      }
-    } catch(err){
-      console.error('Email link sign-in failed:', err);
-      if(errorEl) errorEl.textContent = 'Login link nahi bheja ja saka: ' + (err?.message || 'Unknown error');
-    } finally {
-      if(input) input.disabled = false;
+    if(!password || password.length < 6){
+      if(errorEl) errorEl.textContent = 'Password kam se kam 6 characters ka hona chahiye.';
+      return;
     }
-  };
-
-  // If this page was opened from the emailed sign-in link, finish the login.
-  (async function completeEmailLinkSignIn(){
+    if(btn){ btn.disabled = true; btn.textContent = 'Please wait...'; }
+    if(emailInput) emailInput.disabled = true;
+    if(passInput) passInput.disabled = true;
     try {
-      if(isSignInWithEmailLink(fbAuth, window.location.href)){
-        let email = window.localStorage.getItem('mittuEmailForSignIn');
-        if(!email) email = window.prompt('Confirm karne ke liye apna email daalein:');
-        if(email){
-          await signInWithEmailLink(fbAuth, email, window.location.href);
-          window.localStorage.removeItem('mittuEmailForSignIn');
-          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      try {
+        await signInWithEmailAndPassword(fbAuth, email, password);
+      } catch(err){
+        // No account with this email yet -> create one automatically.
+        if(err && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')){
+          await createUserWithEmailAndPassword(fbAuth, email, password);
+        } else {
+          throw err;
         }
       }
     } catch(err){
-      console.error('Completing email link sign-in failed:', err);
+      console.error('Email/password sign-in failed:', err);
+      if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
+    } finally {
+      if(btn){ btn.disabled = false; btn.textContent = 'Continue with Email'; }
+      if(emailInput) emailInput.disabled = false;
+      if(passInput) passInput.disabled = false;
     }
-  })();
+  };
 
 
   onAuthStateChanged(fbAuth, (user) => {
@@ -382,6 +376,15 @@
   }
   .login-email::placeholder { color: #888; }
   .login-email:focus { border-color: #b9b5b0; box-shadow: 0 0 0 3px rgba(0,0,0,.04); }
+  #loginPasswordInput { margin-top: 10px; }
+  #emailLoginBtn {
+    width: 100%; min-height: 50px; margin-top: 12px;
+    border: 1.5px solid #171717; border-radius: 999px;
+    background: #fff; color: #171717;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  #emailLoginBtn:active { background: #f2f2f2; }
+  #emailLoginBtn:disabled { opacity: .6; cursor: wait; }
   .login-terms {
     margin: 18px 0 0; color: #888; font-size: 11px; line-height: 1.55;
   }
@@ -902,7 +905,9 @@
       Continue with Google
     </button>
     <div class="login-or">OR</div>
-    <input id="loginEmailInput" class="login-email" type="email" inputmode="email" autocomplete="email" placeholder="Enter your email" aria-label="Enter your email" onkeydown="if(event.key==='Enter'){ event.preventDefault(); window.signInWithEmailLinkFlow(); }">
+    <input id="loginEmailInput" class="login-email" type="email" inputmode="email" autocomplete="email" placeholder="Enter your email" aria-label="Enter your email" onkeydown="if(event.key==='Enter'){ event.preventDefault(); document.getElementById('loginPasswordInput').focus(); }">
+    <input id="loginPasswordInput" class="login-email" type="password" autocomplete="current-password" placeholder="Enter your password" aria-label="Enter your password" onkeydown="if(event.key==='Enter'){ event.preventDefault(); window.signInWithEmailPasswordFlow(); }">
+    <button id="emailLoginBtn" type="button" onclick="window.signInWithEmailPasswordFlow()">Continue with Email</button>
     <div class="login-terms">By continuing, you agree to the app's login terms and privacy rules.</div>
     <div id="loginError" role="alert"></div>
   </div>
@@ -2563,7 +2568,7 @@ function refreshDrawerAccount(){
 }
 function openAccountSheet(){refreshDrawerAccount();document.getElementById('accountOverlay').style.display='flex';}
 function closeAccountSheet(){document.getElementById('accountOverlay').style.display='none';}
-function switchMittuAccount(){closeAccountSheet();try{if(typeof signOut==='function'&&typeof fbAuth!=='undefined')signOut(fbAuth);}catch(e){}}
+function switchMittuAccount(){closeAccountSheet();try{if(typeof window.logoutMittuAccount==='function')window.logoutMittuAccount();}catch(e){}}
 
 // ---------------- HAMBURGER DRAWER ----------------
 function openDrawer(){
