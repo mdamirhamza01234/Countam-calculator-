@@ -113,7 +113,7 @@
     }
 
     const ok = confirm(
-      '⚠️ Account Delete Karein?\n\n' +
+      'Account Delete Karein?\n\n' +
       'Isse is Google account ki Firebase Bill History aur customer data permanently delete ho jayega.\n' +
       'Phone ke local bill records bhi delete ho jayenge.\n\n' +
       'Ye action undo nahi kiya ja sakta.\n\nKya aap sach mein Account Delete karna chahte hain?'
@@ -454,6 +454,9 @@
     vertical-align: -5px;
     margin-right: 5px;
   }
+  .history-trash-icon { width:16px; height:16px; display:inline-block; vertical-align:middle; }
+  .history-delete-icon-btn { display:inline-flex; align-items:center; justify-content:center; padding:0; }
+
   .whatsapp-btn {
     display: block;
     width: 100%;
@@ -829,12 +832,22 @@
 
 #searchOverlay input#searchBillInput:focus { outline: 2px solid #ff9933; }
 </style>
+
+<style id="professional-icons-style">
+.pro-icon{width:20px;height:20px;display:inline-block;vertical-align:middle;flex:0 0 auto}
+.pro-icon-small{width:14px;height:14px}
+.drawer-icon .pro-icon,.drawer-title .pro-icon{width:22px;height:22px}
+.drawer-search-btn .pro-icon{width:21px;height:21px}
+.topbar-title .pro-icon{width:20px;height:20px}
+.thermal-print-title .pro-icon,.thermal-btn .pro-icon,.upi-btn .pro-icon,.generate-btn .pro-icon{margin-right:7px}
+.history-trash-icon{width:16px;height:16px}
+</style>
 </head>
 <body>
 <!-- Google Login: billing app is shown only after Firebase Authentication succeeds. -->
 <div id="loginScreen">
   <div class="login-card">
-    <div class="login-logo">🛒</div>
+    <div class="login-logo"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg></div>
     <h1 class="login-title">Welcome to Mittu Billing</h1>
     <p class="login-subtitle">Bill Generator use karne ke liye apne Google account se continue karein.</p>
     <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
@@ -849,10 +862,10 @@
 </div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
-  <div class="topbar-title">🛒 Mittu Hollsaller - Bill Generator</div>
+  <div class="topbar-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Hollsaller - Bill Generator</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
-      <span class="pencil-icon">📝</span>
+      <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
     </button>
   </div>
 </div>
@@ -860,18 +873,18 @@
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()">
   <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
     <div class="drawer-header">
-      <span class="drawer-title">🛒 Mittu Hollsaller</span>
+      <span class="drawer-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Hollsaller</span>
       <div class="drawer-header-actions">
-        <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search">🔍</button>
+        <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
         <button class="drawer-close" onclick="closeDrawer()">✕</button>
       </div>
     </div>
-    <div class="drawer-item" onclick="startNewBill()"><span class="drawer-icon">➕</span> New Bill Create</div>
-    <div class="drawer-item" onclick="openSearchBill()"><span class="drawer-icon">🔍</span> Search Bill</div>
+    <div class="drawer-item" onclick="startNewBill()"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span> New Bill Create</div>
+    <div class="drawer-item" onclick="openSearchBill()"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span> Search Bill</div>
+    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> Sabhi Bills Ka Record Dekhein</div>
+    <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span> Customer Record PDF</button>
     <div class="drawer-recents-title">Recents</div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
-    <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon">📋</span> Sabhi Bills Ka Record Dekhein</div>
-    <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🧾</span> Customer Record PDF</button>
     <div class="drawer-account-spacer"></div>
     <button class="drawer-account-btn" onclick="openAccountSheet()">
       <div class="drawer-account-avatar" id="drawerAccountAvatar">NA</div>
@@ -898,7 +911,7 @@
 <div id="searchOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
   <div style="max-width:600px; margin:0 auto; background:#fff; border-radius:10px; padding:18px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h2 style="margin:0; color:#a04e00; font-size:18px;">🔍 Search Bill</h2>
+      <h2 style="margin:0; color:#a04e00; font-size:18px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg> Search Bill</h2>
       <button onclick="closeSearchBill()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
     </div>
     <input type="text" id="searchBillInput" placeholder="Naam, mobile number, address ya bill number likhein..." oninput="renderSearchResults()" style="width:100%; padding:10px 12px; border:1px solid #cbd3e1; border-radius:8px; font-size:14px; margin-bottom:14px;">
@@ -909,7 +922,7 @@
 <!-- Hidden capture template: full Customer Record PDF (all bills, one row each) -->
 <div id="customerRecordCapture" style="position:fixed; left:-9999px; top:0; width:760px; background:#ffffff; padding:24px; font-family:Arial, sans-serif; color:#1c1c1c;">
   <div style="text-align:center; margin-bottom:4px;">
-    <div style="font-size:22px; font-weight:800; color:#a04e00;">🛒 Mittu Hollsaller</div>
+    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Hollsaller</div>
     <div style="font-size:14px; color:#666;">Customer Record — All Bills</div>
     <div style="font-size:11px; color:#999; margin-top:4px;">Generated on: <span id="crGeneratedOn"></span></div>
   </div>
@@ -974,38 +987,38 @@
     <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
   </div>
 
-  <button class="upi-btn" onclick="generateUPIQR()">💳 UPI Payment QR Generate Karein (Full Screen)</button>
+  <button class="upi-btn" onclick="generateUPIQR()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> UPI Payment QR Generate Karein (Full Screen)</button>
 
   <div class="thermal-print-box">
-    <div class="thermal-print-title">🖨️ Thermal Printer Bill Print</div>
+    <div class="thermal-print-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Thermal Printer Bill Print</div>
     <div class="thermal-size-row">
       <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
       <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
     </div>
-    <button class="thermal-btn" onclick="printThermalBill()">🖨️ Bill Direct Thermal Printer Par Print Karein</button>
+    <button class="thermal-btn" onclick="printThermalBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Bill Direct Thermal Printer Par Print Karein</button>
     <div class="thermal-note">58mm (2 inch) ya 80mm (3 inch) select karein. Android app ke native printer bridge se direct print hoga; normal browser mein fallback print dialog khulega.</div>
   </div>
 
   <button class="whatsapp-btn" onclick="sendWhatsApp()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Bill PDF WhatsApp Par Bhejein</button>
 
-  <button class="generate-btn" onclick="generateBill()">📄 GENERATE BILL (PDF Download)</button>
+  <button class="generate-btn" onclick="generateBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
 </div>
 
 <!-- Bill history overlay -->
 <div id="historyOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
   <div style="max-width:600px; margin:0 auto; background:#fff; border-radius:10px; padding:18px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h2 style="margin:0; color:#a04e00; font-size:18px;">🕘 Recent Bills</h2>
+      <h2 style="margin:0; color:#a04e00; font-size:18px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Recent Bills</h2>
       <button onclick="closeBillHistory()" style="background:#e63946; color:#fff; border:none; border-radius:50%; width:34px; height:34px; font-size:16px; cursor:pointer;">✕</button>
     </div>
 
     <div style="background:#fff8e6; border:1px solid #f2d98a; border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:#7a5a00;">
-      ⚠️ Agar app/browser ka data kabhi clear ho jaye to yahan ki list khali dikh sakti hai. Isliye time-time par <b>"Backup Save"</b> zaroor dabate rahein — wo ek file phone ke Downloads mein save kar deta hai jo hamesha surakshit rehti hai, aur usi se <b>"Backup Load"</b> se history wapas la sakte hain.
+      <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 18H2L12 3z"/><path d="M12 9v5M12 17h.01"/></svg> Agar app/browser ka data kabhi clear ho jaye to yahan ki list khali dikh sakti hai. Isliye time-time par <b>"Backup Save"</b> zaroor dabate rahein — wo ek file phone ke Downloads mein save kar deta hai jo hamesha surakshit rehti hai, aur usi se <b>"Backup Load"</b> se history wapas la sakte hain.
     </div>
 
     <div style="display:flex; gap:8px; margin-bottom:14px;">
-      <button class="add-row-btn" style="flex:1; margin-top:0;" onclick="backupHistoryToFile(false)">💾 Backup Save Karein</button>
-      <button class="add-row-btn" style="flex:1; margin-top:0; background:#1a7a3e;" onclick="triggerRestoreFile()">📂 Backup Load Karein</button>
+      <button class="add-row-btn" style="flex:1; margin-top:0;" onclick="backupHistoryToFile(false)"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h12l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg> Backup Save Karein</button>
+      <button class="add-row-btn" style="flex:1; margin-top:0; background:#1a7a3e;" onclick="triggerRestoreFile()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Backup Load Karein</button>
     </div>
     <!-- Accepts both JSON (the actual backup format) and PDF (so bill PDFs
     show up in the picker too, in case the user wants to browse those) —
@@ -1021,13 +1034,13 @@
         Sab Select Karein
       </label>
       <div style="display:flex; gap:6px;">
-        <button id="historyDeleteSelectedBtn" onclick="deleteSelectedHistory()" style="background:#e63946; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">🗑 Delete Selected (0)</button>
+        <button id="historyDeleteSelectedBtn" onclick="deleteSelectedHistory()" style="background:#e63946; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Selected (0)</button>
         <button onclick="cancelHistorySelection()" style="background:#777; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer;">Cancel</button>
       </div>
     </div>
 
     <div id="historyList"></div>
-    <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()">🗑 Saara History Delete Karein</button>
+    <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Saara History Delete Karein</button>
   </div>
 </div>
 
@@ -1048,8 +1061,12 @@
     <p style="color:#e6d5c2; font-size:13px; margin:2px 0 0 0;">UPI ID: 7303714309@axl</p>
   </div>
 
-  <button class="thermal-btn" onclick="closeQRFullscreen(); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:14px;">🖨️ Bill Print Karein</button>
-  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> WhatsApp Pe Bill Bhejen</button>
+  <div class="thermal-size-row" style="max-width:340px; margin-top:14px;">
+    <button type="button" class="thermal-size-btn active" id="qrThermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
+    <button type="button" class="thermal-size-btn" id="qrThermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
+  </div>
+  <button class="thermal-btn" onclick="if (window.markDisplayPaid) window.markDisplayPaid(); if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 4500); closeQRFullscreen(false); setTimeout(() => printThermalBill(), 80);" style="max-width:340px; margin-top:10px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Payment hogaya Bill Print Karein</button>
+  <button class="whatsapp-btn" onclick="confirmPaymentAndSend()" style="max-width:260px; margin-top:10px; margin-left:auto; margin-right:auto; padding:9px 10px; font-size:13px;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Payment hogaya Bill WhatsApp pe bhejen</button>
   <button class="add-row-btn" onclick="downloadQR(false)" style="margin-top:14px; max-width:340px;">⬇ QR Image Download Karein</button>
 </div>
 
@@ -1550,7 +1567,8 @@ function renderBillHistory(){
 
   toolbar.style.display = historySelectionMode ? 'flex' : 'none';
   document.getElementById('historySelectAllCheckbox').checked = historySelectedSet.size === history.length;
-  document.getElementById('historyDeleteSelectedBtn').textContent = `🗑 Delete Selected (${historySelectedSet.size})`;
+  document.getElementById('historyDeleteSelectedBtn').innerHTML =
+    `<svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Selected (${historySelectedSet.size})`;
 
   history.forEach((rec, idx) => {
     const card = document.createElement('div');
@@ -1570,10 +1588,10 @@ function renderBillHistory(){
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
             <span style="font-size:15px; font-weight:900; color:#1a7a3e;">₹${Number(rec.total || 0).toFixed(2)}</span>
-            ${!historySelectionMode ? `<button data-role="delete" aria-label="Delete bill" style="background:#e63946; color:#fff; border:none; border-radius:7px; width:28px; height:28px; font-size:13px; cursor:pointer; flex-shrink:0;">🗑</button>` : ''}
+            ${!historySelectionMode ? `<button data-role="delete" aria-label="Delete bill" class="history-delete-icon-btn" style="background:#e63946; color:#fff; border:none; border-radius:7px; width:28px; height:28px; cursor:pointer; flex-shrink:0;"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>` : ''}
           </div>
         </div>
-        ${rec.custMobile ? `<div style="font-size:11px; color:#888; margin-top:4px;">📱 ${rec.custMobile}</div>` : ''}
+        ${rec.custMobile ? `<div style="font-size:11px; color:#888; margin-top:4px;"><svg class="pro-icon pro-icon-small" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5 9 3l2 5-2 1.5a14 14 0 0 0 5 5L15.5 13l5 2 .5 2.5c.2 1.1-.7 2-1.8 2C11.4 20 4 12.6 4 4.8c0-1.1.9-1.9 2-1.3z"/></svg> ${rec.custMobile}</div>` : ''}
       </div>
     `;
 
@@ -2102,12 +2120,16 @@ function generateUPIQR(){
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 2px 6px rgba(0,0,0,0.25);
   `;
-  logo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(logoSize*0.28)}px; letter-spacing:0.5px;">MH</span>`;
+  logo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(logoSize*0.28)}px; letter-spacing:0.5px;">🛒</span>`;
   qrDivFull.appendChild(logo);
 
   document.getElementById('upiAmountDisplayFull').textContent = total.toFixed(2);
   document.getElementById('upiCustNameDisplay').textContent = custName ? `Customer: ${custName}` : '';
   document.getElementById('qrFullscreen').style.display = 'flex';
+  const qr58 = document.getElementById('qrThermal58Btn');
+  const qr80 = document.getElementById('qrThermal80Btn');
+  if(qr58) qr58.classList.toggle('active', thermalPaperWidth === 58);
+  if(qr80) qr80.classList.toggle('active', thermalPaperWidth === 80);
 
   // Build the matching downloadable "receipt card" version — same random
   // color, same UPI data — rendered into its own off-screen QR container
@@ -2131,7 +2153,7 @@ function generateUPIQR(){
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 2px 6px rgba(0,0,0,0.25);
   `;
-  dlLogo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(dlLogoSize*0.28)}px; letter-spacing:0.5px;">MH</span>`;
+  dlLogo.innerHTML = `<span style="font-weight:900; font-style:italic; color:${qrColor}; font-size:${Math.round(dlLogoSize*0.28)}px; letter-spacing:0.5px;">🛒</span>`;
   qrDivDownload.appendChild(dlLogo);
 
   document.getElementById('qrDownloadAmount').textContent = '₹ ' + total.toFixed(2);
@@ -2232,6 +2254,10 @@ function setThermalWidth(width){
   try { localStorage.setItem('mittu_thermal_width', String(thermalPaperWidth)); } catch(e){}
   document.getElementById('thermal58Btn').classList.toggle('active', thermalPaperWidth === 58);
   document.getElementById('thermal80Btn').classList.toggle('active', thermalPaperWidth === 80);
+  const qr58 = document.getElementById('qrThermal58Btn');
+  const qr80 = document.getElementById('qrThermal80Btn');
+  if(qr58) qr58.classList.toggle('active', thermalPaperWidth === 58);
+  if(qr80) qr80.classList.toggle('active', thermalPaperWidth === 80);
 }
 
 function escHtml(value){
@@ -2574,7 +2600,7 @@ function renderSearchResults(){
       <div style="font-size:12px; color:#555; margin:4px 0;">${rec.dateTime}</div>
       <div style="font-size:13px; font-weight:600;">${rec.custName || 'Customer'} ${rec.custMobile ? '(' + rec.custMobile + ')' : ''}</div>
       <div style="font-size:12px; color:#777;">${rec.address || ''}</div>
-      <div style="font-size:11px; color:#1a7a3e; margin-top:6px;">👆 Tap karein - PDF dubara download hoga</div>
+      <div style="font-size:11px; color:#1a7a3e; margin-top:6px;"><svg class="pro-icon pro-icon-small" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V6a2 2 0 0 1 4 0v6"/><path d="M12 11V5a2 2 0 0 1 4 0v7"/><path d="M16 12V8a2 2 0 0 1 4 0v6c0 5-3 7-7 7h-1c-3 0-4-2-6-5l-2-3a2 2 0 0 1 3-2l1 1"/></svg> Tap karein - PDF dubara download hoga</div>
     `;
     card.addEventListener('click', () => {
       closeSearchBill();
