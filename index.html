@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>Mittu Wholesaler & Retailer - Bill Generator</title>
+<title>Hamza Wholesaler & Retailer - Bill Generator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -213,6 +213,7 @@
       if(passInput) passInput.disabled = false;
     }
   };
+
 
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
@@ -1046,7 +1047,7 @@
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo"><span class="cart-glow">🛒</span></div>
-    <h1 class="login-title">Welcome to Mittu Billing</h1>
+    <h1 class="login-title">Welcome to Hamza Billing</h1>
     <p class="login-subtitle">To use the Bill Generator, please continue with your Google account.</p>
     <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
       <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg>
@@ -1092,7 +1093,7 @@
 </div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
-  <div class="topbar-title"><span class="cart-glow">🛒</span> Mittu Wholesaler & Retailer - Bill Generator</div>
+  <div class="topbar-title"><span class="cart-glow">🛒</span> Hamza Wholesaler & Retailer - Bill Generator</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
       <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
@@ -1103,7 +1104,7 @@
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()">
   <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
     <div class="drawer-header">
-      <span class="drawer-title"><span class="cart-glow">🛒</span> Mittu Wholesaler & Retailer</span>
+      <span class="drawer-title"><span class="cart-glow">🛒</span> Hamza Wholesaler & Retailer</span>
       <div class="drawer-header-actions">
         <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
         <button class="drawer-close" onclick="closeDrawer()">✕</button>
@@ -1154,7 +1155,7 @@
 <!-- Hidden capture template: full Customer Record PDF (all bills, one row each) -->
 <div id="customerRecordCapture" style="position:fixed; left:-9999px; top:0; width:760px; background:#ffffff; padding:24px; font-family:Arial, sans-serif; color:#1c1c1c;">
   <div style="text-align:center; margin-bottom:4px;">
-    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Wholesaler & Retailer</div>
+    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Hamza Wholesaler & Retailer</div>
     <div style="font-size:14px; color:#666;">Customer Record — All Bills</div>
     <div style="font-size:11px; color:#999; margin-top:4px;">Generated on: <span id="crGeneratedOn"></span></div>
   </div>
@@ -1281,7 +1282,7 @@
   <button onclick="closeQRFullscreen()" style="position:absolute; top:18px; right:18px; background:#e63946; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">✕</button>
 
   <div style="text-align:center; margin-bottom:6px;">
-    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">MITTU WHOLESALER & RETAILER</div>
+    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">HAMZA WHOLESALER & RETAILER</div>
     <div style="color:#fff; font-size:14px;">Scan &amp; Pay via any UPI App</div>
   </div>
 
@@ -1307,12 +1308,12 @@
 separate from the on-screen qrFullscreen view above so the on-screen dark
 theme isn't affected. downloadQR() captures this instead of the plain QR. -->
 <div id="qrDownloadCard" style="position:fixed; left:-9999px; top:0; width:375px; background:#ffffff; border:8px solid #f5a623; border-radius:28px; padding:30px 24px 26px; font-family:Arial, sans-serif; text-align:center; box-sizing:border-box;">
-  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">MITTU<br>WHOLESALER & RETAILER</div>
+  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">HAMZA<br>WHOLESALER & RETAILER</div>
   <div style="width:90px; height:4px; background:#f5a623; margin:16px auto 24px; border-radius:2px;"></div>
   <div style="border:2px solid #0c1f4a; border-radius:16px; padding:14px; display:inline-block; background:#fff;">
     <div id="qrcodeDivDownload" style="position:relative; width:260px; height:260px;"></div>
   </div>
-  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Mittu</div>
+  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Hamza</div>
   <div style="margin-top:18px; font-size:17px; font-weight:700; color:#e65100;">Total Amount is</div>
   <div id="qrDownloadAmount" style="font-size:36px; font-weight:900; color:#e65100; margin-top:2px;">₹ 0.00</div>
   <div id="qrDownloadExtra" style="margin-top:16px;"></div>
@@ -1327,7 +1328,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-company-block">
-    <div class="inv-company">Mittu Wholesaler & Retailer</div>
+    <div class="inv-company">Hamza Wholesaler & Retailer</div>
     <div class="inv-addr-line">Rangra, Bhagalpur, Bihar, 853204, India.</div>
     <div class="inv-addr-line">Mobile: +91 9540125307</div>
   </div>
@@ -1375,7 +1376,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-sign">
-    <div>For Mittu Wholesaler & Retailer</div>
+    <div>For Hamza Wholesaler & Retailer</div>
     <div>________________________<br>Signature</div>
   </div>
 </div>
@@ -1719,7 +1720,7 @@ function generateBill(openFile = true){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   return renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
+    downloadPDF(pdf, `Hamza_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
     // Auto-generate a fresh random bill number for the next bill
     generateRandomBillNo();
@@ -1946,7 +1947,7 @@ function backupHistoryToFile(silent){
     return;
   }
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
+  downloadTextFile(JSON.stringify(history, null, 2), `Hamza_Bill_History_Backup_${stamp}.json`, 'application/json');
   if(!silent){
     alert('The backup file has been saved in your phone\'s Downloads folder. Keep it safe always - you can use this file to restore the old history anytime.');
   }
@@ -2075,7 +2076,7 @@ function redownloadBill(idx){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
+    openPdfInApp(pdf, `Hamza_Bill_${rec.billNo}.pdf`);
   });
 }
 
@@ -2242,7 +2243,7 @@ function buildBillMessage(){
   // ---- English section ----
   let en = '';
   en += `Namaste ${custName},\n`;
-  en += `Mittu Wholesaler & Retailer - Bill No. ${billNo}\n`;
+  en += `Hamza Wholesaler & Retailer - Bill No. ${billNo}\n`;
   items.forEach((it, idx) => {
     en += `${toRoman(idx+1)}. ${it.name} (Qty ${it.qty}, Rate ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
@@ -2252,7 +2253,7 @@ function buildBillMessage(){
   // ---- Hindi section ----
   let hi = '';
   hi += `नमस्ते ${custName},\n`;
-  hi += `मित्तू होलसेलर - बिल नं. ${billNo}\n`;
+  hi += `हमज़ा होलसेलर - बिल नं. ${billNo}\n`;
   items.forEach((it, idx) => {
     hi += `${toRoman(idx+1)}. ${it.name} (मात्रा ${it.qty}, दर ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
@@ -2282,7 +2283,7 @@ function sendWhatsApp(){
 
 function buildUpiUrl(total, billNo){
   const upiId = '7303714309@axl';
-  const payeeName = 'MITTU WHOLESALER & RETAILER';
+  const payeeName = 'HAMZA WHOLESALER & RETAILER';
   return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill No '+billNo)}`;
 }
 
@@ -2442,7 +2443,7 @@ function downloadQR(openFile = true){
   // on-screen fullscreen QR — capturing after it's hidden produces a
   // blank/failed image.
   return html2canvas(qrDiv, {scale: 2, backgroundColor: '#ffffff'}).then(canvas => {
-    const filename = `Mittu_UPI_QR_${billNo}.png`;
+    const filename = `Hamza_UPI_QR_${billNo}.png`;
     return new Promise(resolve => {
       canvas.toBlob(blob => {
         try {
@@ -2532,7 +2533,7 @@ function buildThermalBillHtml(){
 
   return { html: `
     <div class="receipt">
-      <div class="shop">Mittu Wholesaler & Retailer</div>
+      <div class="shop">Hamza Wholesaler & Retailer</div>
       <div class="center">Rangra, Bhagalpur, Bihar, 853204, India.</div>
       <div class="center">Mobile: +91 9540125307</div>
       <div class="dash"></div>
@@ -2550,7 +2551,7 @@ function buildThermalBillHtml(){
       <div class="words">${escHtml(amountInWords(total))}</div>
       <div class="dash"></div>
       <div class="center thanks">Thank you!</div>
-      <div class="center small">For Mittu Wholesaler & Retailer</div>
+      <div class="center small">For Hamza Wholesaler & Retailer</div>
     </div>` };
 }
 
@@ -2590,7 +2591,7 @@ function buildNativeThermalPrintPayload(){
       address: document.getElementById('custAddr').value.trim()
     },
     shop: {
-      name: 'Mittu Wholesaler & Retailer',
+      name: 'Hamza Wholesaler & Retailer',
       address: 'Rangra, Bhagalpur, Bihar, 853204, India.',
       mobile: '+91 9540125307'
     },
@@ -2667,7 +2668,7 @@ function printThermalBill(){
   }
 
   printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Mittu Bill</title>
+  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Hamza Bill</title>
     <style>
       @page { size: ${widthMm}mm auto; margin: 0; }
       html,body { margin:0; padding:0; background:#fff; width:${widthMm}mm; }
@@ -2913,7 +2914,7 @@ function exportCustomerRecordsPDF(){
   function drawHeader(){
     pdf.setFontSize(15);
     pdf.setFont(undefined, 'bold');
-    pdf.text('Mittu Wholesaler & Retailer - Customer Record', pageWidth / 2, y, { align: 'center' });
+    pdf.text('Hamza Wholesaler & Retailer - Customer Record', pageWidth / 2, y, { align: 'center' });
     y += 7;
     pdf.setFontSize(9);
     pdf.setFont(undefined, 'normal');
@@ -2952,7 +2953,7 @@ function exportCustomerRecordsPDF(){
   });
 
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
+  downloadPDF(pdf, `Hamza_Customer_Records_${stamp}.pdf`);
 }
 
 // init
