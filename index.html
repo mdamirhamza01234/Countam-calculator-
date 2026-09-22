@@ -3,10 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>Hamza Wholesaler & Retailer - Bill Generator</title>
+<title>Mittu Wholesaler & Retailer - Bill Generator & Stock Recorder</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+<script>
+  if (window['pdfjsLib']) {
+    window['pdfjsLib'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <script type="module">
   // ---------------- FIREBASE (syncs the QR to the old-phone display) ----------------
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -214,7 +222,6 @@
     }
   };
 
-
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
     const loginScreen = document.getElementById('loginScreen');
@@ -233,6 +240,11 @@
         if(typeof window.restoreBillHistoryFromFirebase === 'function') {
           window.restoreBillHistoryFromFirebase().catch(err =>
             console.warn('Firebase bill history restore failed:', err)
+          );
+        }
+        if(typeof window.restoreStockFromFirebase === 'function') {
+          window.restoreStockFromFirebase().catch(err =>
+            console.warn('Firebase stock restore failed:', err)
           );
         }
       }, 0);
@@ -276,6 +288,7 @@
       try {
         localStorage.removeItem('mittu_bill_history_' + user.uid);
         localStorage.removeItem('mittu_bill_history');
+        localStorage.removeItem('mittu_stock_' + user.uid);
       } catch(e) {}
 
       // Finally delete the Firebase Authentication account.
@@ -326,6 +339,52 @@
     if(!user) return false;
     await remove(firebaseBillPath(user.uid));
     return true;
+  };
+
+  // ---------------- STOCK RECORD CLOUD SYNC ----------------
+  function firebaseStockPath(uid){
+    return ref(fbDb, 'users/' + uid + '/stock');
+  }
+
+  window.saveStockItemToFirebase = async function(item){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user || !item || !item.id) return false;
+    await set(ref(fbDb, 'users/' + user.uid + '/stock/' + item.id), item);
+    return true;
+  };
+
+  window.deleteStockItemFromFirebase = async function(itemId){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user || !itemId) return false;
+    await remove(ref(fbDb, 'users/' + user.uid + '/stock/' + itemId));
+    return true;
+  };
+
+  window.restoreStockFromFirebase = async function(){
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user) return false;
+
+    const snap = await get(firebaseStockPath(user.uid));
+    const cloud = snap.exists() ? Object.values(snap.val() || {}) : [];
+
+    const userKey = 'mittu_stock_' + user.uid;
+    let local = [];
+    try { local = JSON.parse(localStorage.getItem(userKey) || '[]') || []; } catch(e) { local = []; }
+
+    const byId = new Map();
+    cloud.forEach(it => { if(it && it.id) byId.set(it.id, it); });
+    local.forEach(it => { if(it && it.id) byId.set(it.id, it); });
+    const merged = Array.from(byId.values()).sort((a,b) => String(a.itemName||'').localeCompare(String(b.itemName||'')));
+
+    try { localStorage.setItem(userKey, JSON.stringify(merged)); } catch(e) {}
+
+    const cloudIds = new Set(cloud.map(it => it && it.id));
+    await Promise.all(merged.filter(it => !cloudIds.has(it.id)).map(it =>
+      set(ref(fbDb, 'users/' + user.uid + '/stock/' + it.id), it)
+    ));
+
+    window.dispatchEvent(new CustomEvent('mittuFirebaseStockReady'));
+    return merged;
   };
 
   window.restoreBillHistoryFromFirebase = async function(){
@@ -410,6 +469,39 @@
     return remove(billRef)
       .catch(err => console.warn('Firebase clear failed (display may be offline):', err));
   };
+
+  // ---------------- CUSTOMER SELF-SERVICE "AI SE BILL" (Display -> Mittu -> Display) ----------------
+  // The customer, standing at the old-phone Display, can type/photo their
+  // own order. It lands here as customerRequest/status:'new'. This phone
+  // (Mittu) is alerted, runs the SAME AI extraction the shopkeeper's own
+  // "AI se Bill Generate karein" button uses (with our own live Stock
+  // Record), the shopkeeper checks it, then sends a read-only review card
+  // back to the Display with Cash/Online buttons.
+  const customerReqRef = ref(fbDb, 'customerRequest');
+  onValue(customerReqRef, (snapshot) => {
+    const data = snapshot.val();
+    if (typeof window.handleCustomerRequestUpdate === 'function') {
+      window.handleCustomerRequestUpdate(data);
+    }
+  });
+
+  // Shopkeeper approves the auto-filled bill -> send a review-only card to
+  // the Display, with Cash/Online buttons for the customer.
+  window.pushCustomerReviewCard = function(payload){
+    return update(customerReqRef, Object.assign({}, payload, { status: 'review', ts: Date.now() }))
+      .catch(err => console.warn('Firebase customer review push failed:', err));
+  };
+
+  // Shopkeeper confirms the customer's Cash/Online payment was received.
+  window.markCustomerPaymentReceived = function(method, amount, custName){
+    return update(customerReqRef, { status: 'completed', paymentMethod: method, paidAmount: amount, custName: custName || '', ts: Date.now() })
+      .catch(err => console.warn('Firebase customer payment mark failed:', err));
+  };
+
+  // Clears the customer-request flow entirely (back to Display welcome screen).
+  window.clearCustomerRequest = function(){
+    return remove(customerReqRef).catch(err => console.warn('Firebase clear customerRequest failed:', err));
+  };
 </script>
 <style>
   * { box-sizing: border-box; }
@@ -424,6 +516,9 @@
   }
   /* ---------------- GOOGLE LOGIN SCREEN ---------------- */
   body.auth-required { overflow: hidden; }
+  /* TESTING MODE: login screen force-disabled below. Delete these 2 lines to turn login back on. */
+  #loginScreen { display: none !important; }
+  body.auth-required { overflow: visible !important; }
   #loginScreen {
     position: fixed; inset: 0; z-index: 20000;
     display: flex; align-items: center; justify-content: center;
@@ -547,6 +642,317 @@
     max-width: 950px;
     margin: 0 auto;
   }
+
+  /* ---------------- BILL / STOCK MODE TOGGLE ---------------- */
+  .mode-toggle-row {
+    max-width: 950px; margin: 12px auto 0; padding: 0 16px;
+    display: flex; gap: 10px;
+  }
+  .mode-toggle-btn {
+    flex: 1; min-height: 46px; border: 1.5px solid #a04e00; border-radius: 10px;
+    background: #fff; color: #a04e00; font-size: 14.5px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer;
+  }
+  .mode-toggle-btn.active { background: #a04e00; color: #fff; }
+  .mode-toggle-btn .pro-icon { width: 18px; height: 18px; }
+
+  /* ---------------- STOCK RECORD ---------------- */
+  #stockRecordPanel { max-width: 950px; margin: 14px auto 30px; padding: 0 16px; }
+  .stock-ai-advisor-btn {
+    width: 100%; min-height: 46px; margin-bottom: 14px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #6a3de8, #a04ee0); color: #fff; font-size: 14px; font-weight: 800;
+    cursor: pointer; box-shadow: 0 2px 8px rgba(106,61,232,0.35);
+  }
+  .stock-summary-row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .stock-summary-card {
+    flex: 1; background: #fff; border-radius: 10px; padding: 12px 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08); text-align: center; position: relative;
+  }
+  .stock-summary-clickable { cursor: pointer; padding-top: 10px; }
+  .stock-summary-dl-btn {
+    position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 7px;
+    border: none; background: #1a3e8c; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stock-summary-dl-btn svg { width: 14px; height: 14px; }
+  .stock-summary-value { font-size: 19px; font-weight: 800; color: #a04e00; }
+  .stock-summary-label { font-size: 11.5px; color: #777; margin-top: 2px; }
+  .stock-search-row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .stock-search-row input {
+    flex: 1; padding: 10px 12px; border: 1px solid #cbd3e1; border-radius: 8px; font-size: 14px;
+  }
+  .stock-add-btn {
+    background: #a04e00; color: #fff; border: none; border-radius: 8px;
+    padding: 0 16px; font-size: 14px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .stock-ai-inline-link {
+    background: none; border: none; padding: 4px 6px; font-size: 12px; font-weight: 700;
+    color: #1a3e8c; text-decoration: underline; cursor: pointer;
+  }
+  .stock-scan-btn {
+    width: 100%; min-height: 46px; margin-bottom: 14px;
+    background: #1a3e8c; color: #fff; border: none; border-radius: 9px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  #stockScanLoading { text-align: center; padding: 20px 10px; margin-bottom: 10px; }
+  .stock-scan-spinner {
+    width: 30px; height: 30px; margin: 0 auto 10px; border: 3px solid #ddd;
+    border-top-color: #1a3e8c; border-radius: 50%; animation: stockScanSpin .8s linear infinite;
+  }
+  @keyframes stockScanSpin { to { transform: rotate(360deg); } }
+  #stockScanLoadingText { font-size: 13px; color: #555; }
+  .stock-scan-row {
+    display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee;
+  }
+  .stock-scan-row input[type="text"], .stock-scan-row input[type="number"] {
+    padding: 7px 9px; border: 1px solid #cbd3e1; border-radius: 7px; font-size: 13px;
+  }
+  .stock-scan-row .scan-name { flex: 2; min-width: 0; }
+  .stock-scan-row .scan-qty, .stock-scan-row .scan-price { flex: 1; min-width: 0; }
+  .stock-scan-empty { text-align: center; color: #888; font-size: 13px; padding: 20px 10px; }
+  .stock-item-card {
+    background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .stock-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .stock-item-name { font-size: 15px; font-weight: 800; color: #222; }
+  .stock-item-meta { font-size: 12px; color: #777; margin-top: 2px; }
+  .stock-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .stock-icon-btn {
+    width: 30px; height: 30px; border-radius: 7px; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stock-icon-btn.edit { background: #eef1f5; color: #333; }
+  .stock-icon-btn.delete { background: #fdeaea; color: #d62828; }
+  .stock-icon-btn svg { width: 15px; height: 15px; }
+  .stock-item-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .stock-qty-controls { display: flex; align-items: center; gap: 10px; }
+  .stock-qty-btn {
+    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid #a04e00;
+    background: #fff; color: #a04e00; font-size: 18px; font-weight: 800; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; line-height: 1;
+  }
+  .stock-qty-value { font-size: 16px; font-weight: 800; color: #222; min-width: 54px; text-align: center; }
+  .stock-item-value { font-size: 14px; font-weight: 700; color: #1a7a3e; }
+  .stock-item-lowflag { color: #d62828; font-size: 11px; font-weight: 800; margin-top: 3px; }
+  .stock-sl { color: #a04e00; font-weight: 800; margin-right: 4px; }
+  .scan-sl { font-weight: 800; color: #a04e00; font-size: 14px; }
+  .stock-sort-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 2px 10px; }
+  #stockSortLabel { font-size: 12.5px; color: #666; font-weight: 700; }
+  .stock-dots-btn { width: 38px; height: 38px; border: none; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; cursor: pointer; color: #333; }
+  .stock-dots-btn svg { width: 20px; height: 20px; }
+  #stockSortOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 10200; align-items: flex-end; justify-content: center; }
+  #stockSortSheet { width: 100%; max-width: 520px; background: #1c1f26; color: #e8eaed; border-radius: 26px 26px 0 0; padding: 12px 24px 26px; box-sizing: border-box; animation: stockSheetUp .22s ease-out; }
+  @keyframes stockSheetUp { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
+  #stockSortSheet .grab { width: 44px; height: 5px; border-radius: 3px; background: #e8eaed; margin: 0 auto 26px; }
+  #stockSortSheet .ttl { font-size: 15px; color: #b8bcc6; margin-bottom: 8px; }
+  .stock-sort-opt { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; font-size: 18px; cursor: pointer; }
+  .stock-sort-opt .sub { display: block; font-size: 11.5px; color: #8b909c; margin-top: 2px; }
+  .stock-sort-opt .radio { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid #c4c7cf; box-sizing: border-box; position: relative; margin-left: 14px; }
+  .stock-sort-opt.sel .radio { border-color: #a8c7fa; }
+  .stock-sort-opt.sel .radio::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #a8c7fa; }
+  .stock-empty { text-align: center; color: #888; font-size: 13.5px; padding: 40px 10px; }
+
+  #stockItemOverlay, #stockScanReviewOverlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 10050;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .stock-item-modal {
+    width: 100%; max-width: 420px; background: #fff; border-radius: 14px; padding: 20px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .stock-item-modal h3 { margin: 0 0 14px; font-size: 17px; color: #a04e00; }
+  .stock-item-modal .field { margin-bottom: 12px; }
+  .stock-item-modal label { display: block; font-size: 12.5px; color: #555; margin-bottom: 4px; font-weight: 700; }
+  .stock-item-modal input {
+    width: 100%; padding: 9px 11px; border: 1px solid #cbd3e1; border-radius: 8px; font-size: 14px;
+  }
+  .stock-item-modal .field-row { display: flex; gap: 10px; }
+  .stock-item-modal .field-row .field { flex: 1; }
+  .price-unit-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .price-unit-row input { flex: 1; min-width: 0; }
+  .unit-pick-btn {
+    flex: 0 0 auto; min-width: 84px; height: 38px; padding: 0 10px; border: 1px solid #cbd3e1; border-radius: 8px;
+    background: #f6f7fa; color: #a04e00; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  }
+  .unit-pick-btn .arr { font-size: 15px; margin-left: 5px; }
+  .sale-remove-btn {
+    flex: 0 0 auto; width: 34px; height: 38px; border: none; border-radius: 8px;
+    background: #fdeaea; color: #d62828; font-size: 18px; font-weight: 800; cursor: pointer;
+  }
+  .add-sale-btn {
+    width: 100%; padding: 8px; border: 1.5px dashed #a04e00; border-radius: 8px; background: #fff;
+    color: #a04e00; font-size: 13px; font-weight: 800; cursor: pointer;
+  }
+  #unitPickMenu {
+    display: none; position: fixed; z-index: 100000; background: #3a3d42; color: #fff; border-radius: 22px;
+    overflow-y: auto; min-width: 110px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  }
+  #unitPickMenu div { padding: 14px 24px; font-size: 17px; border-bottom: 1px solid #55585e; cursor: pointer; }
+  #unitPickMenu div:last-child { border-bottom: none; }
+  .stock-modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .stock-modal-actions button {
+    flex: 1; min-height: 44px; border-radius: 9px; font-size: 14px; font-weight: 700; cursor: pointer; border: none;
+  }
+  .stock-modal-save { background: #a04e00; color: #fff; }
+  .stock-modal-cancel { background: #eee; color: #444; }
+
+  .stock-ai-setup-btn { width: 100%; margin: -4px 0 12px; padding: 9px 10px; border: 1px dashed #1a3e8c; background: #f2f6ff; color: #1a3e8c; border-radius: 9px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+
+
+  /* ---------------- AI BILL GENERATOR ---------------- */
+  .ai-bill-generate-btn{
+    width:100%; min-height:50px; margin-top:10px; border:0; border-radius:9px;
+    background:linear-gradient(135deg,#6a3de8,#a04ee0); color:#fff;
+    font-size:16px; font-weight:800; cursor:pointer;
+    box-shadow:0 3px 10px rgba(106,61,232,.28);
+  }
+.ai-bill-top-btn{ margin-top:0; margin-bottom:12px; }
+  .ai-bill-spark{font-size:20px; margin-right:5px;}
+  .ai-bill-overlay{
+    position:fixed; inset:0; z-index:10400; background:rgba(0,0,0,.58);
+    display:flex; align-items:flex-end; justify-content:center; padding:0;
+  }
+  .ai-bill-modal{
+    width:100%; max-width:560px; max-height:92vh; overflow:auto;
+    background:#fff; border-radius:20px 20px 0 0;
+    box-shadow:0 -8px 35px rgba(0,0,0,.25);
+  }
+  .ai-bill-head{
+    display:flex; justify-content:space-between; gap:12px; align-items:flex-start;
+    padding:16px; color:#fff; background:linear-gradient(135deg,#6a3de8,#a04ee0);
+  }
+  .ai-bill-title{font-size:18px;font-weight:850;}
+  .ai-bill-subtitle{font-size:12px;line-height:1.45;margin-top:5px;opacity:.92;}
+  .ai-bill-close{
+    width:32px;height:32px;border:0;border-radius:50%;background:rgba(255,255,255,.2);
+    color:#fff;font-size:16px;cursor:pointer;flex:0 0 auto;
+  }
+  .ai-bill-body{padding:16px;}
+  .ai-bill-label{display:block;font-size:13px;font-weight:800;color:#333;margin-bottom:6px;}
+  .ai-bill-textarea{
+    width:100%; min-height:105px; resize:vertical; padding:11px 12px;
+    border:1px solid #cbd3e1; border-radius:10px; font:14px/1.45 inherit;
+    outline:none;
+  }
+  .ai-bill-textarea:focus{border-color:#7b56df;box-shadow:0 0 0 3px rgba(106,61,232,.10);}
+  .ai-bill-or{display:flex;align-items:center;gap:10px;margin:13px 0;color:#888;font-size:11px;font-weight:800;}
+  .ai-bill-or:before,.ai-bill-or:after{content:'';height:1px;background:#e4e4e4;flex:1;}
+  .ai-bill-upload-btn{
+    width:100%;min-height:46px;border:1.5px dashed #7b56df;border-radius:9px;
+    background:#faf8ff;color:#5e35c8;font-size:13.5px;font-weight:800;cursor:pointer;
+  }
+  .ai-bill-file-list{
+    margin-top:8px;padding:8px 10px;background:#f6f4fb;border-radius:8px;
+    color:#666;font-size:11.5px;line-height:1.45;word-break:break-word;
+  }
+  .ai-bill-status{min-height:20px;margin-top:10px;color:#555;font-size:12.5px;line-height:1.45;}
+  .ai-bill-actions{display:flex;gap:9px;margin-top:10px;}
+  .ai-bill-actions button{flex:1;min-height:46px;border:0;border-radius:9px;font-size:13.5px;font-weight:800;cursor:pointer;}
+  .ai-bill-cancel{background:#eee;color:#444;}
+  .ai-bill-submit{background:#6a3de8;color:#fff;}
+  .ai-bill-submit:disabled{opacity:.6;cursor:wait;}
+
+  /* ---------------- AI ADVISOR CHATBOT ---------------- */
+  #aiAdvisorOverlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 10300;
+    align-items: flex-end; justify-content: center;
+  }
+  .ai-advisor-modal {
+    width: 100%; max-width: 520px; background: #fff; border-radius: 18px 18px 0 0;
+    height: 82vh; max-height: 720px; display: flex; flex-direction: column; overflow: hidden;
+    animation: stockSheetUp .22s ease-out;
+  }
+  .ai-advisor-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 14px 16px;
+    background: linear-gradient(135deg, #6a3de8, #a04ee0); color: #fff; flex: 0 0 auto;
+  }
+  .ai-advisor-title { font-size: 15px; font-weight: 800; }
+  .ai-advisor-close {
+    width: 30px; height: 30px; border: none; border-radius: 50%; background: rgba(255,255,255,0.2);
+    color: #fff; font-size: 15px; cursor: pointer; flex: 0 0 auto;
+  }
+  .ai-advisor-messages {
+    flex: 1 1 auto; overflow-y: auto; padding: 14px 12px; background: #f6f4fb;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .ai-advisor-msg { max-width: 84%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .ai-advisor-msg.user { align-self: flex-end; background: #6a3de8; color: #fff; border-bottom-right-radius: 3px; }
+  .ai-advisor-msg.ai { align-self: flex-start; background: #fff; color: #222; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border-bottom-left-radius: 3px; }
+  .ai-advisor-msg.error { align-self: flex-start; background: #fdeaea; color: #b3261e; }
+  .ai-advisor-suggestions { display: flex; gap: 8px; padding: 8px 12px 0; flex-wrap: wrap; flex: 0 0 auto; background: #f6f4fb; }
+  .ai-advisor-suggestions button {
+    border: 1px solid #a04ee0; background: #fff; color: #6a3de8; border-radius: 20px;
+    padding: 6px 11px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  }
+  .ai-advisor-typing { font-size: 12px; color: #888; padding: 4px 16px; background: #f6f4fb; flex: 0 0 auto; }
+  .ai-advisor-input-row {
+    display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #eee;
+    background: #fff; flex: 0 0 auto;
+  }
+  .ai-advisor-input-row textarea {
+    flex: 1; resize: none; max-height: 90px; padding: 10px 12px; border: 1px solid #cbd3e1;
+    border-radius: 14px; font-size: 13.5px; font-family: inherit;
+  }
+  .ai-advisor-send-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: none; background: #6a3de8; color: #fff;
+    font-size: 17px; cursor: pointer; flex: 0 0 auto;
+  }
+  .ai-advisor-send-btn:disabled { opacity: .6; }
+  .ai-advisor-attach-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: 1.5px solid #a04ee0; background: #fff;
+    color: #6a3de8; font-size: 22px; font-weight: 800; cursor: pointer; flex: 0 0 auto; line-height: 1;
+    display: flex; align-items: center; justify-content: center; padding-bottom: 2px;
+  }
+  .ai-advisor-msg.typing-cursor::after { content: '▍'; display: inline-block; animation: aiCursorBlink .9s steps(1) infinite; color: #6a3de8; }
+  @keyframes aiCursorBlink { 50% { opacity: 0; } }
+
+  /* ---------------- STOCK DATA ENTRY LIST ---------------- */
+  .stock-entries-toggle-btn {
+    width: 100%; margin: -4px 0 12px; padding: 10px 10px; border: 1px solid #1a3e8c;
+    background: #eef2ff; color: #1a3e8c; border-radius: 9px; font-size: 13px; font-weight: 800; cursor: pointer;
+  }
+  #stockEntriesListContainer { margin: -4px 0 14px; }
+  .stock-entry-card {
+    background: #fff; border-radius: 10px; padding: 11px 13px; margin-bottom: 9px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .stock-entry-info { flex: 1; min-width: 0; }
+  .stock-entry-row1 { font-size: 13.5px; font-weight: 800; color: #222; }
+  .stock-entry-row1 span.amt { color: #1a7a3e; margin-left: 8px; }
+  .stock-entry-row2 { font-size: 11.5px; color: #777; margin-top: 3px; }
+  .stock-entry-supplier { font-size: 11.5px; color: #a04e00; font-weight: 700; margin-top: 2px; }
+  .stock-entry-dl-btn {
+    flex: 0 0 auto; width: 38px; height: 38px; border-radius: 9px; border: none; cursor: pointer;
+    background: #1a3e8c; color: #fff; display: flex; align-items: center; justify-content: center;
+  }
+  .stock-entry-dl-btn svg { width: 18px; height: 18px; }
+  .stock-entries-empty { text-align: center; color: #888; font-size: 13px; padding: 18px 10px; }
+  .scan-banner { font-size: 12.5px; color: #1a5c2e; background: #eef8f0; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+  .scan-preview { text-align: center; margin-bottom: 10px; }
+  .scan-preview img { max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #ddd; }
+  .scan-preview button { display: block; margin: 6px auto 0; background: none; border: none; color: #1a3e8c; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .scan-legend { font-size: 11.5px; color: #666; margin: 0 0 8px; }
+  .scan-card { border: 1.5px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fff; }
+  .scan-card.st-ok { border-color: #bfe3c7; }
+  .scan-card.st-check { border-color: #f0d58a; background: #fffdf3; }
+  .scan-card.st-miss { border-color: #f2b8b5; background: #fff8f7; }
+  .scan-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .scan-inc { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: #444; margin: 0; }
+  .scan-inc input { width: auto; }
+  .scan-badge { flex: 1; font-size: 12px; font-weight: 700; color: #555; }
+  .scan-del { background: #fdeaea; color: #d62828; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
+  .scan-card .scan-in { width: 100%; padding: 8px 9px; border: 1px solid #cbd3e1; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  .scan-grid { display: flex; gap: 8px; margin-top: 8px; }
+  .scan-grid > div { flex: 1; min-width: 0; }
+  .scan-lbl { display: block; font-size: 11px; color: #777; margin-bottom: 2px; font-weight: 700; }
+  .scan-card .scan-missing { border-color: #d62828 !important; background: #fff0ef; }
+  .scan-card .scan-check { border-color: #e0a800 !important; background: #fff8dc; }
+  .scan-total { font-size: 12px; color: #1a7a3e; font-weight: 700; margin-top: 6px; }
+  .scan-src { font-size: 10.5px; color: #999; margin-top: 4px; word-break: break-word; }
+  .scan-addrow { width: 100%; padding: 10px; border: 1.5px dashed #a04e00; background: #fff7ee; color: #a04e00; border-radius: 9px; font-weight: 800; font-size: 13.5px; cursor: pointer; margin-bottom: 8px; }
   h1 {
     text-align: center;
     color: #3b1f00;
@@ -602,6 +1008,9 @@
     border-bottom: 1px solid #eee;
   }
   #itemsTable td input { padding: 6px 8px; font-size: 13px; }
+  /* Dropdown arrow dikhega nahi, par tap karne par list khulti rahegi */
+  #itemsTable input::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; }
+  #itemsTable input[list]::-webkit-calendar-picker-indicator { opacity: 0; }
   .amt-cell { text-align: right; font-weight: 600; padding-right: 10px; }
   .rm-btn {
     background: #e63946;
@@ -1047,7 +1456,7 @@
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo"><span class="cart-glow">🛒</span></div>
-    <h1 class="login-title">Welcome to Hamza Billing</h1>
+    <h1 class="login-title">Welcome to Mittu Billing</h1>
     <p class="login-subtitle">To use the Bill Generator, please continue with your Google account.</p>
     <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
       <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg>
@@ -1093,7 +1502,7 @@
 </div>
 <div class="topbar">
   <button class="hamburger-btn" onclick="openDrawer()" aria-label="Open menu"></button>
-  <div class="topbar-title"><span class="cart-glow">🛒</span> Hamza Wholesaler & Retailer - Bill Generator</div>
+  <div class="topbar-title"><span class="cart-glow">🛒</span> Mittu Wholesaler & Retailer - Bill Generator & Stock Recorder</div>
   <div class="topbar-actions">
     <button class="topbar-action-btn" onclick="startNewBill()" aria-label="New bill">
       <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg>
@@ -1104,7 +1513,7 @@
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()">
   <div class="drawer-panel" id="drawerPanel" onclick="event.stopPropagation()">
     <div class="drawer-header">
-      <span class="drawer-title"><span class="cart-glow">🛒</span> Hamza Wholesaler & Retailer</span>
+      <span class="drawer-title"><span class="cart-glow">🛒</span> Mittu Wholesaler & Retailer</span>
       <div class="drawer-header-actions">
         <button class="drawer-search-btn" onclick="closeDrawer(); openSearchBill();" aria-label="Search"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
         <button class="drawer-close" onclick="closeDrawer()">✕</button>
@@ -1155,7 +1564,7 @@
 <!-- Hidden capture template: full Customer Record PDF (all bills, one row each) -->
 <div id="customerRecordCapture" style="position:fixed; left:-9999px; top:0; width:760px; background:#ffffff; padding:24px; font-family:Arial, sans-serif; color:#1c1c1c;">
   <div style="text-align:center; margin-bottom:4px;">
-    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Hamza Wholesaler & Retailer</div>
+    <div style="font-size:22px; font-weight:800; color:#a04e00;"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2.2 11h10.9l2-8H6.1"/></svg> Mittu Wholesaler & Retailer</div>
     <div style="font-size:14px; color:#666;">Customer Record — All Bills</div>
     <div style="font-size:11px; color:#999; margin-top:4px;">Generated on: <span id="crGeneratedOn"></span></div>
   </div>
@@ -1175,8 +1584,157 @@
   </table>
 </div>
 
-<div class="app-wrap">
+<div class="mode-toggle-row">
+  <button type="button" class="mode-toggle-btn active" id="modeBillBtn" onclick="switchToBillView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> Bill Generate</button>
+  <button type="button" class="mode-toggle-btn" id="modeStockBtn" onclick="switchToStockView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 12h6"/></svg> Stock Record</button>
+</div>
+
+<div id="stockRecordPanel" style="display:none;">
+  <div class="stock-summary-row">
+    <div class="stock-summary-card stock-summary-clickable" onclick="downloadAvailableItemsPDF()" title="Available Item PDF Download">
+      <div class="stock-summary-value" id="stockTotalItems">0</div>
+      <div class="stock-summary-label">Total Items</div>
+      <button type="button" class="stock-summary-dl-btn" title="Available Item PDF Download" onclick="event.stopPropagation(); downloadAvailableItemsPDF()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+    <div class="stock-summary-card stock-summary-clickable" onclick="downloadLowStockPDF()" title="Low Stock PDF Download">
+      <div class="stock-summary-value" id="stockLowCount">0</div>
+      <div class="stock-summary-label">Low Stock</div>
+      <button type="button" class="stock-summary-dl-btn" title="Low Stock PDF Download" onclick="event.stopPropagation(); downloadLowStockPDF()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="stock-search-row">
+    <input type="text" id="stockSearchInput" list="stockItemNameSuggestions" placeholder="Search item..." oninput="renderStockList()">
+    <datalist id="stockItemNameSuggestions"></datalist>
+    <button type="button" class="stock-add-btn" onclick="openStockItemModal()">+ Add Item</button>
+  </div>
+  <button type="button" class="stock-ai-advisor-btn" onclick="openAiAdvisorModal()">🤖 Ask from AI — Stock &amp; Marketing Problem</button>
+  <button type="button" class="stock-scan-btn" onclick="document.getElementById('stockScanFileInput').click()">🤖 AI Through Scan Bill / Invoice (Printed ya Handwritten) — Auto Add Items</button>
+  <button type="button" class="stock-entries-toggle-btn" id="stockEntriesToggleBtn" onclick="toggleStockEntriesList()">🧾 Stocks Data Entry List</button>
+  <div id="stockEntriesListContainer" style="display:none;"></div>
+  <input type="file" id="stockScanFileInput" accept="image/*,application/pdf" style="display:none" onchange="handleStockScanFile(event)">
+  <div id="stockScanLoading" style="display:none;">
+    <div class="stock-scan-spinner"></div>
+    <div id="stockScanLoadingText">Scanning... please wait</div>
+  </div>
+  <button type="button" id="stockMergeDupBtn" class="stock-scan-btn" style="display:none; margin-top:0;" onclick="mergeDuplicateStockItems()">🔀 Duplicate items ek mein jodein</button>
+  <div class="stock-sort-row">
+    <span id="stockSortLabel"></span>
+    <button type="button" class="stock-dots-btn" onclick="openStockSortSheet()" aria-label="Sort by"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+  </div>
+  <div id="stockListContainer"></div>
+</div>
+
+<!-- Scanned items review overlay -->
+<div id="stockScanReviewOverlay" onclick="if(event.target===this) closeStockScanReview()">
+  <div class="stock-item-modal" style="max-width:520px;" onclick="event.stopPropagation()">
+    <h3>Review Scanned Items</h3>
+    <div id="stockScanBanner" class="scan-banner" style="display:none;"></div>
+    <div id="stockScanPreviewWrap" class="scan-preview" style="display:none;">
+      <img id="stockScanPreviewImg" alt="Bill" onclick="openStockScanZoom()">
+      <button type="button" onclick="openStockScanZoom()">🔍 Bill bada karke dekhein / ghumayein</button>
+    </div>
+    <p class="scan-legend"><b>✅ OK</b> &nbsp; <b>⚠️ Check karein</b> (andaza hai) &nbsp; <b style="color:#b3261e">❌ Adhura</b> (laal box khud bharein)</p>
+    <div class="field" style="margin-bottom:10px;">
+      <label>Supplier / Dukandar Name (jahan se kharida)</label>
+      <input type="text" id="stockScanSupplier" placeholder="e.g. Ramesh Traders">
+    </div>
+    <div id="stockScanReviewList"></div>
+    <button type="button" class="scan-addrow" onclick="addStockScanRow()">+ Item add karein</button>
+    <details id="stockScanRawWrap" style="display:none; margin:8px 0;">
+      <summary style="font-size:12px; color:#666; cursor:pointer;">Scan ka raw text dekhein</summary>
+      <pre id="stockScanRawText" style="white-space:pre-wrap; font-size:11px; background:#f6f6f6; padding:8px; border-radius:8px; max-height:160px; overflow:auto;"></pre>
+    </details>
+    <datalist id="scanUnitList"><option value="kg"><option value="pcs"><option value="bag"><option value="ltr"><option value="box"><option value="dozen"><option value="qtl"><option value="pkt"><option value="g"></datalist>
+    <div class="stock-modal-actions">
+      <button type="button" class="stock-modal-cancel" onclick="closeStockScanReview()">Cancel</button>
+      <button type="button" class="stock-modal-save" onclick="confirmStockReviewCurrentMode()" id="stockScanReviewSaveBtn">Add Selected to Stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill photo zoom -->
+<div id="stockScanZoomOverlay" style="display:none; position:fixed; inset:0; background:#000; z-index:10100; overflow:hidden;">
+  <img id="stockScanZoomImg" alt="Bill" style="position:absolute; top:50%; left:50%; object-fit:contain;">
+  <div style="position:fixed; top:12px; right:12px; display:flex; gap:8px; z-index:2;">
+    <button type="button" onclick="rotateStockScanZoom()" style="padding:9px 14px; border:none; border-radius:9px; font-weight:700;">↻ Ghumayein</button>
+    <button type="button" onclick="closeStockScanZoom()" style="padding:9px 14px; border:none; border-radius:9px; font-weight:700; background:#e63946; color:#fff;">✕ Band</button>
+  </div>
+</div>
+
+<!-- AI Advisor Chatbot (Stock & Marketing) -->
+<div id="aiAdvisorOverlay" onclick="if(event.target===this) closeAiAdvisorModal()">
+  <div class="ai-advisor-modal" onclick="event.stopPropagation()">
+    <div class="ai-advisor-header">
+      <div class="ai-advisor-title">🤖 AI Advisor — Stock &amp; Marketing</div>
+      <button type="button" class="ai-advisor-close" onclick="closeAiAdvisorModal()">✕</button>
+    </div>
+    <div id="aiAdvisorMessages" class="ai-advisor-messages"></div>
+    <div id="aiAdvisorSuggestions" class="ai-advisor-suggestions">
+      <button type="button" onclick="aiAdvisorAskSuggestion('Mera abhi kaunsa stock kam ho raha hai aur kitna order karna chahiye?')">📦 Low stock kya hai?</button>
+      <button type="button" onclick="aiAdvisorAskSuggestion('Mujhe apni dukaan ki marketing karni hai aur naye customer lane hain, kya tarike apnaun?')">📢 Marketing kaise karun?</button>
+      <button type="button" onclick="aiAdvisorAskSuggestion('Ek customer ke paas mera purana udhar/baki paisa fasa hai, use vinamrata se jaldi paisa dene ke liye kaise kahun?')">💰 Udhar/baki kaise mangu?</button>
+    </div>
+    <div id="aiAdvisorTyping" class="ai-advisor-typing" style="display:none;">AI soch raha hai...</div>
+    <div class="ai-advisor-input-row">
+      <button type="button" class="ai-advisor-attach-btn" title="Bill / Photo attach karein" onclick="document.getElementById('aiAdvisorFileInput').click()">+</button>
+      <input type="file" id="aiAdvisorFileInput" accept="image/*,application/pdf" style="display:none" onchange="aiAdvisorFileSelected(event)">
+      <textarea id="aiAdvisorInput" rows="1" placeholder="Apna sawal likhein... (stock, marketing, customer se paisa lena, kuch bhi)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); aiAdvisorSend(); }"></textarea>
+      <button type="button" class="ai-advisor-send-btn" id="aiAdvisorSendBtn" onclick="aiAdvisorSend()">➤</button>
+    </div>
+  </div>
+</div>
+
+<div id="stockItemOverlay" onclick="if(event.target===this) closeStockItemModal()">
+  <div class="stock-item-modal" onclick="event.stopPropagation()">
+    <h3 id="stockModalTitle">Add Stock Item</h3>
+    <input type="hidden" id="stockItemId">
+    <div class="field">
+      <label>Item Name</label>
+      <input type="text" id="stockItemName" placeholder="e.g. LED Bulb 9W">
+    </div>
+    <div class="field">
+      <label id="stockQtyLabel">Quantity</label>
+      <input type="number" id="stockItemQty" placeholder="0">
+    </div>
+    <div class="field">
+      <label>Purchase Price (₹)</label>
+      <div class="price-unit-row">
+        <input type="number" id="stockItemPurchasePrice" placeholder="0" onkeydown="handlePriceUnitEnter(event)">
+        <button type="button" class="unit-pick-btn" id="stockPurchaseUnitBtn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Sale Price (₹)</label>
+      <div id="stockSalePriceRows"></div>
+      <button type="button" class="add-sale-btn" onclick="addSalePriceRow('', '')">+ Add another sale price (per kg / bag ...)</button>
+    </div>
+    <div class="field">
+      <label>Low Stock Alert (Qty)</label>
+      <input type="number" id="stockItemLowAlert" placeholder="e.g. 5">
+    </div>
+    <div class="field" id="stockItemSupplierField">
+      <label>Supplier / Dukandar Name (jahan se kharida)</label>
+      <input type="text" id="stockItemSupplier" placeholder="e.g. Ramesh Traders">
+    </div>
+    <div class="stock-modal-actions">
+      <button type="button" class="stock-modal-cancel" onclick="closeStockItemModal()">Cancel</button>
+      <button type="button" class="stock-modal-save" onclick="saveStockItemModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="app-wrap" id="appWrap">
   <div class="panel">
+    <button type="button" class="ai-bill-generate-btn ai-bill-top-btn" onclick="openAiBillGenerator()">
+      <span class="ai-bill-spark">✦</span> AI se Bill Generate karein
+    </button>
+    <button type="button" class="ai-bill-generate-btn ai-bill-top-btn" style="background:#0d6e4e; margin-top:8px;" onclick="sendBillForCustomerReview()">
+      <span class="ai-bill-spark">📤</span> Customer Display par Review ke liye Bhejein
+    </button>
     <h2>Customer &amp; Bill Details</h2>
     <div class="grid2">
       <div class="field">
@@ -1189,7 +1747,8 @@
       </div>
       <div class="field">
         <label>Customer Name</label>
-        <input type="text" id="custName" placeholder="Customer name">
+        <input type="text" id="custName" list="custNameSuggestions" placeholder="Customer name">
+        <datalist id="custNameSuggestions"></datalist>
       </div>
       <div class="field">
         <label>Customer Mobile Number (WhatsApp)</label>
@@ -1220,7 +1779,7 @@
     <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
   </div>
 
-  <button class="upi-btn" onclick="generateUPIQR()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> Generate UPI Payment QR (Full Screen)</button>
+  <button class="upi-btn" onclick="requestBillFinalAction('upi')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> Generate UPI Payment QR (Full Screen)</button>
 
   <div class="thermal-print-box">
     <div class="thermal-print-title"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Thermal Printer Bill Print</div>
@@ -1228,14 +1787,49 @@
       <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
       <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
     </div>
-    <button class="thermal-btn" onclick="printThermalBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Print Bill Directly on Thermal Printer</button>
-    <div class="thermal-note">Select 58mm (2 inch) or 80mm (3 inch). It will print directly via the Android app's native printer bridge; a fallback print dialog will open in a normal browser.</div>
+    <button class="thermal-btn" onclick="requestBillFinalAction('thermal')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Print Bill Directly on Thermal Printer</button>
   </div>
 
-  <button class="whatsapp-btn" onclick="sendWhatsApp()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Send Bill PDF via WhatsApp</button>
+  <button class="whatsapp-btn" onclick="requestBillFinalAction('whatsapp')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Send Bill PDF via WhatsApp</button>
 
-  <button class="generate-btn" onclick="generateBill()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
+  <button class="generate-btn" onclick="requestBillFinalAction('pdf')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
+
 </div>
+
+<!-- AI BILL GENERATOR -->
+<div id="aiBillOverlay" class="ai-bill-overlay" style="display:none;" onclick="if(event.target===this) closeAiBillGenerator()">
+  <div class="ai-bill-modal">
+    <div class="ai-bill-head">
+      <div>
+        <div class="ai-bill-title">✦ AI Bill Generator</div>
+        <div class="ai-bill-subtitle">Customer ki details aur items bolkar/likhkar ya document upload karke bill fields automatically bharein.</div>
+      </div>
+      <button type="button" class="ai-bill-close" onclick="closeAiBillGenerator()">✕</button>
+    </div>
+
+    <div class="ai-bill-body">
+      <label class="ai-bill-label">Bill ke baare mein likhein</label>
+      <textarea id="aiBillInput" class="ai-bill-textarea"
+        placeholder="Example: Ramesh, 7303714309, Rangra, 5kg aalu, 5kg chana, 5kg badam ke liye bill generate karo"></textarea>
+
+      <div class="ai-bill-or"><span>YA</span></div>
+
+      <input type="file" id="aiBillFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.docx,application/pdf,image/*,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden onchange="aiBillFilesSelected(event)">
+      <button type="button" class="ai-bill-upload-btn" onclick="document.getElementById('aiBillFileInput').click()">
+        📎 Documents / PDF / Photo upload karein
+      </button>
+      <div id="aiBillFileList" class="ai-bill-file-list">Koi document select nahi hua.</div>
+
+      <div id="aiBillStatus" class="ai-bill-status"></div>
+
+      <div class="ai-bill-actions">
+        <button type="button" class="ai-bill-cancel" onclick="closeAiBillGenerator()">Cancel</button>
+        <button type="button" id="aiBillGenerateBtn" class="ai-bill-submit" onclick="runAiBillGenerator()">✦ Bill fields automatically fill karein</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Bill history overlay -->
 <div id="historyOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
@@ -1282,7 +1876,7 @@
   <button onclick="closeQRFullscreen()" style="position:absolute; top:18px; right:18px; background:#e63946; color:#fff; border:none; border-radius:50%; width:40px; height:40px; font-size:18px; cursor:pointer;">✕</button>
 
   <div style="text-align:center; margin-bottom:6px;">
-    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">HAMZA WHOLESALER & RETAILER</div>
+    <div style="color:#ffd54f; font-weight:900; font-size:20px; letter-spacing:1px;">MITTU WHOLESALER & RETAILER</div>
     <div style="color:#fff; font-size:14px;">Scan &amp; Pay via any UPI App</div>
   </div>
 
@@ -1308,12 +1902,12 @@
 separate from the on-screen qrFullscreen view above so the on-screen dark
 theme isn't affected. downloadQR() captures this instead of the plain QR. -->
 <div id="qrDownloadCard" style="position:fixed; left:-9999px; top:0; width:375px; background:#ffffff; border:8px solid #f5a623; border-radius:28px; padding:30px 24px 26px; font-family:Arial, sans-serif; text-align:center; box-sizing:border-box;">
-  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">HAMZA<br>WHOLESALER & RETAILER</div>
+  <div id="qrDownloadTitle" style="font-size:26px; font-weight:800; color:#0c1f4a; line-height:1.3; letter-spacing:0.5px;">MITTU<br>WHOLESALER & RETAILER</div>
   <div style="width:90px; height:4px; background:#f5a623; margin:16px auto 24px; border-radius:2px;"></div>
   <div style="border:2px solid #0c1f4a; border-radius:16px; padding:14px; display:inline-block; background:#fff;">
     <div id="qrcodeDivDownload" style="position:relative; width:260px; height:260px;"></div>
   </div>
-  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Hamza</div>
+  <div id="qrDownloadName" style="margin-top:22px; font-size:28px; font-weight:800; font-style:italic; color:#0c1f4a;">Mittu</div>
   <div style="margin-top:18px; font-size:17px; font-weight:700; color:#e65100;">Total Amount is</div>
   <div id="qrDownloadAmount" style="font-size:36px; font-weight:900; color:#e65100; margin-top:2px;">₹ 0.00</div>
   <div id="qrDownloadExtra" style="margin-top:16px;"></div>
@@ -1328,7 +1922,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-company-block">
-    <div class="inv-company">Hamza Wholesaler & Retailer</div>
+    <div class="inv-company">Mittu Wholesaler & Retailer</div>
     <div class="inv-addr-line">Rangra, Bhagalpur, Bihar, 853204, India.</div>
     <div class="inv-addr-line">Mobile: +91 9540125307</div>
   </div>
@@ -1376,7 +1970,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
   </div>
 
   <div class="inv-sign">
-    <div>For Hamza Wholesaler & Retailer</div>
+    <div>For Mittu Wholesaler & Retailer</div>
     <div>________________________<br>Signature</div>
   </div>
 </div>
@@ -1392,7 +1986,7 @@ function addRow(){
     <td style="text-align:center;">${rowCount}</td>
     <td><input type="text" class="itemName" placeholder="Item name" enterkeyhint="next"></td>
     <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
-    <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
+    <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"><input type="text" class="itemUnit" list="scanUnitList" placeholder="Unit (kg/pcs/box)" enterkeyhint="next" style="margin-top:4px;"></td>
     <td class="amt-cell"><span class="itemAmt">0.00</span></td>
   `;
   tbody.appendChild(tr);
@@ -1410,35 +2004,47 @@ function addRow(){
   rateInput.addEventListener('focus', function(){ this.select(); });
 
   // Keyboard "next" (➡️) button navigation: Naam -> Qty -> Rate -> next row's Naam
+  const unitInput = tr.querySelector('.itemUnit');
   nameInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'name'));
   qtyInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'qty'));
   rateInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'rate'));
+  unitInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'unit'));
 
+  attachStockAutofill(tr);
+  refreshBillStockNames();
   calcTotal();
 }
 
+function billFieldIsEmpty(el){
+  if(!el || el.disabled || el.readOnly || el.offsetParent === null) return false;
+  return !String(el.value || '').trim();
+}
+function focusNextBillEmptyField(current){
+  const fields = Array.from(document.querySelectorAll(
+    '#custName, #custMobile, #custAddr, #itemsBody input.itemName, #itemsBody input.itemQty, #itemsBody input.itemRate, #itemsBody input.itemUnit'
+  )).filter(el => !el.disabled && !el.readOnly && el.offsetParent !== null);
+  const start = fields.indexOf(current);
+  const ordered = start >= 0 ? fields.slice(start + 1).concat(fields.slice(0, start + 1)) : fields;
+  const next = ordered.find(billFieldIsEmpty);
+  if(next){
+    next.focus();
+    try{ next.select(); }catch(_){}
+    next.scrollIntoView({block:'center', behavior:'smooth'});
+    return true;
+  }
+  // Sab existing boxes filled hain — agar item rows khatam ho gaye hain to nayi blank row bana do.
+  if(current && current.closest('#itemsBody') && current.classList.contains('itemUnit')){
+    addRow();
+    const rows = document.querySelectorAll('#itemsBody tr');
+    const last = rows[rows.length-1]?.querySelector('.itemName');
+    if(last){ last.focus(); last.scrollIntoView({block:'center', behavior:'smooth'}); return true; }
+  }
+  return false;
+}
 function handleFieldEnter(e, type){
   if(e.key !== 'Enter') return;
   e.preventDefault();
-  const tr = e.target.closest('tr');
-  if(type === 'name'){
-    const qtyInput = tr.querySelector('.itemQty');
-    qtyInput.focus();
-    qtyInput.select();
-  } else if(type === 'qty'){
-    const rateInput = tr.querySelector('.itemRate');
-    rateInput.focus();
-    rateInput.select();
-  } else if(type === 'rate'){
-    const nextTr = tr.nextElementSibling;
-    if(nextTr){
-      nextTr.querySelector('.itemName').focus();
-    } else {
-      addRow();
-      const rows = document.querySelectorAll('#itemsBody tr');
-      rows[rows.length-1].querySelector('.itemName').focus();
-    }
-  }
+  focusNextBillEmptyField(e.target);
 }
 
 function removeRow(btn){
@@ -1548,6 +2154,12 @@ function renderInvoiceToPdf(pdf, el){
   const pBody = document.getElementById('p_itemsBody');
   const allRows = Array.from(pBody.children);
   const actualRows = allRows.filter(r => r.dataset.realItem === '1');
+  // Embed exact item data in the PDF so Stock > Scan can import this bill 100% accurately
+  try {
+    const _num = s => parseFloat(String(s || '').replace(/[^\d.\-]/g, '')) || 0;
+    const _emb = actualRows.map(r => ({ n: (r.children[1].textContent || '').trim(), q: _num(r.children[2].textContent), r: _num(r.children[3].textContent), a: _num(r.children[4].textContent) }));
+    pdf.setProperties({ subject: 'Mittu Wholesaler & Retailer Invoice', keywords: 'MITTU1:' + encodeURIComponent(JSON.stringify(_emb)) });
+  } catch(e){ console.warn('PDF data embed failed:', e); }
 
   // Remove any old/generated blank rows first.
   allRows.forEach(r => {
@@ -1680,11 +2292,12 @@ function generateBill(openFile = true){
     const name = tr.querySelector('.itemName').value || '-';
     const qty = parseFloat(tr.querySelector('.itemQty').value) || 0;
     const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+    const unit = (tr.querySelector('.itemUnit')?.value || '').trim();
     const amt = qty * rate;
     total += amt;
-    itemList.push({ name, qty, rate, amt });
+    itemList.push({ name, qty, unit, rate, amt });
     const row = document.createElement('tr');
-    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${name}</td><td class="num">${qty}</td><td class="num">${fmtAmountCell('₹'+rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+amt.toFixed(2))}</td>`;
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${name}</td><td class="num">${qty}${unit ? ' ' + unit : ''}</td><td class="num">${fmtAmountCell('₹'+rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+amt.toFixed(2))}</td>`;
     pBody.appendChild(row);
   });
   // Mark real item rows. renderInvoiceToPdf() handles the A4 layout: short
@@ -1716,11 +2329,14 @@ function generateBill(openFile = true){
     total: total
   });
 
+  // Stock record se connect: bill ke items ka stock automatically kam karo
+  try { deductStockForBill(itemList); } catch(e){ console.warn('Stock deduct failed:', e); }
+
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   return renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    downloadPDF(pdf, `Hamza_Bill_${currentSno || 'bill'}.pdf`, openFile);
+    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
     // Auto-generate a fresh random bill number for the next bill
     generateRandomBillNo();
@@ -1745,6 +2361,7 @@ function saveBillToHistory(record){
     filtered.unshift(record); // newest first
     localStorage.setItem(key, JSON.stringify(filtered));
     if(typeof renderDrawerRecents === 'function') renderDrawerRecents();
+    if(typeof refreshCustNameSuggestions === 'function') refreshCustNameSuggestions();
     if(window.saveBillToFirebase){
       window.saveBillToFirebase(record).catch(err =>
         console.warn('Firebase bill history save failed; local copy is still safe:', err)
@@ -1947,7 +2564,7 @@ function backupHistoryToFile(silent){
     return;
   }
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadTextFile(JSON.stringify(history, null, 2), `Hamza_Bill_History_Backup_${stamp}.json`, 'application/json');
+  downloadTextFile(JSON.stringify(history, null, 2), `Mittu_Bill_History_Backup_${stamp}.json`, 'application/json');
   if(!silent){
     alert('The backup file has been saved in your phone\'s Downloads folder. Keep it safe always - you can use this file to restore the old history anytime.');
   }
@@ -2013,7 +2630,7 @@ function restoreBillToForm(idx){
       <td style="text-align:center;">${rowCount}</td>
       <td><input type="text" class="itemName" placeholder="Item name" enterkeyhint="next" value=""></td>
       <td><input type="number" class="itemQty" value="1" min="0" oninput="calcTotal()" enterkeyhint="next"></td>
-      <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"></td>
+      <td><input type="number" class="itemRate" value="0" min="0" step="0.01" oninput="calcTotal()" enterkeyhint="next"><input type="text" class="itemUnit" list="scanUnitList" placeholder="Unit (kg/pcs/box)" enterkeyhint="next" style="margin-top:4px;"></td>
       <td class="amt-cell"><span class="itemAmt">0.00</span></td>
     `;
     tbody.appendChild(tr);
@@ -2023,6 +2640,8 @@ function restoreBillToForm(idx){
     nameInput.value = it.name || '';
     qtyInput.value = Number(it.qty ?? 1);
     rateInput.value = Number(it.rate ?? 0);
+    const unitInput = tr.querySelector('.itemUnit');
+    if(unitInput) unitInput.value = it.unit || '';
     qtyInput.addEventListener('input', calcTotal);
     rateInput.addEventListener('input', calcTotal);
     qtyInput.addEventListener('focus', function(){ this.select(); });
@@ -2030,6 +2649,7 @@ function restoreBillToForm(idx){
     nameInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'name'));
     qtyInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'qty'));
     rateInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'rate'));
+    attachStockAutofill(tr);
   });
 
   // Always keep at least one editable row, just like a new bill.
@@ -2059,7 +2679,7 @@ function redownloadBill(idx){
   pBody.innerHTML = '';
   (rec.items || []).forEach((it, i) => {
     const row = document.createElement('tr');
-    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${it.name}</td><td class="num">${it.qty}</td><td class="num">${fmtAmountCell('₹'+it.rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+it.amt.toFixed(2))}</td>`;
+    row.innerHTML = `<td style="text-align:center;">${i+1}</td><td>${it.name}</td><td class="num">${it.qty}${it.unit ? ' ' + it.unit : ''}</td><td class="num">${fmtAmountCell('₹'+it.rate.toFixed(2))}</td><td class="num">${fmtAmountCell('₹'+it.amt.toFixed(2))}</td>`;
     pBody.appendChild(row);
   });
   // Mark actual item rows. renderInvoiceToPdf() will keep 28 rows for a
@@ -2076,7 +2696,7 @@ function redownloadBill(idx){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    openPdfInApp(pdf, `Hamza_Bill_${rec.billNo}.pdf`);
+    openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
   });
 }
 
@@ -2243,9 +2863,9 @@ function buildBillMessage(){
   // ---- English section ----
   let en = '';
   en += `Namaste ${custName},\n`;
-  en += `Hamza Wholesaler & Retailer - Bill No. ${billNo}\n`;
+  en += `Mittu Wholesaler & Retailer - Bill No. ${billNo}\n`;
   items.forEach((it, idx) => {
-    en += `${toRoman(idx+1)}. ${it.name} (Qty ${it.qty}, Rate ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
+    en += `${toRoman(idx+1)}. ${it.name} (Qty ${it.qty}${it.unit ? ' ' + it.unit : ''}, Rate ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
   en += `*Total Amount: ₹${total}*\n`;
   en += `Thank you!`;
@@ -2253,9 +2873,9 @@ function buildBillMessage(){
   // ---- Hindi section ----
   let hi = '';
   hi += `नमस्ते ${custName},\n`;
-  hi += `हमज़ा होलसेलर - बिल नं. ${billNo}\n`;
+  hi += `मित्तू होलसेलर - बिल नं. ${billNo}\n`;
   items.forEach((it, idx) => {
-    hi += `${toRoman(idx+1)}. ${it.name} (मात्रा ${it.qty}, दर ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
+    hi += `${toRoman(idx+1)}. ${it.name} (मात्रा ${it.qty}${it.unit ? ' ' + it.unit : ''}, दर ₹ ${it.rate.toFixed(2)}) — ₹ ${it.amt.toFixed(2)}\n`;
   });
   hi += `*कुल राशि: ₹${total}*\n`;
   hi += `Thank you!`;
@@ -2283,7 +2903,7 @@ function sendWhatsApp(){
 
 function buildUpiUrl(total, billNo){
   const upiId = '7303714309@axl';
-  const payeeName = 'HAMZA WHOLESALER & RETAILER';
+  const payeeName = 'MITTU WHOLESALER & RETAILER';
   return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill No '+billNo)}`;
 }
 
@@ -2443,7 +3063,7 @@ function downloadQR(openFile = true){
   // on-screen fullscreen QR — capturing after it's hidden produces a
   // blank/failed image.
   return html2canvas(qrDiv, {scale: 2, backgroundColor: '#ffffff'}).then(canvas => {
-    const filename = `Hamza_UPI_QR_${billNo}.png`;
+    const filename = `Mittu_UPI_QR_${billNo}.png`;
     return new Promise(resolve => {
       canvas.toBlob(blob => {
         try {
@@ -2515,7 +3135,7 @@ function buildThermalBillHtml(){
     if(!name && qty === 0 && rate === 0) return;
     const amt = qty * rate;
     total += amt;
-    rows.push({i:i+1, name:name || '-', qty, rate, amt});
+    rows.push({i:i+1, name:name || '-', qty, unit:(tr.querySelector('.itemUnit')?.value||'').trim(), rate, amt});
   });
 
   if(rows.length === 0 || total <= 0){
@@ -2526,14 +3146,14 @@ function buildThermalBillHtml(){
     <tr>
       <td class="sr">${it.i}</td>
       <td class="item">${escHtml(it.name)}</td>
-      <td class="num">${it.qty}</td>
+      <td class="num">${it.qty}${it.unit ? ' ' + escHtml(it.unit) : ''}</td>
       <td class="num">${it.rate.toFixed(2)}</td>
       <td class="num">${it.amt.toFixed(2)}</td>
     </tr>`).join('');
 
   return { html: `
     <div class="receipt">
-      <div class="shop">Hamza Wholesaler & Retailer</div>
+      <div class="shop">Mittu Wholesaler & Retailer</div>
       <div class="center">Rangra, Bhagalpur, Bihar, 853204, India.</div>
       <div class="center">Mobile: +91 9540125307</div>
       <div class="dash"></div>
@@ -2551,7 +3171,7 @@ function buildThermalBillHtml(){
       <div class="words">${escHtml(amountInWords(total))}</div>
       <div class="dash"></div>
       <div class="center thanks">Thank you!</div>
-      <div class="center small">For Hamza Wholesaler & Retailer</div>
+      <div class="center small">For Mittu Wholesaler & Retailer</div>
     </div>` };
 }
 
@@ -2572,6 +3192,7 @@ function buildNativeThermalPrintPayload(){
       sr: i + 1,
       name: name || '-',
       qty: qty,
+      unit: (tr.querySelector('.itemUnit')?.value || '').trim(),
       rate: rate,
       amount: amt
     });
@@ -2591,7 +3212,7 @@ function buildNativeThermalPrintPayload(){
       address: document.getElementById('custAddr').value.trim()
     },
     shop: {
-      name: 'Hamza Wholesaler & Retailer',
+      name: 'Mittu Wholesaler & Retailer',
       address: 'Rangra, Bhagalpur, Bihar, 853204, India.',
       mobile: '+91 9540125307'
     },
@@ -2668,7 +3289,7 @@ function printThermalBill(){
   }
 
   printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Hamza Bill</title>
+  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Mittu Bill</title>
     <style>
       @page { size: ${widthMm}mm auto; margin: 0; }
       html,body { margin:0; padding:0; background:#fff; width:${widthMm}mm; }
@@ -2776,6 +3397,2598 @@ function closeDrawer(){
   document.getElementById('drawerPanel').classList.remove('open');
   setTimeout(() => { document.getElementById('drawerOverlay').style.display = 'none'; }, 260);
 }
+
+// ---------------- BILL / STOCK MODE TOGGLE ----------------
+function switchToBillView(){
+  document.getElementById('appWrap').style.display = '';
+  document.getElementById('stockRecordPanel').style.display = 'none';
+  document.getElementById('modeBillBtn').classList.add('active');
+  document.getElementById('modeStockBtn').classList.remove('active');
+}
+function switchToStockView(){
+  document.getElementById('appWrap').style.display = 'none';
+  document.getElementById('stockRecordPanel').style.display = 'block';
+  document.getElementById('modeBillBtn').classList.remove('active');
+  document.getElementById('modeStockBtn').classList.add('active');
+  renderStockList();
+}
+
+// ---------------- BILL <-> STOCK CONNECTION ----------------
+function stockNormName(n){ return String(n||'').trim().toLowerCase().replace(/\s+/g,' '); }
+
+function showStockToast(msg, isWarn){
+  let t = document.getElementById('stockToast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'stockToast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:90%;padding:10px 16px;border-radius:12px;color:#fff;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,.25);text-align:center;';
+    document.body.appendChild(t);
+  }
+  t.style.background = isWarn ? '#d62828' : '#1a7a3e';
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>{ t.style.display = 'none'; }, 4500);
+}
+
+function deductStockForBill(items){
+  const list = getStockList();
+  if(!list.length) return;
+  const changed = [];
+  const short = [];
+  const mismatch = [];
+  items.forEach(it => {
+    const key = stockNormName(it.name);
+    const qty = Number(it.qty) || 0;
+    if(!key || qty <= 0) return;
+    const stock = list.find(s => stockNormName(s.itemName) === key);
+    if(!stock) return;
+    const bu = String(it.unit || '').trim().toLowerCase();
+    const su = String(stock.unit || '').trim().toLowerCase();
+    if(bu && su && bu !== su){ mismatch.push(`${stock.itemName} (bill: ${it.unit}, stock: ${stock.unit})`); return; }
+    const have = Number(stock.quantity) || 0;
+    if(qty > have) short.push(`${stock.itemName} (stock ${have} ${stock.unit||'pcs'})`);
+    stock.quantity = Math.max(0, Math.round((have - qty) * 1000) / 1000);
+    if(!changed.includes(stock)) changed.push(stock);
+  });
+  if(!changed.length){
+    if(mismatch.length) showStockToast('⚠ Unit alag hai, stock kam nahi hua: ' + mismatch.join(', '), true);
+    return;
+  }
+  saveStockList(list);
+  changed.forEach(st => {
+    if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(st).catch(err => console.warn('Firebase stock save failed:', err));
+  });
+  const panel = document.getElementById('stockRecordPanel');
+  if(panel && panel.style.display !== 'none') renderStockList();
+  refreshBillStockNames();
+  if(mismatch.length) showStockToast('⚠ Unit alag hai, stock kam nahi hua: ' + mismatch.join(', '), true);
+  else if(short.length) showStockToast('⚠ Stock kam tha: ' + short.join(', '), true);
+  else showStockToast('✅ Stock update ho gaya (' + changed.length + ' item)');
+}
+
+// Bill mein purane Customer naam suggest karo (Bill History se) + suggestion
+// select karte hi keypad band kiye bina agle box (Mobile Number) mein chale jao
+function refreshCustNameSuggestions(){
+  let dl = document.getElementById('custNameSuggestions');
+  if(!dl){
+    dl = document.createElement('datalist');
+    dl.id = 'custNameSuggestions';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = '';
+  const seen = new Set();
+  getBillHistory().forEach(rec => {
+    const n = String(rec.custName || '').trim();
+    const key = n.toLowerCase();
+    if(!n || seen.has(key)) return;
+    seen.add(key);
+    const o = document.createElement('option');
+    o.value = n;
+    dl.appendChild(o);
+  });
+}
+function attachCustNameAutofill(){
+  const nameInput = document.getElementById('custName');
+  if(!nameInput || nameInput.dataset.custBound) return;
+  nameInput.dataset.custBound = '1';
+  nameInput.addEventListener('input', (e) => {
+    if(e.inputType && e.inputType !== 'insertReplacementText') return;   // normal typing nahi, suggestion select hui hai
+    const dl = document.getElementById('custNameSuggestions');
+    if(!dl) return;
+    const v = nameInput.value.trim().toLowerCase();
+    if(!Array.from(dl.options).some(o => String(o.value).trim().toLowerCase() === v)) return;
+    setTimeout(() => {
+      const mobileInput = document.getElementById('custMobile');
+      if(mobileInput){ mobileInput.focus(); mobileInput.select(); }
+      else nameInput.focus();
+    }, 30);
+  });
+}
+
+// Bill mein item naam likhte waqt stock ke items suggest ho + sale price auto-fill
+function refreshBillStockNames(){
+  let dl = document.getElementById('billStockNames');
+  if(!dl){
+    dl = document.createElement('datalist');
+    dl.id = 'billStockNames';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML = '';
+  getStockList().forEach(st => {
+    const o = document.createElement('option');
+    o.value = st.itemName;
+    dl.appendChild(o);
+  });
+}
+let _saleUnitListSeq = 0;
+// Bill mein aisa naya item likha jaye jo Stock Record mein nahi hai,
+// to us item ko automatic Stock Record mein save karo.
+// Quantity 0 rahegi (sirf item + current bill sale price save hoga),
+// Low Stock Alert hamesha 0 rahega.
+function autoSaveUnknownBillItem(name, salePrice, unit){
+  // Unknown bill items are intentionally NOT saved while the user is typing.
+  // They are collected and shown in the same Review popup when a final bill
+  // action is pressed. This prevents accidental Stock Record entries.
+  return null;
+}
+
+function attachStockAutofill(tr){
+  const nameInput = tr.querySelector('.itemName');
+  const rateInput = tr.querySelector('.itemRate');
+  const unitInput = tr.querySelector('.itemUnit');
+  if(!nameInput || nameInput.dataset.stockBound) return;
+  nameInput.dataset.stockBound = '1';
+  nameInput.setAttribute('list', 'billStockNames');
+  // Dropdown se word select karte hi keypad band kiye bina agle box mein chale jao
+  const listPicked = (e, inp) => {
+    if(e.inputType && e.inputType !== 'insertReplacementText') return false;   // normal typing nahi
+    const dl = document.getElementById(inp.getAttribute('list') || '');
+    if(!dl) return false;
+    const v = inp.value.trim().toLowerCase();
+    return Array.from(dl.options).some(o => String(o.value).trim().toLowerCase() === v);
+  };
+  nameInput.addEventListener('input', (e) => {
+    if(!listPicked(e, nameInput)) return;
+    setTimeout(() => {
+      nameInput.dispatchEvent(new Event('change'));      // sale price / unit auto-fill pehle ho jaye
+      const q = tr.querySelector('.itemQty');
+      if(q){ q.focus(); q.select(); }
+    }, 30);
+  });
+  if(unitInput){
+    unitInput.addEventListener('keydown', (e) => handleFieldEnter(e, 'unit'));
+    unitInput.addEventListener('input', (e) => {
+      if(!listPicked(e, unitInput)) return;
+      setTimeout(() => {
+        unitInput.dispatchEvent(new Event('change'));    // is unit ka sale price aa jaye
+        handleFieldEnter({ key: 'Enter', preventDefault(){}, target: unitInput }, 'unit');
+      }, 30);
+    });
+  }
+  const findStock = () => {
+    const key = stockNormName(nameInput.value);
+    return getStockList().find(s => stockNormName(s.itemName) === key);
+  };
+  nameInput.addEventListener('change', () => {
+    const stock = findStock();
+    if(!stock){
+      const saved = autoSaveUnknownBillItem(nameInput.value, rateInput.value, unitInput ? unitInput.value : 'pcs');
+      // Naye item ke liye bill mein jo rate/unit diya hai wahi Stock Record mein save hoga.
+      // Agar rate blank hai to baad mein manually Stock Record se rate set kiya ja sakta hai.
+      if(saved){
+        refreshBillStockNames();
+      }
+      return;
+    }
+    const prices = getSalePrices(stock);
+    const first = prices.find(p => p.price > 0) || prices[0];
+    if(first.price) rateInput.value = first.price;
+    if(unitInput){
+      unitInput.value = first.unit || stock.unit || 'pcs';
+      if(prices.length > 1){
+        // Ek se zyada sale price: unit box mein sirf is item ki units dikhengi
+        if(!unitInput.dataset.dlId) unitInput.dataset.dlId = 'saleUnits_' + (++_saleUnitListSeq);
+        let dl = document.getElementById(unitInput.dataset.dlId);
+        if(!dl){ dl = document.createElement('datalist'); dl.id = unitInput.dataset.dlId; document.body.appendChild(dl); }
+        dl.innerHTML = '';
+        prices.forEach(p => { const o = document.createElement('option'); o.value = p.unit; dl.appendChild(o); });
+        unitInput.setAttribute('list', dl.id);
+        unitInput.dataset.multi = '1';
+      } else {
+        unitInput.setAttribute('list', 'scanUnitList');
+        unitInput.dataset.multi = '';
+      }
+    }
+    calcTotal();
+  });
+  if(rateInput){
+    rateInput.addEventListener('change', () => {
+      const stock = findStock();
+      if(!stock && nameInput.value.trim()){
+        autoSaveUnknownBillItem(nameInput.value, rateInput.value, unitInput ? unitInput.value : 'pcs');
+      }
+    });
+  }
+  if(unitInput){
+    unitInput.addEventListener('change', () => {
+      const stock = findStock();
+      if(!stock && nameInput.value.trim()){
+        autoSaveUnknownBillItem(nameInput.value, rateInput.value, unitInput.value || 'pcs');
+      }
+    });
+    // Multi-price item: unit tap karne par saari units dikhein
+    unitInput.addEventListener('focus', () => {
+      if(unitInput.dataset.multi === '1'){ unitInput.dataset.prev = unitInput.value; unitInput.value = ''; }
+    });
+    unitInput.addEventListener('blur', () => {
+      if(unitInput.dataset.multi === '1' && unitInput.value === '') unitInput.value = unitInput.dataset.prev || '';
+    });
+    // Unit badalne par us unit ka sale price apne aap aa jaye
+    unitInput.addEventListener('change', () => {
+      const stock = findStock();
+      if(!stock) return;
+      const u = unitInput.value.trim().toLowerCase();
+      const p = getSalePrices(stock).find(x => String(x.unit).toLowerCase() === u);
+      if(p && p.price){ rateInput.value = p.price; calcTotal(); }
+    });
+  }
+}
+window.addEventListener('mittuFirebaseStockReady', refreshBillStockNames);
+
+// ---------------- UNIT PICKER + MULTI SALE PRICE (Stock modal) ----------------
+const UNIT_CHOICES = ['kg','pcs','bag','ltr','box','dozen','qtl','pkt','g'];
+function _unitEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function setUnitBtn(btn, unit){
+  unit = String(unit || '').trim();
+  btn.dataset.unit = unit;
+  btn.innerHTML = (unit ? _unitEsc(unit) : 'Unit') + '<span class="arr">↕</span>';
+}
+function updateStockQtyLabel(){
+  const b = document.getElementById('stockPurchaseUnitBtn');
+  const u = b ? (b.dataset.unit || '') : '';
+  const l = document.getElementById('stockQtyLabel');
+  if(l) l.textContent = u ? ('Quantity (' + u + ')') : 'Quantity';
+}
+function closeUnitMenu(){
+  const m = document.getElementById('unitPickMenu');
+  if(m){ m.style.display = 'none'; m._btn = null; }
+}
+// Purchase/Sale Price box mein number likhkar keyboard ka "Next" (➡️) dabane par
+// seedha agle text-box mein na chala jaye — Bill Generator ki tarah pehle usi row
+// ka Unit-select khulna chahiye. Mobile keyboard ka "next" browser ke default
+// focus-order se agla focusable element dhoondta hai, aur <button> usmein kabhi
+// nahi aata — isliye ye handler khud us row ke unit-pick-btn ko dhoond kar kholta hai.
+function handlePriceUnitEnter(e){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const row = e.target.closest('.price-unit-row');
+  if(!row) return;
+  const btn = row.querySelector('.unit-pick-btn');
+  if(!btn) return;
+  e.target.blur();
+  setTimeout(() => openUnitMenu(btn), 60);
+}
+function openUnitMenu(btn){
+  let m = document.getElementById('unitPickMenu');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'unitPickMenu';
+    document.body.appendChild(m);
+    document.addEventListener('pointerdown', (e) => {
+      const mm = document.getElementById('unitPickMenu');
+      if(mm && mm.style.display !== 'none' && !mm.contains(e.target) && !e.target.closest('.unit-pick-btn')) closeUnitMenu();
+    });
+  }
+  if(m.style.display !== 'none' && m._btn === btn){ closeUnitMenu(); return; }
+  m._btn = btn;
+  m.innerHTML = '';
+  UNIT_CHOICES.concat(['Other…']).forEach(u => {
+    const d = document.createElement('div');
+    d.textContent = u;
+    d.onclick = () => {
+      let val = u;
+      if(u === 'Other…'){
+        val = (prompt('Unit likhein (jaise kg, bag, box):') || '').trim();
+        if(!val){ closeUnitMenu(); return; }
+      }
+      setUnitBtn(btn, val);
+      closeUnitMenu();
+      if(btn.id === 'stockPurchaseUnitBtn') updateStockQtyLabel();
+      if(btn.dataset.scanIdx !== undefined) scanRecordRefresh(+btn.dataset.scanIdx);
+      if(btn.dataset.scanSale !== undefined) scanSaleTouched(+btn.dataset.scanSale);
+    };
+    m.appendChild(d);
+  });
+  m.style.display = 'block';
+  const r = btn.getBoundingClientRect();
+  const vh = window.innerHeight, vw = window.innerWidth;
+  const spaceBelow = vh - r.bottom - 8, spaceAbove = r.top - 8;
+  const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
+  m.style.maxHeight = Math.max(160, Math.min(openDown ? spaceBelow : spaceAbove, 420)) + 'px';
+  const mh = m.offsetHeight, mw = m.offsetWidth;
+  m.style.top = (openDown ? r.bottom + 4 : Math.max(8, r.top - mh - 4)) + 'px';
+  m.style.left = Math.max(8, Math.min(r.right - mw, vw - mw - 8)) + 'px';
+}
+function refreshSaleRemoveBtns(){
+  const rows = document.querySelectorAll('#stockSalePriceRows .price-unit-row');
+  rows.forEach(r => { r.querySelector('.sale-remove-btn').style.display = rows.length > 1 ? 'block' : 'none'; });
+}
+function addSalePriceRow(price, unit){
+  const box = document.getElementById('stockSalePriceRows');
+  const row = document.createElement('div');
+  row.className = 'price-unit-row';
+  row.innerHTML = '<input type="number" class="stockSalePriceInput" placeholder="0" onkeydown="handlePriceUnitEnter(event)">' +
+    '<button type="button" class="unit-pick-btn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>' +
+    '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.price-unit-row\').remove(); refreshSaleRemoveBtns();">×</button>';
+  box.appendChild(row);
+  row.querySelector('input').value = price === 0 ? '' : (price || '');
+  setUnitBtn(row.querySelector('.unit-pick-btn'), unit || '');
+  refreshSaleRemoveBtns();
+}
+// Purana item (sirf ek salePrice) bhi sahi chale, naya item (salePrices list) bhi
+function getSalePrices(item){
+  const fb = String(item.unit || 'pcs');
+  if(Array.isArray(item.salePrices) && item.salePrices.length){
+    return item.salePrices.map(p => ({ price: Number(p.price) || 0, unit: String(p.unit || fb) }));
+  }
+  return [{ price: Number(item.salePrice) || 0, unit: fb }];
+}
+
+// ---------------- STOCK RECORD ----------------
+function getStockStorageKey(){
+  const user = window.currentFirebaseUser;
+  return user && user.uid ? ('mittu_stock_' + user.uid) : 'mittu_stock';
+}
+function getStockList(){
+  try { return JSON.parse(localStorage.getItem(getStockStorageKey()) || '[]'); }
+  catch(e){ return []; }
+}
+function saveStockList(list){
+  try { localStorage.setItem(getStockStorageKey(), JSON.stringify(list)); } catch(e){}
+}
+
+// ---------------- LOW STOCK / AVAILABLE ITEMS PDF (from summary cards) ----------------
+function stockItemValue(it){ return (Number(it.quantity)||0) * (Number(it.purchasePrice)||0); }
+function buildStockSummaryPdf(title, items, sortDir){
+  const sorted = items.slice().sort((a, b) => {
+    const va = stockItemValue(a), vb = stockItemValue(b);
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+  const pageWidth = 210, pageHeight = 297, marginX = 14;
+  const bottomLimit = pageHeight - 18;
+  const nameX = marginX + 18, qtyX = pageWidth - marginX - 30;
+  let y = 22;
+
+  function drawHeader(){
+    pdf.setFontSize(15);
+    pdf.setFont(undefined, 'bold');
+    pdf.text(title, pageWidth / 2, y, { align: 'center', maxWidth: pageWidth - marginX * 2 });
+    y += 8;
+    pdf.setFontSize(10.5);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(formatNow(), pageWidth / 2, y, { align: 'center' });
+    y += 7;
+    pdf.setLineWidth(0.3);
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 8;
+    pdf.setFontSize(10);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Sl.No', marginX, y);
+    pdf.text('Item Name', nameX, y);
+    pdf.text('Qty', qtyX, y);
+    y += 2;
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 6;
+    pdf.setFont(undefined, 'normal');
+    pdf.setFontSize(10);
+  }
+
+  drawHeader();
+  sorted.forEach((it, i) => {
+    if(y > bottomLimit){
+      pdf.addPage();
+      y = 22;
+      drawHeader();
+    }
+    pdf.text(String(i + 1), marginX, y);
+    pdf.text((it.itemName || '-').toString(), nameX, y, { maxWidth: qtyX - nameX - 4 });
+    pdf.text(`${Number(it.quantity) || 0} ${it.unit || 'pcs'}`, qtyX, y);
+    y += 7;
+  });
+  return pdf;
+}
+function downloadLowStockPDF(){
+  const list = getStockList().filter(it => it.lowAlert && Number(it.quantity) <= Number(it.lowAlert));
+  if(!list.length){ alert('Abhi koi Low Stock item nahi hai.'); return; }
+  const pdf = buildStockSummaryPdf('Low Stocks - You are purchasing these item', list, 'asc');
+  const stamp = formatNow().replace(/[/,: ]/g, '-');
+  downloadPDF(pdf, `Mittu_Low_Stock_${stamp}.pdf`);
+}
+function downloadAvailableItemsPDF(){
+  const list = getStockList();
+  if(!list.length){ alert('Stock mein abhi koi item nahi hai.'); return; }
+  const pdf = buildStockSummaryPdf('Available item', list, 'desc');
+  const stamp = formatNow().replace(/[/,: ]/g, '-');
+  downloadPDF(pdf, `Mittu_Available_Items_${stamp}.pdf`);
+}
+
+// ---------------- STOCK DATA ENTRY LIST (purchase entries log) ----------------
+// Har baar jab stock mein naye item(s) add hote hain (manually "+ Add Item" se
+// ya AI Scan se), ek "entry" yahan log hoti hai: kitne item, kab (date/time),
+// total amount, aur har item ka detail (naam, qty, purchase price/unit, unit,
+// amount) — taaki baad mein us purchase ki PDF bill nikaali ja sake.
+function getStockEntriesStorageKey(){
+  const user = window.currentFirebaseUser;
+  return user && user.uid ? ('mittu_stock_entries_' + user.uid) : 'mittu_stock_entries';
+}
+function getStockEntries(){
+  try { return JSON.parse(localStorage.getItem(getStockEntriesStorageKey()) || '[]'); }
+  catch(e){ return []; }
+}
+function saveStockEntries(list){
+  try { localStorage.setItem(getStockEntriesStorageKey(), JSON.stringify(list)); } catch(e){}
+}
+function logStockEntry(items, supplierName){
+  if(!items || !items.length) return;
+  const nowParts = formatNowParts();
+  const totalAmount = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  const entry = {
+    id: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    ts: Date.now(),
+    dateTime: `${nowParts.date}, ${nowParts.time}`,
+    supplierName: (supplierName || '').trim(),
+    items: items,
+    totalItems: items.length,
+    totalAmount: totalAmount
+  };
+  const list = getStockEntries();
+  list.unshift(entry);
+  saveStockEntries(list);
+  const container = document.getElementById('stockEntriesListContainer');
+  if(container && container.style.display !== 'none') renderStockEntriesList();
+}
+function toggleStockEntriesList(){
+  const container = document.getElementById('stockEntriesListContainer');
+  if(!container) return;
+  const show = container.style.display === 'none';
+  container.style.display = show ? 'block' : 'none';
+  if(show) renderStockEntriesList();
+}
+function renderStockEntriesList(){
+  const container = document.getElementById('stockEntriesListContainer');
+  if(!container) return;
+  const entries = getStockEntries();
+  if(!entries.length){
+    container.innerHTML = '<div class="stock-entries-empty">Abhi tak koi Stock Data Entry nahi hai.</div>';
+    return;
+  }
+  container.innerHTML = entries.map(en => `
+    <div class="stock-entry-card">
+      <div class="stock-entry-info">
+        <div class="stock-entry-row1">${en.totalItems} item${en.totalItems > 1 ? 's' : ''}<span class="amt">₹${(Number(en.totalAmount)||0).toFixed(2)}</span></div>
+        <div class="stock-entry-row2">${escHtml(en.dateTime || '-')}</div>
+        ${en.supplierName ? `<div class="stock-entry-supplier">🏪 ${escHtml(en.supplierName)}</div>` : ''}
+      </div>
+      <button type="button" class="stock-entry-dl-btn" title="Bill PDF Download" onclick="downloadStockEntryPDF('${en.id}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
+function downloadStockEntryPDF(entryId){
+  const entries = getStockEntries();
+  const entry = entries.find(e => e.id === entryId);
+  if(!entry){ alert('Entry nahi mili.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
+  const pageWidth = 210, pageHeight = 297, marginX = 14;
+  const bottomLimit = pageHeight - 18;
+  let y = 20;
+
+  const cols = [
+    { label: 'Sl.No', x: marginX,       w: 14, align: 'left' },
+    { label: 'Item',   x: marginX + 14, w: 60, align: 'left' },
+    { label: 'Qty',    x: marginX + 76, w: 22, align: 'left' },
+    { label: 'Purchase Price/Unit', x: marginX + 100, w: 38, align: 'left' },
+    { label: 'Unit',   x: marginX + 140, w: 18, align: 'left' },
+    { label: 'Amount', x: marginX + 160, w: 32, align: 'left' }
+  ];
+
+  function drawHeader(){
+    pdf.setFontSize(15);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Mittu Wholesaler & Retailer - Stock Purchase Entry', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+    pdf.setFontSize(10.5);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Supplier / Dukandar:', marginX, y);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(entry.supplierName || '-', marginX + 42, y);
+    y += 6;
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Total Items:', marginX, y);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(String(entry.totalItems), marginX + 42, y);
+    y += 6;
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Date & Time:', marginX, y);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(entry.dateTime || '-', marginX + 42, y);
+    y += 6;
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Total Amount:', marginX, y);
+    pdf.setFont(undefined, 'normal');
+    pdf.text('Rs. ' + (Number(entry.totalAmount)||0).toFixed(2), marginX + 42, y);
+    y += 9;
+    pdf.setLineWidth(0.3);
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 6;
+    pdf.setFontSize(10);
+    pdf.setFont(undefined, 'bold');
+    cols.forEach(c => pdf.text(c.label, c.x, y, { maxWidth: c.w - 2 }));
+    y += 2;
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 6;
+    pdf.setFont(undefined, 'normal');
+    pdf.setFontSize(9.5);
+  }
+
+  drawHeader();
+  (entry.items || []).forEach((it, i) => {
+    if(y > bottomLimit){
+      pdf.addPage();
+      y = 20;
+      drawHeader();
+    }
+    const qty = Number(it.quantity) || 0;
+    const rate = Number(it.purchasePrice) || 0;
+    const amt = Number(it.amount != null ? it.amount : qty * rate);
+    pdf.text(String(i + 1), cols[0].x, y);
+    pdf.text((it.itemName || '-').toString(), cols[1].x, y, { maxWidth: cols[1].w - 2 });
+    pdf.text(String(qty), cols[2].x, y);
+    pdf.text('Rs. ' + rate.toFixed(2), cols[3].x, y);
+    pdf.text((it.unit || '-').toString(), cols[4].x, y);
+    pdf.text('Rs. ' + amt.toFixed(2), cols[5].x, y);
+    y += 7;
+  });
+
+  const stamp = (entry.dateTime || formatNow()).replace(/[/,: ]/g, '-');
+  downloadPDF(pdf, `Mittu_Stock_Entry_${stamp}.pdf`);
+}
+window.addEventListener('mittuFirebaseStockReady', () => {
+  const panel = document.getElementById('stockRecordPanel');
+  if(panel && panel.style.display !== 'none') renderStockList();
+});
+
+// ---------------- STOCK LIST SORT (⋮ menu) ----------------
+const STOCK_SORT_KEY = 'mittu_stock_sort';
+const STOCK_SORT_OPTIONS = [
+  { id: 'newest',   label: 'Newest date first' },
+  { id: 'oldest',   label: 'Oldest date first' },
+  { id: 'largest',  label: 'Largest first',  sub: 'Total stock value (₹) ke hisaab se' },
+  { id: 'smallest', label: 'Smallest first', sub: 'Total stock value (₹) ke hisaab se' },
+  { id: 'lowstock',  label: 'Low Stock first',  sub: 'Quantity ke hisaab se, sabse kam pehle' },
+  { id: 'highstock', label: 'High Stock first', sub: 'Quantity ke hisaab se, sabse zyada pehle' },
+  { id: 'az',       label: 'Name A → Z' },
+  { id: 'za',       label: 'Name Z → A' }
+];
+function getStockSort(){
+  try { const v = localStorage.getItem(STOCK_SORT_KEY); if(STOCK_SORT_OPTIONS.some(o => o.id === v)) return v; } catch(e){}
+  return 'newest';
+}
+function stockItemDate(it){
+  if(Number(it.createdAt) > 0) return Number(it.createdAt);
+  const m = /^stk_(\d{10,})_/.exec(String(it.id || ''));   // purane items: id mein banne ka time hota hai
+  return m ? Number(m[1]) : 0;
+}
+function sortStockItems(list){
+  const mode = getStockSort();
+  const val = it => (Number(it.quantity) || 0) * (Number(it.purchasePrice) || 0);
+  const qty = it => Number(it.quantity) || 0;
+  const nm = it => String(it.itemName || '').toLowerCase();
+  const byName = (a, b) => nm(a).localeCompare(nm(b));
+  const out = list.slice();
+  out.sort((a, b) => {
+    let r = 0;
+    if(mode === 'newest') r = stockItemDate(b) - stockItemDate(a);
+    else if(mode === 'oldest') r = stockItemDate(a) - stockItemDate(b);
+    else if(mode === 'largest') r = val(b) - val(a);
+    else if(mode === 'smallest') r = val(a) - val(b);
+    else if(mode === 'lowstock') r = qty(a) - qty(b);
+    else if(mode === 'highstock') r = qty(b) - qty(a);
+    else if(mode === 'az') return byName(a, b);
+    else if(mode === 'za') return byName(b, a);
+    return r || byName(a, b);
+  });
+  return out;
+}
+function openStockSortSheet(){
+  let ov = document.getElementById('stockSortOverlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'stockSortOverlay';
+    ov.onclick = (e) => { if(e.target === ov) closeStockSortSheet(); };
+    document.body.appendChild(ov);
+  }
+  const cur = getStockSort();
+  ov.innerHTML = '<div id="stockSortSheet"><div class="grab"></div><div class="ttl">Sort by</div>' +
+    STOCK_SORT_OPTIONS.map(o =>
+      '<div class="stock-sort-opt' + (o.id === cur ? ' sel' : '') + '" onclick="setStockSort(\'' + o.id + '\')"><div>' + o.label +
+      (o.sub ? '<span class="sub">' + o.sub + '</span>' : '') + '</div><div class="radio"></div></div>').join('') +
+    '</div>';
+  ov.style.display = 'flex';
+}
+function closeStockSortSheet(){
+  const ov = document.getElementById('stockSortOverlay');
+  if(ov) ov.style.display = 'none';
+}
+function setStockSort(id){
+  try { localStorage.setItem(STOCK_SORT_KEY, id); } catch(e){}
+  closeStockSortSheet();
+  renderStockList();
+}
+
+// ---- Same naam + same unit ka item dobara add ho to alag entry nahi, purane mein merge ----
+function stockMergeKey(it){
+  return String(it.itemName||'').trim().toLowerCase().replace(/\s+/g,' ') + '|' + String(it.unit||'pcs').trim().toLowerCase();
+}
+function mergeStockInto(existing, inc){
+  const eq = Number(existing.quantity)||0, iq = Number(inc.quantity)||0;
+  const ep = Number(existing.purchasePrice)||0, ip = Number(inc.purchasePrice)||0;
+  existing.quantity = eq + iq;
+  // Purchase price: weighted average (taaki stock ki value sahi rahe)
+  if(!ip) { /* naya rate nahi diya -> purana rahe */ }
+  else if(!ep) existing.purchasePrice = ip;
+  else if(eq + iq > 0) existing.purchasePrice = Math.round(((eq*ep + iq*ip) / (eq + iq)) * 10000) / 10000;
+  // Sale price: purane mein 0 tha aur naye mein hai to naya le lo
+  const exSale = getSalePrices(existing).some(p => p.price > 0);
+  const inSale = getSalePrices(inc).some(p => p.price > 0);
+  if(!exSale && inSale){ existing.salePrices = getSalePrices(inc); existing.salePrice = existing.salePrices[0].price; }
+  if(!Number(existing.lowAlert) && Number(inc.lowAlert)) existing.lowAlert = Number(inc.lowAlert);
+  return existing;
+}
+// Scan/add ke waqt: record mein us naam ka Sale Price ho to wahi uthao (pehle naam+unit, phir sirf naam)
+function findRecordSalePrices(name, unit){
+  const nm = String(name||'').trim().toLowerCase().replace(/\s+/g,' ');
+  if(!nm) return null;
+  const withSale = getStockList().filter(x =>
+    String(x.itemName||'').trim().toLowerCase().replace(/\s+/g,' ') === nm && getSalePrices(x).some(p => p.price > 0));
+  if(!withSale.length) return null;
+  const u = String(unit||'pcs').trim().toLowerCase();
+  const pick = withSale.find(x => String(x.unit||'pcs').trim().toLowerCase() === u) || withSale[0];
+  return getSalePrices(pick).filter(p => p.price > 0);
+}
+function countStockDuplicates(){
+  const seen = new Set(); let d = 0;
+  getStockList().forEach(it => { const k = stockMergeKey(it); if(seen.has(k)) d++; else seen.add(k); });
+  return d;
+}
+function mergeDuplicateStockItems(){
+  const d = countStockDuplicates();
+  if(!d){ alert('Koi duplicate item nahi mila.'); return; }
+  if(!confirm(d + ' duplicate entry milin. Same naam ke items ko ek mein jod dein? (Quantity add hogi)')) return;
+  const list = getStockList(), out = [], map = {}, removedIds = [], changed = [];
+  list.forEach(it => {
+    const k = stockMergeKey(it);
+    if(map[k]){ mergeStockInto(map[k], it); removedIds.push(it.id); if(changed.indexOf(map[k]) < 0) changed.push(map[k]); }
+    else { map[k] = it; out.push(it); }
+  });
+  saveStockList(out);
+  changed.forEach(it => { if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(it).catch(e => console.warn('Firebase stock save failed:', e)); });
+  removedIds.forEach(id => { if(window.deleteStockItemFromFirebase) window.deleteStockItemFromFirebase(id).catch(e => console.warn('Firebase stock delete failed:', e)); });
+  renderStockList();
+}
+
+// Stock ke "Search item..." box mein maujuda stock ke item-naam suggest karo
+function refreshStockSearchNames(list){
+  const dl = document.getElementById('stockItemNameSuggestions');
+  if(!dl) return;
+  const names = Array.from(new Set((list || getStockList()).map(it => it.itemName).filter(Boolean)));
+  dl.innerHTML = names.map(n => `<option value="${_unitEsc(n)}"></option>`).join('');
+}
+
+function renderStockList(){
+  const container = document.getElementById('stockListContainer');
+  if(!container) return;
+  const query = (document.getElementById('stockSearchInput').value || '').trim().toLowerCase();
+  let list = getStockList();
+
+  document.getElementById('stockTotalItems').textContent = list.length;
+  refreshStockSearchNames(list);
+  const mdb = document.getElementById('stockMergeDupBtn');
+  if(mdb){ const dc = countStockDuplicates(); mdb.style.display = dc ? 'block' : 'none'; if(dc) mdb.textContent = '🔀 ' + dc + ' duplicate item ek mein jodein'; }
+  const lowCount = list.filter(it => it.lowAlert && Number(it.quantity) <= Number(it.lowAlert)).length;
+  document.getElementById('stockLowCount').textContent = lowCount;
+
+  if(query){
+    list = list.filter(it => String(it.itemName||'').toLowerCase().includes(query));
+  }
+  list = sortStockItems(list);
+  const sortLbl = document.getElementById('stockSortLabel');
+  if(sortLbl){ const so = STOCK_SORT_OPTIONS.find(o => o.id === getStockSort()); sortLbl.textContent = 'Sort: ' + (so ? so.label : ''); }
+
+  if(list.length === 0){
+    container.innerHTML = '<div class="stock-empty">No stock items found. Tap "+ Add Item" to start recording your stock.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  list.forEach((item, slIdx) => {
+    const card = document.createElement('div');
+    card.className = 'stock-item-card';
+    const value = (Number(item.quantity)||0) * (Number(item.purchasePrice)||0);
+    const isLow = item.lowAlert && Number(item.quantity) <= Number(item.lowAlert);
+    card.innerHTML = `
+      <div class="stock-item-top">
+        <div>
+          <div class="stock-item-name"><span class="stock-sl">${slIdx + 1}.</span> ${item.itemName}</div>
+          <div class="stock-item-meta">Purchase ₹${Number(item.purchasePrice||0).toFixed(2)} / ${item.unit || 'pcs'} · Sale ${getSalePrices(item).map(p => '₹' + p.price.toFixed(2) + ' / ' + p.unit).join(', ')}</div>
+          ${isLow ? '<div class="stock-item-lowflag">⚠ Low Stock</div>' : ''}
+        </div>
+        <div class="stock-item-actions">
+          <button type="button" class="stock-icon-btn edit" onclick="openStockItemModal('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button type="button" class="stock-icon-btn delete" onclick="deleteStockItem('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/></svg></button>
+        </div>
+      </div>
+      <div class="stock-item-bottom">
+        <div class="stock-qty-controls">
+          <div class="stock-qty-value" style="text-align:left;">${item.quantity} ${item.unit || 'pcs'}</div>
+        </div>
+        <div class="stock-item-value">₹${value.toFixed(2)}</div>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function adjustStockQty(id, delta){
+  const list = getStockList();
+  const item = list.find(it => it.id === id);
+  if(!item) return;
+  item.quantity = Math.max(0, (Number(item.quantity)||0) + delta);
+  saveStockList(list);
+  if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(item).catch(err => console.warn('Firebase stock save failed:', err));
+  renderStockList();
+}
+
+function openStockItemModal(id){
+  const overlay = document.getElementById('stockItemOverlay');
+  document.getElementById('stockModalTitle').textContent = id ? 'Edit Stock Item' : 'Add Stock Item';
+  document.getElementById('stockItemId').value = id || '';
+  const rowsBox = document.getElementById('stockSalePriceRows');
+  rowsBox.innerHTML = '';
+  const pBtn = document.getElementById('stockPurchaseUnitBtn');
+  const item = id ? getStockList().find(it => it.id === id) : null;
+  if(item){
+    document.getElementById('stockItemName').value = item.itemName || '';
+    document.getElementById('stockItemQty').value = item.quantity || 0;
+    document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
+    document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
+    setUnitBtn(pBtn, item.unit || '');
+    getSalePrices(item).forEach(p => addSalePriceRow(p.price, p.unit));
+  } else {
+    ['stockItemName','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
+      document.getElementById(id2).value = '';
+    });
+    setUnitBtn(pBtn, '');
+    addSalePriceRow('', '');
+  }
+  // Supplier name sirf is purchase-entry ke liye hai, item ke saath permanently save nahi hoti
+  document.getElementById('stockItemSupplier').value = '';
+  const supplierField = document.getElementById('stockItemSupplierField');
+  if(supplierField) supplierField.style.display = id ? 'none' : '';
+  updateStockQtyLabel();
+  closeUnitMenu();
+  overlay.style.display = 'flex';
+}
+function closeStockItemModal(){
+  closeUnitMenu();
+  document.getElementById('stockItemOverlay').style.display = 'none';
+}
+function saveStockItemModal(){
+  const name = document.getElementById('stockItemName').value.trim();
+  if(!name){ alert('Item Name daalein.'); return; }
+  const id = document.getElementById('stockItemId').value;
+  const list = getStockList();
+  const rawSale = Array.from(document.querySelectorAll('#stockSalePriceRows .price-unit-row')).map(r => ({
+    price: Number(r.querySelector('input').value) || 0,
+    unit: (r.querySelector('.unit-pick-btn').dataset.unit || '').trim()
+  }));
+  // Stock ki quantity purchase unit mein hoti hai (na ho to pehli sale unit, phir pcs)
+  const qtyUnit = (document.getElementById('stockPurchaseUnitBtn').dataset.unit || '').trim()
+    || ((rawSale.find(p => p.unit) || {}).unit) || 'pcs';
+  let salePrices = rawSale.filter(p => p.price > 0).map(p => ({ price: p.price, unit: p.unit || qtyUnit }));
+  if(!salePrices.length) salePrices = [{ price: 0, unit: qtyUnit }];
+  const item = {
+    id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
+    itemName: name,
+    quantity: Number(document.getElementById('stockItemQty').value) || 0,
+    unit: qtyUnit,
+    purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
+    salePrice: salePrices[0].price,
+    salePrices: salePrices,
+    lowAlert: Number(document.getElementById('stockItemLowAlert').value) || 0,
+    createdAt: (id && (list.find(it => it.id === id) || {}).createdAt) || (id ? stockItemDate({ id: id }) || Date.now() : Date.now())
+  };
+  const existingIdx = list.findIndex(it => it.id === item.id);
+  let savedItem = item;
+  if(existingIdx >= 0){
+    list[existingIdx] = item;
+  } else {
+    // Naya item add ho raha hai: same naam + unit pehle se ho to usi mein jod do
+    const dup = list.find(it => stockMergeKey(it) === stockMergeKey(item));
+    if(dup){
+      mergeStockInto(dup, item);
+      savedItem = dup;
+      alert('"' + dup.itemName + '" pehle se stock mein hai - quantity usi mein jod di gayi. Ab total: ' + dup.quantity + ' ' + (dup.unit || 'pcs'));
+    } else {
+      list.push(item);
+    }
+  }
+  saveStockList(list);
+  if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(savedItem).catch(err => console.warn('Firebase stock save failed:', err));
+  // Naya item (edit nahi) add hua ho to isko ek "Stock Data Entry" ke roop mein log karo
+  if(!id){
+    const supplierName = (document.getElementById('stockItemSupplier').value || '').trim();
+    logStockEntry([{
+      itemName: item.itemName,
+      quantity: item.quantity,
+      unit: item.unit,
+      purchasePrice: item.purchasePrice,
+      amount: item.quantity * item.purchasePrice
+    }], supplierName);
+  }
+  closeStockItemModal();
+  renderStockList();
+}
+function deleteStockItem(id){
+  if(!confirm('Ye stock item delete karein?')) return;
+  let list = getStockList();
+  list = list.filter(it => it.id !== id);
+  saveStockList(list);
+  if(window.deleteStockItemFromFirebase) window.deleteStockItemFromFirebase(id).catch(err => console.warn('Firebase stock delete failed:', err));
+  renderStockList();
+}
+
+// ---------------- SMART SCAN v2: PDF / PHOTO / HANDWRITTEN BILL -> STOCK ITEMS ----------------
+// Pipeline: (1) Is app ka apna PDF  -> embedded data (100% exact)
+//           (2) Digital PDF text     -> column-aware parser
+//           (3) AI Vision (Google Gemini, key code mein)  -> handwritten / kharab photo + stock ke naam se match
+//           (4) Local OCR (Tesseract) -> SIRF tab jab AI fail ho aur user popup mein OK dabaye
+//           (5) Jo adhura reh jaye   -> Review popup mein manually complete karein
+let stockScanParsedItems = [];
+let stockScanPreviewSrc = '';
+let stockScanRawText = '';
+let stockScanZoomRot = 0;
+
+const SCAN_UNIT_MAP = {
+  'kg':'kg','kgs':'kg','kilo':'kg','किलो':'kg','किग्रा':'kg','केजी':'kg',
+  'g':'g','gm':'g','gms':'g','gram':'g','ग्राम':'g',
+  'l':'ltr','ltr':'ltr','ltrs':'ltr','litre':'ltr','liter':'ltr','लीटर':'ltr',
+  'ml':'ml',
+  'pcs':'pcs','pc':'pcs','piece':'pcs','pieces':'pcs','nos':'pcs','नग':'pcs','पीस':'pcs',
+  'bag':'bag','bags':'bag','bori':'bag','बोरी':'bag',
+  'box':'box','boxes':'box','डिब्बा':'box',
+  'dozen':'dozen','dz':'dozen','दर्जन':'dozen',
+  'qtl':'qtl','quintal':'qtl','क्विंटल':'qtl',
+  'pkt':'pkt','packet':'pkt','पैकेट':'pkt',
+  'ton':'ton','tons':'ton','टन':'ton'
+};
+function scanNormUnit(t){
+  return SCAN_UNIT_MAP[String(t || '').toLowerCase().replace(/\.$/, '')] || '';
+}
+function scanRound2(n){ return Math.round(n * 100) / 100; }
+
+// A number token can carry an OCR-misread "₹" (read as "2"). Keep both readings.
+function scanNumAlts(rawStr){
+  const clean = String(rawStr).replace(/,/g, '');
+  const v = parseFloat(clean);
+  const alts = [v];
+  if(/^2\d/.test(clean)){
+    const v2 = parseFloat(clean.slice(1));
+    if(v2 > 0 && alts.indexOf(v2) < 0) alts.push(v2);
+  }
+  return alts;
+}
+
+function scanTokenizeLine(line){
+  line = String(line || '')
+    .replace(/[०-९]/g, d => '०१२३४५६७८९'.indexOf(d))
+    .replace(/[|_=~]+/g, ' ');
+  const CUR = /^(₹|₨|rs\.?|रु\.?|रू|र|rupees?|रुपये|\/-|\/=|%|\$|-|:|=)$/i;
+  const raw = line.split(/\s+/).filter(Boolean);
+  const nums = [], nameParts = [];
+  let lastWasNum = false, pendingUnit = '';
+
+  for(let i = 0; i < raw.length; i++){
+    let tok = raw[i].replace(/^[(\[{]+/, '').replace(/[)\]};:,]+$/, '');
+    tok = tok.replace(/^(₹|₨|rs\.?|रु\.?|%)(?=\d)/i, '').replace(/(\/-|₹|\/=)$/, '');
+    if(!tok) continue;
+    if(CUR.test(tok)) continue;
+
+    let m = tok.match(/^(\d[\d,]*(?:\.\d+)?)\.?$/);
+    if(m){
+      nums.push({ raw: m[1], alts: scanNumAlts(m[1]), unit: pendingUnit });
+      pendingUnit = ''; lastWasNum = true; continue;
+    }
+    m = tok.match(/^(\d[\d,]*(?:\.\d+)?)([A-Za-z\u0900-\u097F.]+)$/);
+    if(m && scanNormUnit(m[2])){
+      nums.push({ raw: m[1], alts: scanNumAlts(m[1]), unit: scanNormUnit(m[2]) });
+      lastWasNum = true; continue;
+    }
+    const u = scanNormUnit(tok);
+    if(u){
+      if(lastWasNum && nums.length && !nums[nums.length-1].unit){
+        nums[nums.length-1].unit = u; lastWasNum = false; continue;
+      }
+      const next = raw[i+1] || '';
+      if(/^[₹%]?\d/.test(next)){ pendingUnit = u; continue; }
+    }
+    nameParts.push(tok); lastWasNum = false;
+  }
+  return { nums, nameParts };
+}
+
+function scanStripSerial(line){
+  let m = line.match(/^\s*(\d{1,3})\s*[.)\]:-]\s*(?=\S)/);
+  if(m){
+    const rest = line.slice(m[0].length);
+    if(!/^\d/.test(rest)) return rest;
+  }
+  m = line.match(/^\s*(\d{1,3})\s+(?=[A-Za-z\u0900-\u097F])/);
+  if(m){
+    const rest = line.slice(m[0].length);
+    if(!scanNormUnit(rest.split(/\s+/)[0])) return rest;
+  }
+  return line;
+}
+
+function scanCleanName(s){
+  return String(s || '')
+    .replace(/[|\\{}<>~^`*_=]+/g, ' ')
+    .replace(/^[\s.,:;\-()\[\]"'#]+|[\s.,:;\-()\[\]"'#]+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function scanIsNoiseLine(line){
+  if(/\b(total|sub\s*total|grand|round\s*off|balance|received|paid|thank|signature|jurisdiction|terms|conditions|e\s*&\s*o\.?e|interest|goods once|invoice\s*(no|number|date)|bill\s*(no|number|date)|date|gstin|gst|ifsc|bank|account|a\/c|branch|page\s*no|original copy|billing details|amount in words|only)\b/i.test(line)) return true;
+  if(/\b\d{10}\b/.test(line)) return true;                            // phone number
+  if(/\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/.test(line)) return true;   // date
+  if(/\d{1,2}:\d{2}/.test(line)) return true;                         // time
+  if(/\b\d{6}\b/.test(line) && /[a-z]{3,}.*,/i.test(line)) return true; // address + pincode
+  return false;
+}
+function scanIsTableEnd(line){
+  return /^\W*(sub\s*)?total\b|grand\s*total|\bonly\s*$|^[\W_]*\d[\d,]*(\.\d+)?[\W_]*$/i.test(line);
+}
+
+function scanSolveNumbers(nums, ctx){
+  const out = { qty: null, rate: null, amount: null, unit: '', check: false };
+  const unitNum = nums.find(n => n.unit);
+  if(unitNum) out.unit = unitNum.unit;
+  const close = (a, b) => Math.abs(a - b) <= Math.max(0.5, Math.abs(b) * 0.005);
+
+  // 1) 3+ numbers: find qty x rate = amount (also repairs OCR-misread Rupee sign)
+  if(nums.length >= 3){
+    for(let k = nums.length - 3; k >= 0; k--){
+      const A = nums[k], B = nums[k+1], C = nums[k+2];
+      for(const q of A.alts) for(const r of B.alts) for(const a of C.alts){
+        if(q > 0 && r > 0 && a > 0 && close(q * r, a)){
+          out.qty = q; out.rate = r; out.amount = a;
+          out.check = !(q === A.alts[0] && r === B.alts[0] && a === C.alts[0]);
+          return out;
+        }
+      }
+    }
+  }
+  // 2) A number with a unit (600 kg) is the quantity; the other number is amount or rate
+  if(unitNum){
+    const q = unitNum.alts[0];
+    out.qty = q;
+    const others = nums.filter(n => n !== unitNum);
+    if(others.length === 0){ out.check = true; return out; }
+    const o = others[others.length - 1].alts[0];
+    if(others.length >= 2){
+      const r = others[0].alts[0];
+      if(close(q * r, o)){ out.rate = r; out.amount = o; return out; }
+    }
+    if(q > 0 && o >= q){ out.amount = o; out.rate = scanRound2(o / q); }
+    else { out.rate = o; out.amount = scanRound2(o * q); }
+    out.check = true;
+    return out;
+  }
+  // 3) Exactly two numbers
+  if(nums.length === 2){
+    const X = nums[0], Y = nums[1];
+    if(ctx.hasRateCol){
+      // Qty column OCR mein chhoot gaya => qty = amount / rate
+      for(const r of X.alts) for(const a of Y.alts){
+        const q = a / r;
+        if(r > 0 && a > 0 && q >= 0.25 && Math.abs(q * 4 - Math.round(q * 4)) < 0.01){
+          out.qty = Math.round(q * 100) / 100; out.rate = r; out.amount = a;
+          out.check = !(r === X.alts[0] && a === Y.alts[0]);
+          return out;
+        }
+      }
+      out.rate = X.alts[0]; out.amount = Y.alts[0]; out.check = true;   // qty missing
+      return out;
+    }
+    if(ctx.hasHeader && ctx.hasQtyCol){
+      out.qty = X.alts[0]; out.amount = Y.alts[0];
+      out.rate = out.qty > 0 ? scanRound2(out.amount / out.qty) : null;
+      return out;
+    }
+    out.qty = X.alts[0]; out.rate = Y.alts[0]; out.check = true;
+    return out;
+  }
+  // 4) One number => treat as quantity, rest missing
+  if(nums.length === 1){ out.qty = nums[0].alts[0]; out.check = true; return out; }
+  // 5) 3+ numbers but nothing consistent => positional guess, marked for checking
+  const n = nums.slice(-3);
+  out.qty = n[0].alts[0]; out.rate = n[1].alts[0]; out.amount = n[2].alts[0]; out.check = true;
+  return out;
+}
+
+function scanParseLine(line, ctx){
+  const tk = scanTokenizeLine(scanStripSerial(line));
+  if(tk.nums.length === 0) return null;
+  let name = scanCleanName(tk.nameParts.join(' '));
+  const hasLetters = (name.match(/[A-Za-z\u0900-\u097F]/g) || []).length >= 2;
+  if(!hasLetters){
+    if(!ctx.hasHeader) return null;
+    name = '';
+  }
+  const sol = scanSolveNumbers(tk.nums, ctx);
+  return { itemName: name, quantity: sol.qty, unit: sol.unit || '', rate: sol.rate, amount: sol.amount, check: !!sol.check, src: line };
+}
+
+function parseScannedTextToItems(rawText){
+  const lines = String(rawText || '').split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const hdrRe = /\b(item|items|description|particulars?|qty|quantity|rate|price|amount|amt|mrp|unit)\b/gi;
+  const hdrIdx = lines.findIndex(l => (l.match(hdrRe) || []).length >= 2);
+  const headerLine = hdrIdx >= 0 ? lines[hdrIdx] : '';
+  const ctx = {
+    hasHeader: hdrIdx >= 0,
+    hasRateCol: /\b(rate|price|mrp)\b/i.test(headerLine),
+    hasQtyCol: /\b(qty|quantity)\b/i.test(headerLine)
+  };
+  const items = [];
+  for(let i = hdrIdx + 1; i < lines.length; i++){
+    const line = lines[i];
+    if(ctx.hasHeader && items.length > 0 && scanIsTableEnd(line)) break;
+    if(scanIsNoiseLine(line)) continue;
+    const it = scanParseLine(line, ctx);
+    if(it) items.push(it);
+  }
+  return items;
+}
+
+// ---- PDF helpers ----
+function scanPdfTextToLines(textItems){
+  const rows = [];
+  textItems.filter(i => i.str && i.str.trim()).forEach(i => {
+    const y = i.transform[5], x = i.transform[4];
+    let row = rows.find(r => Math.abs(r.y - y) <= 3);
+    if(!row){ row = { y, parts: [] }; rows.push(row); }
+    row.parts.push({ x, s: i.str });
+  });
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map(r => r.parts.sort((a, b) => a.x - b.x).map(p => p.s).join(' ').replace(/\s+/g, ' ').trim());
+}
+
+async function scanReadPdf(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let embedded = null;
+  try {
+    const md = await pdf.getMetadata();
+    const kw = md && md.info && md.info.Keywords;
+    if(kw && String(kw).indexOf('MITTU1:') === 0){
+      const arr = JSON.parse(decodeURIComponent(String(kw).slice(7)));
+      if(Array.isArray(arr) && arr.length){
+        embedded = arr.map(o => ({ itemName: String(o.n || ''), quantity: Number(o.q) || null, unit: '', rate: Number(o.r) || null, amount: Number(o.a) || null, check: false, src: '' }));
+      }
+    }
+  } catch(e){ console.warn('Embedded bill data read failed:', e); }
+
+  let textLines = [];
+  if(!embedded){
+    for(let p = 1; p <= pdf.numPages; p++){
+      showStockScanLoading(`PDF page ${p} of ${pdf.numPages} padhi ja rahi hai...`);
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const lines = scanPdfTextToLines(tc.items);
+      if(lines.join(' ').length > 20) textLines = textLines.concat(lines);
+    }
+  }
+  return { embedded, textLines, pdf };
+}
+
+async function scanRenderPdfPages(pdf, scale, maxPages){
+  const out = [];
+  const n = Math.min(pdf.numPages, maxPages || 5);
+  for(let p = 1; p <= n; p++){
+    showStockScanLoading(`PDF page ${p} of ${n} image bana rahe hain...`);
+    const page = await pdf.getPage(p);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push(canvas);
+  }
+  return out;
+}
+
+// ---- Image helpers ----
+function scanLoadImage(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Photo open nahi ho payi'));
+    img.src = url;
+  });
+}
+function scanCanvasFromSource(src, opts){
+  const rot = (((opts.rot || 0) % 360) + 360) % 360;
+  const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+  const swap = rot === 90 || rot === 270;
+  let scale = opts.targetLong ? opts.targetLong / Math.max(sw, sh) : 1;
+  scale = Math.min(scale, opts.maxScale || 3);
+  const dw = Math.round(sw * scale), dh = Math.round(sh * scale);
+  const c = document.createElement('canvas');
+  c.width = swap ? dh : dw; c.height = swap ? dw : dh;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate(rot * Math.PI / 180);
+  ctx.drawImage(src, -dw / 2, -dh / 2, dw, dh);
+  return c;
+}
+// Grayscale + contrast stretch: coloured paper (peela/orange) aur halki roshni mein OCR behtar hota hai
+function scanEnhanceCanvas(c){
+  const ctx = c.getContext('2d');
+  const id = ctx.getImageData(0, 0, c.width, c.height);
+  const d = id.data, hist = new Uint32Array(256);
+  for(let i = 0; i < d.length; i += 4){
+    const g = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) | 0;
+    d[i] = d[i+1] = d[i+2] = g; hist[g]++;
+  }
+  const total = c.width * c.height;
+  let acc = 0, lo = 0, hi = 255;
+  for(let i = 0; i < 256; i++){ acc += hist[i]; if(acc >= total * 0.02){ lo = i; break; } }
+  acc = 0;
+  for(let i = 255; i >= 0; i--){ acc += hist[i]; if(acc >= total * 0.02){ hi = i; break; } }
+  if(hi - lo >= 30){
+    const sc = 255 / (hi - lo);
+    for(let i = 0; i < d.length; i += 4){
+      let v = (d[i] - lo) * sc; v = v < 0 ? 0 : v > 255 ? 255 : v;
+      d[i] = d[i+1] = d[i+2] = v;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  return c;
+}
+async function scanOcr(canvas, lang, label){
+  const opts = { logger: m => {
+    if(m && m.status === 'recognizing text') showStockScanLoading(`${label} ${Math.round((m.progress || 0) * 100)}%`);
+  }};
+  let res;
+  try { res = await Tesseract.recognize(canvas, lang, opts); }
+  catch(e){
+    if(lang === 'eng') throw e;
+    res = await Tesseract.recognize(canvas, 'eng', opts);   // Hindi data load na ho paya to sirf English
+  }
+  return (res && res.data && res.data.text) || '';
+}
+
+// ---- AI Vision (Google Gemini) ----
+// >>> GEMINI API KEY (Google AI Studio 'AQ.' auth key) — badalni ho to sirf neeche wali line badlein <<<
+const GEMINI_API_KEY = 'AQ.Ab8RN6LD1zEnym0E4esf9ti0ZyXI1--oemewuwOeawO-w__dwQ';
+// Pehla model try hota hai; na chale (naam badal gaya / quota / busy) to agla try hota hai.
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+function geminiKeyReady(){ return !!GEMINI_API_KEY && !/^PASTE_/i.test(GEMINI_API_KEY); }
+
+function buildScanAiPrompt(stockNames){
+  let p =
+    'Yeh ek bill / invoice / hath se likhi parchi ki photo hai (Hindi, English ya Hinglish; photo tedhi ya ghumi hui ho sakti hai). ' +
+    'Isme se saare saamaan (items) nikalo. SIRF ek JSON array return karo, koi aur text ya ``` nahi: ' +
+    '[{"name":"...","stock_match":"..."|null,"qty":number|null,"unit":"kg|pcs|bag|ltr|box|dozen|qtl|pkt|null","rate":number|null,"amount":number|null,"uncertain":true|false}]. ' +
+    'rate = 1 unit ki keemat, amount = us line ka total. Jo cheez saaf na padh sako use null rakho aur uncertain=true karo — andaza mat lagao. ' +
+    'name = bill mein jo likha hai wo Roman letters (Hinglish) mein, jaise आलू -> Aalu, चावल -> Chawal; English naam waise hi rakho. ' +
+    'Header, dukaan ka naam, address, phone, date, bill number aur grand total ko item mat maano. ';
+  if(stockNames && stockNames.length){
+    p +=
+      'STOCK MATCH: mere stock mein pehle se ye items hain (exact naam): ' + JSON.stringify(stockNames) + '. ' +
+      'Bill ke har item ke liye dekho ki kya wo isi list ke kisi item ki SAME cheez hai (doosri bhasha, translation ya alag spelling — jaise potato = Aalu, rice = Chawal, onion = Pyaaz). ' +
+      'Agar same cheez hai to stock_match mein us item ka naam bilkul waisa hi likho jaisa list mein hai (ek bhi akshar badle bina). ' +
+      'Agar list mein nahi hai ya pakka yakeen nahi hai to stock_match null rakho. ' +
+      'Milte-julte par alag items (jaise sweet potato / shakarkandi alag hai aalu se, ya alag variety/brand) ko match MAT karo.';
+  } else {
+    p += 'Stock abhi khaali hai, isliye stock_match hamesha null rakho.';
+  }
+  return p;
+}
+
+async function scanRunAi(sources){
+  if(!geminiKeyReady()) throw new Error('Gemini API key code mein set nahi hai');
+
+  // Stock ke maujooda naam (AI ko match karne ke liye) — normalized naam -> asli naam
+  const stockNames = [], stockByNorm = new Map();
+  getStockList().forEach(st => {
+    const n = String(st.itemName || '').trim(), k = stockNormName(n);
+    if(n && !stockByNorm.has(k)){ stockByNorm.set(k, n); stockNames.push(n); }
+  });
+
+  const parts = [];
+  sources.slice(0, 5).forEach(s => {
+    const c = scanCanvasFromSource(s, { rot: 0, targetLong: 1568, maxScale: 1 });
+    const data = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data } });
+  });
+  parts.push({ text: buildScanAiPrompt(stockNames.slice(0, 400)) });
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts }],
+    generationConfig: { temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json' }
+  });
+
+  let j = null, lastErr = '';
+  for(const model of GEMINI_MODELS){
+    let resp;
+    try {
+      resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body
+      });
+    } catch(e){ throw new Error('Internet / network problem'); }
+    if(resp.ok){ j = await resp.json(); break; }
+    let msg = '';
+    try { const ej = await resp.json(); msg = (ej.error && ej.error.message) || ''; } catch(e){}
+    lastErr = 'AI error ' + resp.status + (msg ? ' — ' + msg.slice(0, 120) : '');
+    if(resp.status === 401 || resp.status === 403 || /api key/i.test(msg)) throw new Error(lastErr);   // key galat: dusra model try karna bekaar
+  }
+  if(!j) throw new Error(lastErr || 'AI se jawab nahi mila');
+
+  const cand = j.candidates && j.candidates[0];
+  const txt = (cand && cand.content && cand.content.parts) ? cand.content.parts.map(b => b.text || '').join('\n') : '';
+  if(!txt){
+    const br = j.promptFeedback && j.promptFeedback.blockReason;
+    throw new Error('AI ne jawab nahi diya' + (br ? ' (' + br + ')' : ''));
+  }
+  const a = txt.indexOf('['), b = txt.lastIndexOf(']');
+  if(a < 0 || b < a) throw new Error('AI ka jawab samajh nahi aaya');
+  let arr;
+  try { arr = JSON.parse(txt.slice(a, b + 1)); } catch(e){ throw new Error('AI ka jawab samajh nahi aaya'); }
+  if(!Array.isArray(arr)) throw new Error('AI ka jawab samajh nahi aaya');
+
+  let mappedCount = 0;
+  const items = arr.map(o => {
+    let q = Number(o.qty), r = Number(o.rate), am = Number(o.amount);
+    q = isFinite(q) && q > 0 ? q : null;
+    r = isFinite(r) && r > 0 && o.rate !== null ? r : null;
+    am = isFinite(am) && am > 0 && o.amount !== null ? am : null;
+    let check = !!o.uncertain;
+    if(r == null && am != null && q){ r = scanRound2(am / q); check = true; }
+    if(r != null && am != null && q && Math.abs(q * r - am) > Math.max(1, am * 0.02)) check = true;
+
+    // Naam: agar stock mein pehle se same item hai (jaise potato -> Aalu) to stock wala naam hi use hoga
+    const billName = String(o.name || '').trim();
+    let itemName = billName, src = '', srcNote = false;
+    const hit = stockByNorm.get(stockNormName(o.stock_match)) || stockByNorm.get(stockNormName(billName));
+    if(hit){
+      itemName = hit;
+      if(stockNormName(hit) !== stockNormName(billName)){
+        mappedCount++;
+        src = 'Bill mein "' + billName + '" likha tha → aapke stock ke naam "' + hit + '" se save hoga';
+        srcNote = true;
+      }
+    }
+    return { itemName, quantity: q, unit: scanNormUnit(o.unit) || String(o.unit || '').trim(), rate: r, amount: am, check, src, srcNote };
+  }).filter(it => it.itemName || it.quantity || it.rate);
+  return { items, raw: txt, mappedCount };
+}
+
+
+// ---------------- AI BILL GENERATOR ----------------
+let aiBillSelectedFiles = [];
+
+function openAiBillGenerator(){
+  const ov = document.getElementById('aiBillOverlay');
+  if(!ov) return;
+  ov.style.display = 'flex';
+  const input = document.getElementById('aiBillInput');
+  if(input) setTimeout(() => input.focus(), 120);
+}
+function closeAiBillGenerator(){
+  const ov = document.getElementById('aiBillOverlay');
+  if(ov) ov.style.display = 'none';
+}
+function aiBillFilesSelected(event){
+  aiBillSelectedFiles = Array.from(event.target.files || []);
+  const box = document.getElementById('aiBillFileList');
+  if(!box) return;
+  if(!aiBillSelectedFiles.length){ box.textContent = 'Koi document select nahi hua.'; return; }
+  box.innerHTML = aiBillSelectedFiles.map(f => '📄 ' + escHtml(f.name) + ' (' + Math.max(1, Math.round(f.size/1024)) + ' KB)').join('<br>');
+}
+function aiBillSetStatus(msg, isError){
+  const el = document.getElementById('aiBillStatus');
+  if(el){ el.textContent = msg || ''; el.style.color = isError ? '#b3261e' : '#555'; }
+}
+function aiBillNormalize(s){
+  return String(s || '').trim().toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function aiBillStockMatch(name, stockMatch){
+  const list = getStockList();
+  const target = aiBillNormalize(stockMatch || name);
+  if(!target) return null;
+  let hit = list.find(x => aiBillNormalize(x.itemName) === target);
+  if(hit) return hit;
+  // AI usually supplies stock_match; fallback exact item name is useful for short/manual prompts.
+  hit = list.find(x => aiBillNormalize(x.itemName) === aiBillNormalize(name));
+  return hit || null;
+}
+function aiBillRateFromStock(stock, unit){
+  if(!stock) return null;
+  const prices = getSalePrices(stock).filter(p => Number(p.price) > 0);
+  if(!prices.length) return null;
+  const u = aiBillNormalize(unit || '');
+  const exact = prices.find(p => aiBillNormalize(p.unit) === u);
+  if(exact) return { rate:Number(exact.price), unit:exact.unit };
+  const stockUnit = aiBillNormalize(stock.unit || '');
+  const sameStockUnit = prices.find(p => aiBillNormalize(p.unit) === stockUnit);
+  if(sameStockUnit) return { rate:Number(sameStockUnit.price), unit:sameStockUnit.unit };
+  return { rate:Number(prices[0].price), unit:prices[0].unit || stock.unit || unit || '' };
+}
+function aiBillStockContext(){
+  const list = getStockList();
+  if(!list.length) return 'STOCK RECORD KHAALI HAI.';
+  return list.slice(0,400).map(it => {
+    const sales = getSalePrices(it).filter(p => Number(p.price)>0)
+      .map(p => p.price + '/' + (p.unit || it.unit || 'pcs')).join(', ');
+    return `- ${it.itemName} | stock quantity: ${Number(it.quantity)||0} ${it.unit||'pcs'} | sale prices: ${sales || 'none'}`;
+  }).join('\n');
+}
+function aiBillSystemPrompt(){
+  return `Tum bill generator ke liye data-extraction AI ho. User Hindi/Hinglish/English mein customer aur item details de sakta hai, ya uploaded bill/document de sakta hai.
+SIRF valid JSON object return karo, koi markdown nahi:
+{"customerName":string|null,"mobile":string|null,"address":string|null,"items":[{"name":string,"stock_match":string|null,"qty":number|null,"unit":string|null}]}
+Rules:
+1. Customer name, 10-digit mobile aur address ko alag fields mein nikalo.
+2. Items mein sirf beche ja rahe items nikalo; dukaan ka naam, date, bill no, total, GST ko item mat banao.
+3. Qty aur unit ko alag karo. "5kg aalu" => qty 5, unit "kg", name "aalu".
+4. Agar exact stock item milta hai to stock_match mein uska naam BILKUL stock list jaisa likho. Translation/spelling variation (potato/aalu, rice/chawal) ko match kar sakte ho, lekin alag item ko match mat karo.
+5. Agar qty/rate document mein nahi hai to null rakho; andaza mat lagao.
+6. Mobile mein sirf 10 digits do.
+CURRENT STOCK RECORD:
+${aiBillStockContext()}`;
+}
+async function aiBillCall(contents){
+  if(!geminiKeyReady()) throw new Error('Gemini API key code mein set nahi hai.');
+  const body = JSON.stringify({
+    systemInstruction:{parts:[{text:aiBillSystemPrompt()}]},
+    contents:[{role:'user',parts:contents}],
+    generationConfig:{temperature:0,maxOutputTokens:4096,responseMimeType:'application/json'}
+  });
+  let lastErr='';
+  for(const model of GEMINI_MODELS){
+    let resp;
+    try{
+      resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
+        method:'POST',headers:{'content-type':'application/json','x-goog-api-key':GEMINI_API_KEY},body
+      });
+    }catch(e){ lastErr='Internet / network problem'; continue; }
+    if(resp.ok){
+      const j=await resp.json();
+      const cand=j.candidates&&j.candidates[0];
+      const txt=(cand&&cand.content&&cand.content.parts)?cand.content.parts.map(p=>p.text||'').join(''): '';
+      if(!txt) throw new Error('AI ne document se data nahi nikala.');
+      const a=txt.indexOf('{'), b=txt.lastIndexOf('}');
+      if(a<0 || b<a) throw new Error('AI ka jawab samajh nahi aaya.');
+      try{return JSON.parse(txt.slice(a,b+1));}catch(e){throw new Error('AI ka JSON data sahi nahi tha.');}
+    }
+    let msg='';
+    try{const ej=await resp.json();msg=(ej.error&&ej.error.message)||'';}catch(e){}
+    lastErr='AI error '+resp.status+(msg?' — '+msg.slice(0,140):'');
+    if(resp.status===401||resp.status===403||/api key/i.test(msg)) break;
+  }
+  throw new Error(lastErr||'AI se jawab nahi mila.');
+}
+async function aiBillReadFile(file){
+  const type=String(file.type||'').toLowerCase();
+  const name=file.name||'';
+  if(type==='application/pdf'||/\.pdf$/i.test(name)){
+    const pr=await scanReadPdf(file);
+    const parts=[];
+    if(pr.embedded && pr.embedded.length){
+      parts.push({text:'Is PDF mein app ka embedded bill data mila. Is data ko customer/items ke liye source maano: '+JSON.stringify(pr.embedded)});
+      return parts;
+    }
+    if(pr.textLines && pr.textLines.length){
+      parts.push({text:'PDF se nikala gaya text:\\n'+pr.textLines.join('\\n')});
+      // Text PDFs ko AI ke paas text ke roop mein bhejna zyada reliable aur halka hai.
+      return parts;
+    }
+    const sources=await scanRenderPdfPages(pr.pdf,2,5);
+    sources.forEach(c=>{
+      parts.push({inline_data:{mime_type:'image/jpeg',data:c.toDataURL('image/jpeg',0.86).split(',')[1]}});
+    });
+    parts.push({text:'Uploaded PDF ke pages ko padhkar customer aur items nikalo.'});
+    return parts;
+  }
+  if(type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'||/\.docx$/i.test(name)){
+    if(!window.mammoth) throw new Error('DOCX reader load nahi hua. Internet on karke dobara try karein.');
+    const ab=await file.arrayBuffer();
+    const result=await mammoth.extractRawText({arrayBuffer:ab});
+    return [{text:'DOCX document text:\\n'+(result.value||'')}];
+  }
+  if(type.startsWith('image/')||/\.(png|jpe?g|webp)$/i.test(name)){
+    const data=await new Promise((resolve,reject)=>{
+      const fr=new FileReader();
+      fr.onload=()=>resolve(String(fr.result).split(',')[1]);
+      fr.onerror=()=>reject(new Error('Photo read nahi ho payi.'));
+      fr.readAsDataURL(file);
+    });
+    return [{inline_data:{mime_type:type||'image/jpeg',data}},{text:'Is uploaded photo ko padhkar customer aur bill items nikalo.'}];
+  }
+  if(type.startsWith('text/')||/\.(txt|csv)$/i.test(name)){
+    return [{text:'Uploaded document text:\\n'+await file.text()}];
+  }
+  throw new Error('Ye file format support nahi hai. PDF, photo, TXT/CSV ya DOCX upload karein.');
+}
+function aiBillSanitizeResult(data){
+  const out={customerName:'',mobile:'',address:'',items:[]};
+  if(data && typeof data==='object'){
+    out.customerName=String(data.customerName||'').trim();
+    out.mobile=String(data.mobile||'').replace(/\D/g,'').slice(-10);
+    out.address=String(data.address||'').trim();
+    const arr=Array.isArray(data.items)?data.items:[];
+    out.items=arr.map(o=>({
+      name:String(o&&o.name||'').trim(),
+      stock_match:String(o&&o.stock_match||'').trim(),
+      qty:(o&&o.qty!=null&&isFinite(Number(o.qty))&&Number(o.qty)>0)?Number(o.qty):null,
+      unit:String(o&&o.unit||'').trim()
+    })).filter(x=>x.name||x.qty);
+  }
+  return out;
+}
+function aiBillApplyResult(raw){
+  const data=aiBillSanitizeResult(raw);
+  if(data.customerName) document.getElementById('custName').value=data.customerName;
+  if(data.mobile) document.getElementById('custMobile').value=data.mobile;
+  if(data.address) document.getElementById('custAddr').value=data.address;
+
+  if(data.items.length){
+    const tbody=document.getElementById('itemsBody');
+    tbody.innerHTML=''; rowCount=0;
+    data.items.forEach(item=>{
+      addRow();
+      const tr=tbody.lastElementChild;
+      const stock=aiBillStockMatch(item.name,item.stock_match);
+      const stockName=stock ? stock.itemName : item.name;
+      const picked=aiBillRateFromStock(stock,item.unit);
+      tr.querySelector('.itemName').value=stockName;
+      tr.querySelector('.itemQty').value=item.qty!=null?item.qty:'';
+      tr.querySelector('.itemUnit').value=(picked&&picked.unit)||item.unit||'';
+      tr.querySelector('.itemRate').value=(picked&&picked.rate>0)?picked.rate:'';
+      if(!stock){
+        autoSaveUnknownBillItem(stockName, (picked&&picked.rate)||0, (picked&&picked.unit)||item.unit||'pcs');
+      }
+    });
+    calcTotal();
+  }
+  refreshBillStockNames();
+  focusFirstEmptyBillField();
+  return data;
+}
+function focusFirstEmptyBillField(){
+  const fields=Array.from(document.querySelectorAll(
+    '#custName,#custMobile,#custAddr,#itemsBody input.itemName,#itemsBody input.itemQty,#itemsBody input.itemRate,#itemsBody input.itemUnit'
+  )).filter(el=>!el.disabled&&!el.readOnly&&el.offsetParent!==null);
+  const first=fields.find(billFieldIsEmpty);
+  if(first){
+    first.focus();
+    try{first.select();}catch(_){}
+    first.scrollIntoView({block:'center',behavior:'smooth'});
+  }
+}
+async function runAiBillGenerator(){
+  const btn=document.getElementById('aiBillGenerateBtn');
+  const prompt=(document.getElementById('aiBillInput').value||'').trim();
+  if(!prompt && !aiBillSelectedFiles.length){
+    aiBillSetStatus('Pehle bill ki details likhein ya document upload karein.',true); return;
+  }
+  if(btn) btn.disabled=true;
+  try{
+    aiBillSetStatus('AI stock record dekhkar bill details nikaal raha hai...');
+    const parts=[];
+    if(prompt) parts.push({text:'User ki instructions:\\n'+prompt});
+    for(const file of aiBillSelectedFiles){
+      aiBillSetStatus('Document padh raha hoon: '+file.name);
+      const fp=await aiBillReadFile(file);
+      parts.push({text:'SOURCE FILE: '+file.name});
+      parts.push(...fp);
+    }
+    const data=await aiBillCall(parts);
+    const applied=aiBillApplyResult(data);
+    aiBillSetStatus(
+      'Bill fields fill ho gaye. Jahan AI ne value nahi bhari, wahan pehla khaali box automatically select hai — aap Next dabakar agle khaali box par ja sakte hain.'
+    );
+    setTimeout(closeAiBillGenerator,700);
+    return applied;
+  }catch(err){
+    console.error('AI Bill Generator failed:',err);
+    aiBillSetStatus((err&&err.message)||'AI bill generate nahi ho paya.',true);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+}
+
+// Customer fields mein bhi keyboard ka Next/Enter AI-filled fields ko skip kare.
+function attachAiBillCustomerNavigation(){
+  ['custName','custMobile','custAddr'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el || el.dataset.aiNextBound) return;
+    el.dataset.aiNextBound='1';
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();focusNextBillEmptyField(e.target);}
+    });
+  });
+}
+setTimeout(attachAiBillCustomerNavigation,0);
+
+// ==================================================================
+// CUSTOMER SELF-SERVICE "AI SE BILL" — Display se aane wale requests
+// ==================================================================
+// Customer, Display (purana phone) par khud apna order (text/photo) bhejta
+// hai. Wo yahan customerRequest node mein status:'new' ban kar aata hai.
+// Yeh phone (Mittu) alert deta hai, OK dabane par wahi AI extraction chalti
+// hai jo "AI se Bill Generate karein" button chalata hai (apne live Stock
+// Record ke saath), shopkeeper check karta hai, phir Display par review
+// card bhejta hai jisme customer Cash/Online payment choose karta hai.
+
+let processedCustomerReqTs = 0;   // last 'new' request already alerted
+let processedCustomerPayTs = 0;   // last payment-selection already alerted
+
+window.handleCustomerRequestUpdate = function(data){
+  if(!data) return;
+  if(data.status === 'new' && data.ts && data.ts !== processedCustomerReqTs){
+    processedCustomerReqTs = data.ts;
+    showCustomerRequestAlert(data);
+  } else if((data.status === 'cash_selected' || data.status === 'online_selected') && data.ts && data.ts !== processedCustomerPayTs){
+    processedCustomerPayTs = data.ts;
+    showCustomerPaymentAlert(data);
+  }
+};
+
+// Shopkeeper ko batata hai ki customer ne khud Bill bheja hai. OK dabate hi
+// AI usi request se bill fields auto-fill kar deta hai (jaise "AI se Bill
+// Generate karein" dabane par hota hai) — chahe shopkeeper abhi koi doosra
+// bill hi kyun na bana raha ho, pehle poochha jaata hai.
+function showCustomerRequestAlert(data){
+  const who = data.customerName ? data.customerName : 'Ek Customer';
+  const proceed = confirm('📩 ' + who + ' ne Display se apna Bill bheja hai.\n\nOK dabakar AI se bill fields automatically fill karein.');
+  if(proceed){
+    runCustomerAiBillGenerator(data);
+  }
+}
+
+// Customer ki request (text + optional photo, base64) ko wahi AI pipeline
+// se guzarta hai jo runAiBillGenerator() use karta hai (same system prompt,
+// same live Stock Record context), phir wahi aiBillApplyResult() se bill
+// fields fill karta hai — bilkul jaise shopkeeper khud "AI se Bill
+// Generate karein" dabakar karta hai.
+async function runCustomerAiBillGenerator(data){
+  try{
+    const parts = [];
+    if(data.requestText) parts.push({text:'Customer ne Display se ye instructions bheji hain:\n'+data.requestText});
+    if(data.customerName) parts.push({text:'Customer ka naam (agar upar text mein na ho to yahi use karo): '+data.customerName});
+    if(data.customerMobile) parts.push({text:'Customer ka mobile (agar upar text mein na ho to yahi use karo): '+data.customerMobile});
+    if(Array.isArray(data.files)){
+      data.files.forEach(f=>{
+        if(!f || !f.data) return;
+        if(f.mimeType && f.mimeType.startsWith('image/')){
+          parts.push({inline_data:{mime_type:f.mimeType, data:f.data}});
+          parts.push({text:'Upar di gayi photo customer ne Display se apne order ke liye bheji hai, ise padhkar items nikalo.'});
+        } else if(f.mimeType && f.mimeType.startsWith('text/')){
+          try{ parts.push({text:'Customer ki bheji hui text file:\n'+decodeURIComponent(escape(atob(f.data)))}); }catch(e){}
+        }
+      });
+    }
+    if(!parts.length){
+      alert('Customer ne koi detail nahi bheji thi.');
+      return;
+    }
+    aiBillSetStatus && aiBillSetStatus('Customer ki request se AI bill fields nikaal raha hai...');
+    const resultData = await aiBillCall(parts);
+    aiBillApplyResult(resultData);
+    alert('✅ Bill fields Customer ki request se auto-fill ho gaye hain. Check/edit karke "Customer Display par Review ke liye Bhejein" button dabayen.');
+  }catch(err){
+    console.error('Customer AI bill generation failed:', err);
+    alert('❌ Customer ka bill AI se fill nahi ho paya: ' + ((err && err.message) || err));
+  }
+}
+
+// Shopkeeper ka naya button: bharey hue bill ko check karta hai ki har item
+// Stock Record mein hai ya nahi. Agar koi item stock mein nahi hai to
+// popup dikhata hai aur rokta hai. Sab thik ho to Display par ek review-only
+// card bhej deta hai (Cash/Online buttons ke saath).
+function sendBillForCustomerReview(){
+  const rows = Array.from(document.querySelectorAll('#itemsBody tr'));
+  const items = [];
+  const missing = [];
+  let total = 0;
+  rows.forEach(tr=>{
+    const name = (tr.querySelector('.itemName')?.value || '').trim();
+    if(!name) return;
+    const qty = parseFloat(tr.querySelector('.itemQty')?.value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate')?.value) || 0;
+    const unit = (tr.querySelector('.itemUnit')?.value || '').trim();
+    const amt = qty * rate;
+    total += amt;
+    items.push({ name, qty, unit, rate, amt: amt.toFixed(2) });
+    const inStock = getStockList().some(s => stockNormName(s.itemName) === stockNormName(name));
+    if(!inStock) missing.push(name);
+  });
+
+  if(!items.length){
+    alert('Pehle bill mein items add karein (ya upar "AI se Bill Generate karein" / customer request se auto-fill karein).');
+    return;
+  }
+  if(missing.length){
+    alert('⚠️ Ye item(s) Stock Record mein nahi mile:\n\n' + missing.join('\n') + '\n\nPehle inhe Stock Record mein add karein ya naam sahi karein, uske baad hi Customer Display par bhej sakte hain.');
+    return;
+  }
+  if(typeof window.pushCustomerReviewCard !== 'function'){
+    alert('Display se connection abhi available nahi hai.');
+    return;
+  }
+
+  const custName = document.getElementById('custName').value || '';
+  const custMobile = document.getElementById('custMobile').value || '';
+  const billNo = document.getElementById('sno').value || '';
+
+  window.pushCustomerReviewCard({ items, total: total.toFixed(2), billNo, custName, custMobile });
+  alert('✅ Bill Customer Display par review ke liye bhej diya gaya hai. Customer ab Cash ya Online payment choose kar sakta hai.');
+}
+
+// Customer ne Display par Cash ya Online payment button dabaya — shopkeeper
+// ko alert milta hai. OK dabate hi payment "received" mark hota hai aur
+// bill normal tarike se finalize (PDF save, stock deduct, history) ho jaata
+// hai — bilkul jaise koi normal bill generate hota hai.
+function showCustomerPaymentAlert(data){
+  const method = data.status === 'cash_selected' ? 'CASH' : 'ONLINE';
+  const amount = data.total || '0';
+  const who = data.custName || document.getElementById('custName').value || 'Customer';
+  const proceed = confirm('💰 ' + who + ' ne ' + method + ' payment select kiya hai.\nAmount: ₹' + amount + '\n\nPayment mil gaya hai? OK dabayen.');
+  if(!proceed) return;
+
+  if(typeof window.markCustomerPaymentReceived === 'function'){
+    window.markCustomerPaymentReceived(method, amount, who);
+  }
+  try{
+    generateBill(false); // save history, deduct stock, download PDF silently — same as a normal bill
+  }catch(e){
+    console.warn('Auto bill finalize after customer payment failed:', e);
+  }
+  // Display apne aap Thank You dikhakar kuch der baad welcome par wapas chala jaayega.
+}
+
+
+// ---------------- AI ADVISOR CHATBOT (Stock & Marketing) ----------------
+let aiAdvisorHistory = [];   // [{role:'user'|'model', text:'...'}]
+let aiAdvisorBusy = false;
+
+function buildAiAdvisorStockContext(){
+  const list = getStockList();
+  if(!list.length) return 'Abhi dukaan ke stock mein koi item add nahi hua hai.';
+  const lines = list.slice(0, 250).map(it => {
+    const qty = Number(it.quantity) || 0;
+    const unit = it.unit || 'pcs';
+    const purchase = Number(it.purchasePrice) || 0;
+    const sales = getSalePrices(it).map(p => p.price + '/' + p.unit).join(', ');
+    const low = it.lowAlert && qty <= Number(it.lowAlert) ? ' [LOW STOCK]' : '';
+    return `- ${it.itemName}: ${qty} ${unit} bacha hai, purchase rate ₹${purchase}/${unit}, sale rate ₹${sales}${low}`;
+  });
+  const lowCount = list.filter(it => it.lowAlert && Number(it.quantity) <= Number(it.lowAlert)).length;
+  return `Dukaan mein total ${list.length} tarah ke item hain, jinme se ${lowCount} item low stock mein hain. Poora item list:\n` + lines.join('\n');
+}
+
+function buildAiAdvisorSystemPrompt(){
+  return (
+    'Tum ek anubhavi (experienced) business advisor ho jo ek chhote wholesaler/retailer dukaandar ki madad karte ho. ' +
+    'Dukaandar Hindi/Hinglish mein baat karta hai, tum bhi seedhi saral Hinglish (Hindi + thoda English) mein, dost jaise tone mein jawab do — zyada bhari-bharkam English words mat use karo. ' +
+    'Tumhare 2 kaam hain: (1) Dukaandar ke stock/inventory se related sawalon ka jawab do — neeche diya gaya uska asli stock data use karke (kaunsa item kam hai, kitna order karna chahiye, profit margin kya hai, kaunsa item zyada bik raha hoga waghera). (2) Marketing, prachar, naye customer lana, purane customer ko wapas bulana, aur customer se bakaya/udhar paisa vinamrata (politely) lekin asarkari (effectively) tarike se maangne jaise business-growth sawalon mein practical, chhote-chhote, turant apnaye ja sakne wale (actionable) sujhav (tips) do — jaise WhatsApp status/broadcast, local offers, combo deals, referral, follow-up reminders, udhar wapas maangne ke vinamra par firm message templates, waghera. ' +
+    'Jawab chhota aur to-the-point rakho (points/bullets mein), lamba lecture mat do, jab tak dukaandar khud vistaar (detail) na maange. Agar sawal ekdum unrelated ho (stock/marketing/dukaan se koi lena dena na ho), tab bhi vinamrata se jawab dene ki koshish karo. ' +
+    'Yahan uske dukaan ke stock ka current data hai (yeh hamesha sach maano, andaza mat lagao):\n' + buildAiAdvisorStockContext()
+  );
+}
+
+function aiAdvisorScrollToBottom(){
+  const el = document.getElementById('aiAdvisorMessages');
+  if(el) el.scrollTop = el.scrollHeight;
+}
+
+function aiAdvisorRenderMessage(role, text){
+  const box = document.getElementById('aiAdvisorMessages');
+  if(!box) return;
+  const div = document.createElement('div');
+  div.className = 'ai-advisor-msg ' + (role === 'user' ? 'user' : role === 'error' ? 'error' : 'ai');
+  div.textContent = text;
+  box.appendChild(div);
+  aiAdvisorScrollToBottom();
+}
+
+function openAiAdvisorModal(){
+  const ov = document.getElementById('aiAdvisorOverlay');
+  if(!ov) return;
+  ov.style.display = 'flex';
+  if(!aiAdvisorHistory.length){
+    const box = document.getElementById('aiAdvisorMessages');
+    if(box) box.innerHTML = '';
+    aiAdvisorRenderMessage('ai', 'Namaste! 🙏 Main aapka AI Advisor hoon. Aap mujhse apne stock ke baare mein (jaise kaunsa item kam hai) ya marketing/customer se paise lene jaisi baatein pooch sakte hain. Neeche diye sawal try karein ya khud type karein.');
+  }
+  setTimeout(() => { const inp = document.getElementById('aiAdvisorInput'); if(inp) inp.focus(); }, 200);
+}
+
+function closeAiAdvisorModal(){
+  const ov = document.getElementById('aiAdvisorOverlay');
+  if(ov) ov.style.display = 'none';
+}
+
+function aiAdvisorAskSuggestion(text){
+  const inp = document.getElementById('aiAdvisorInput');
+  if(inp) inp.value = text;
+  aiAdvisorSend();
+}
+
+// ---------------- BILL FINAL ACTION REVIEW / NEW STOCK ITEMS ----------------
+let pendingBillFinalAction = null;
+let stockScanReviewMode = 'scan'; // scan | billUnknown | aiPriceUpdate
+
+function getUnknownBillItemsForReview(){
+  const stock = getStockList();
+  const map = new Map();
+  document.querySelectorAll('#itemsBody tr').forEach(tr => {
+    const name = String(tr.querySelector('.itemName')?.value || '').trim();
+    const rate = Number(tr.querySelector('.itemRate')?.value || 0);
+    const unit = String(tr.querySelector('.itemUnit')?.value || 'pcs').trim() || 'pcs';
+    if(!name) return;
+    const exists = stock.some(s => stockNormName(s.itemName) === stockNormName(name));
+    if(exists) return;
+    const key = stockNormName(name) + '|' + stockNormName(unit);
+    if(!map.has(key)) map.set(key, { include:true, itemName:name, quantity:0, unit, rate:0, amount:0, check:false, sales:[{price:rate,unit}], billUnknown:true, lowAlert:0 });
+    else {
+      const x=map.get(key);
+      if(rate>0){ x.sales=[{price:rate,unit}]; }
+    }
+  });
+  return Array.from(map.values());
+}
+
+function requestBillFinalAction(action){
+  const unknown = getUnknownBillItemsForReview();
+  if(unknown.length){
+    pendingBillFinalAction = action;
+    stockScanReviewMode = 'billUnknown';
+    stockScanParsedItems = unknown;
+    stockScanRawText = '';
+    stockScanPreviewSrc = '';
+    openStockScanReview(unknown, {
+      source:'🛒 Bill mein ye item Stock Record mein nahi mile.',
+      note:'Neeche se check karein — Qty, Purchase Price aur Low Stock Alert mein jo bhi bharenge wahi Item Stock Record mein save hoga; Sale Price bill ke rate se pehle se bhara hai.'
+    });
+    return;
+  }
+  runPendingBillFinalAction(action);
+}
+
+function runPendingBillFinalAction(action){
+  pendingBillFinalAction = null;
+  if(action==='upi') return generateUPIQR();
+  if(action==='thermal') return printThermalBill();
+  if(action==='whatsapp') return sendWhatsApp();
+  return generateBill();
+}
+
+function openAiSalePriceReview(update){
+  const list = getStockList();
+  const item = list.find(x => stockNormName(x.itemName) === stockNormName(update.item));
+  if(!item) return false;
+  stockScanReviewMode = 'aiPriceUpdate';
+  pendingBillFinalAction = null;
+  stockScanParsedItems = [{
+    include:true,
+    itemName:item.itemName,
+    quantity:Number(item.quantity)||0,
+    unit:update.unit || item.unit || 'pcs',
+    rate:Number(item.purchasePrice)||0,
+    amount:0,
+    check:false,
+    sales:[{price:Number(update.price)||0, unit:update.unit || item.unit || 'pcs'}],
+    aiPriceUpdate:true,
+    lowAlert:Number(item.lowAlert)||0
+  }];
+  stockScanRawText=''; stockScanPreviewSrc='';
+  openStockScanReview(stockScanParsedItems, {
+    source:'🤖 AI ne ye Stock Record update suggest kiya hai.',
+    note:'Sale Price ko check karein. “Update Sale Price” dabane par sirf Sale Price update hoga; stock quantity/purchase price nahi badlega.'
+  });
+  return true;
+}
+
+function confirmBillUnknownStockAndContinue(){
+  syncStockScanFromDOM();
+  const chosen=stockScanParsedItems.filter(it=>it.include!==false && it.itemName);
+  const list=getStockList();
+  const touched=[];
+  chosen.forEach(it=>{
+    const sales=(it.sales||[]).filter(p=>Number(p.price)>0);
+    const unit=it.unit || (sales[0]&&sales[0].unit) || 'pcs';
+    const salePrices=sales.length ? sales.map(p=>({price:Number(p.price)||0,unit:p.unit||unit})) : [{price:0,unit}];
+    const quantity=Number(it.quantity)||0;
+    const purchasePrice=Number(it.rate)||0;
+    const lowAlert=Number(it.lowAlert)||0;
+    const existing=list.find(x=>stockNormName(x.itemName)===stockNormName(it.itemName));
+    if(existing){
+      existing.quantity=(Number(existing.quantity)||0)+quantity;
+      if(purchasePrice>0) existing.purchasePrice=purchasePrice;
+      if(sales.length){ existing.salePrices=salePrices; existing.salePrice=salePrices[0].price; }
+      existing.lowAlert=lowAlert;
+      if(!touched.includes(existing)) touched.push(existing);
+    } else {
+      const item={id:'stk_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),itemName:it.itemName,quantity,unit,purchasePrice,salePrice:salePrices[0].price,salePrices,lowAlert,autoCreatedFromBill:true,createdAt:Date.now()};
+      list.push(item); touched.push(item);
+    }
+  });
+  saveStockList(list);
+  touched.forEach(t=>{ if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(t).catch(e=>console.warn('Firebase stock save failed:',e)); });
+  refreshBillStockNames();
+  renderStockList();
+  const action=pendingBillFinalAction;
+  closeStockScanReview();
+  stockScanReviewMode='scan';
+  if(action) setTimeout(()=>runPendingBillFinalAction(action),60);
+}
+
+function confirmAiSalePriceReview(){
+  syncStockScanFromDOM();
+  const it=stockScanParsedItems[0];
+  if(!it || !it.itemName){ alert('Item ka naam nahi mila.'); return; }
+  const sale=(it.sales||[]).find(p=>Number(p.price)>0);
+  if(!sale){ alert('Sale Price bharein.'); return; }
+  const list=getStockList();
+  const item=list.find(x=>stockNormName(x.itemName)===stockNormName(it.itemName));
+  if(!item){ alert('Stock Record mein item nahi mila.'); return; }
+  const prices=getSalePrices(item).map(p=>({price:Number(p.price)||0,unit:p.unit||item.unit||'pcs'}));
+  const idx=prices.findIndex(p=>stockNormName(p.unit)===stockNormName(sale.unit));
+  if(idx>=0) prices[idx].price=Number(sale.price); else prices.push({price:Number(sale.price),unit:sale.unit});
+  item.salePrices=prices; item.salePrice=Number(sale.price);
+  saveStockList(list);
+  if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(item).catch(e=>console.warn('Firebase stock price update failed:',e));
+  refreshBillStockNames(); renderStockList();
+  closeStockScanReview(); stockScanReviewMode='scan';
+}
+
+function confirmStockReviewCurrentMode(){
+  if(stockScanReviewMode==='billUnknown') return confirmBillUnknownStockAndContinue();
+  if(stockScanReviewMode==='aiPriceUpdate') return confirmAiSalePriceReview();
+  return confirmStockScanReview();
+}
+
+// AI Advisor ka direct stock-price command handler.
+// Example: "chawal ka dam 45₹/kg karo" / "chawal ka sale price 45 kg kar do"
+function aiAdvisorTryUpdateSalePrice(command){
+  const raw = String(command || '').trim();
+  if(!raw) return {handled:false};
+
+  // Price + unit nikaalo: 45₹/kg, ₹45/kg, 45 / kg, 45 rupees kg, etc.
+  const priceMatch = raw.match(/(?:₹\s*)?(\d+(?:\.\d+)?)\s*(?:₹|rs\.?|rupees?)?\s*(?:\/\s*)?(kg|g|qtl|quintal|pcs|piece|pieces|bag|ltr|liter|litre|box|dozen|pkt|packet|unit)\b/i)
+    || raw.match(/(?:₹\s*)?(\d+(?:\.\d+)?)\s*(?:₹|rs\.?|rupees?)?/i);
+  if(!priceMatch) return {handled:false};
+
+  const lower = raw.toLowerCase();
+  const looksLikeUpdate = /(dam|daam|price|rate|sale|rupaye|rupee|\b₹\b|rs\.?|kar\s*(?:do|de|den|dena|diya|dijiye)|karo|update|badal|set)/i.test(raw);
+  if(!looksLikeUpdate) return {handled:false};
+
+  const price = Number(priceMatch[1]);
+  if(!isFinite(price) || price < 0) return {handled:false};
+  const unitRaw = priceMatch[2] ? priceMatch[2].toLowerCase() : '';
+  const unitMap = {piece:'pcs',pieces:'pcs',piece:'pcs',packet:'pkt',liter:'ltr',litre:'ltr',quintal:'qtl'};
+  const unit = unitMap[unitRaw] || unitRaw || '';
+
+  const list = getStockList();
+
+  // Primary: seedha stock record ke naam se match karo — jo bhi item naam
+  // sentence mein kahin bhi mile use pakad lo. Ye "bhai/tune/kar diya/kar
+  // dena" jaisi casual phrasing se bilkul affect nahi hota, kyunki hum
+  // filler words hatane ki koshish nahi kar rahe, seedha jaana-pehchana
+  // item naam dhoondh rahe hain.
+  const normFull = ' ' + stockNormName(raw) + ' ';
+  let candidates = [];
+  let bestLen = 0;
+  list.forEach(x => {
+    const n = stockNormName(x.itemName);
+    if(!n) return;
+    if(normFull.includes(' ' + n + ' ')){
+      if(n.length > bestLen){ bestLen = n.length; candidates = [x]; }
+      else if(n.length === bestLen){ candidates.push(x); }
+    }
+  });
+
+  if(!candidates.length){
+    // Fallback: price/unit aur jaane-pehchane filler/verb words hata kar
+    // jo bacha use item naam maan lo.
+    let itemQuery = raw
+      .replace(/(?:₹\s*)?(\d+(?:\.\d+)?)\s*(?:₹|rs\.?|rupees?)?\s*(?:\/\s*)?(kg|g|qtl|quintal|pcs|piece|pieces|bag|ltr|liter|litre|box|dozen|pkt|packet|unit)?\b/i, ' ')
+      .replace(/(?:sale\s*)?(price|rate|dam|daam)\s*(?:ko|mein|me)?/ig, ' ')
+      .replace(/(?:kar\s*(?:do|de|den|do na|dena|dijiye|dijiyega|diya)|update\s*(?:karo|kar\s*do|kar\s*diya)|badal\s*(?:do|de|den|diya|dena)|set\s*(?:karo|kar\s*do|kar\s*diya))/ig, ' ')
+      .replace(/\b(bhai|bhaiya|yaar|dost|arre|are|tune|tumne|aapne|abhi|turant|zara|please)\b/ig, ' ')
+      .replace(/(?:₹|rs\.?|rupees?)/ig, ' ')
+      .replace(/\b(ka|ke|ki|ko|mein|me|par|per|of|to|the|is|usse|use|wala|wali|wale)\b/ig, ' ')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if(!itemQuery) return {handled:false};
+    const q = stockNormName(itemQuery);
+    candidates = list.filter(x => stockNormName(x.itemName) === q);
+    if(!candidates.length){
+      // Chhote Hindi/Hinglish variations ke liye token based fallback.
+      const tokens = q.split(' ').filter(Boolean);
+      candidates = list.filter(x => {
+        const n = stockNormName(x.itemName);
+        return tokens.length && tokens.every(t => n.includes(t));
+      });
+    }
+  }
+  if(!candidates.length) return {handled:false};
+
+  const requestedUnit = unit || '';
+  // Duplicate item names mein requested unit wala record pehle choose karo.
+  // Example: Chawal ke pcs aur kg ke alag records hain aur user ne 45/kg bola.
+  let item = candidates.find(x => {
+    const ps = getSalePrices(x);
+    return requestedUnit && (ps.some(p => stockNormName(p.unit) === stockNormName(requestedUnit)) || stockNormName(x.unit) === stockNormName(requestedUnit));
+  }) || candidates[0];
+
+  const prices = getSalePrices(item).map(p => ({price:Number(p.price)||0, unit:String(p.unit||item.unit||'pcs')}));
+  const targetUnit = requestedUnit || String(item.unit || (prices[0] && prices[0].unit) || 'pcs').trim();
+  const existing = prices.find(p => stockNormName(p.unit) === stockNormName(targetUnit));
+  if(existing){
+    existing.price = price;
+  }else{
+    prices.push({price, unit:targetUnit});
+  }
+  item.salePrices = prices.filter(p => Number(p.price) >= 0);
+  // Existing app mein salePrice primary sale rate hai; requested unit ko primary bana do.
+  item.salePrice = price;
+  item.unit = targetUnit || item.unit || 'pcs';
+
+  return {
+    handled:true,
+    item:item.itemName,
+    price,
+    unit:targetUnit,
+    message:'Sale Price update review ke liye taiyar hai: ' + item.itemName + ' — ₹' + price.toFixed(2) + '/' + targetUnit
+  };
+}
+
+// Attach button: bill/photo seedha diya jaaye to isko wahi purana proven "AI Through Scan Bill" pipeline
+// handle karta hai (same OCR/AI extraction + same review-before-adding screen) — koi alag logic nahi.
+function aiAdvisorFileSelected(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  aiAdvisorRenderMessage('user', '📎 Bill/Photo attach ki: ' + file.name);
+  aiAdvisorRenderMessage('ai', 'Theek hai! Isse main bilkul waise hi padhta hoon jaise "AI Through Scan Bill" karta hai — item nikaal kar aapko check karne ke liye dikha dunga, phir aap "Add Selected to Stock" dabakar stock update kar dena.');
+  closeAiAdvisorModal();
+  handleStockScanFile(event);   // same function jo the existing scan-bill button use karta hai
+}
+
+// Streams the reply chunk-by-chunk (SSE) so it appears to "type" live, like a normal chat.
+// Falls back to a plain call + local typewriter reveal if streaming isn't available.
+async function aiAdvisorFetchStream(body, onChunk){
+  let lastErr = '';
+  for(const model of GEMINI_MODELS){
+    let resp;
+    try {
+      resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?alt=sse', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body
+      });
+    } catch(e){ lastErr = 'Internet / network problem'; continue; }
+    if(!resp.ok){
+      let msg = '';
+      try { const ej = await resp.json(); msg = (ej.error && ej.error.message) || ''; } catch(e){}
+      lastErr = 'AI error ' + resp.status + (msg ? ' — ' + msg.slice(0, 120) : '');
+      if(resp.status === 401 || resp.status === 403 || /api key/i.test(msg)) throw new Error(lastErr);
+      continue;
+    }
+    if(!resp.body || !resp.body.getReader){ lastErr = 'STREAM_UNSUPPORTED'; continue; }
+    try {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '', got = false;
+      while(true){
+        const { value, done } = await reader.read();
+        if(done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for(const raw of lines){
+          const line = raw.trim();
+          if(!line.startsWith('data:')) continue;
+          const js = line.slice(5).trim();
+          if(!js || js === '[DONE]') continue;
+          try {
+            const obj = JSON.parse(js);
+            const cand = obj.candidates && obj.candidates[0];
+            const chunkTxt = (cand && cand.content && cand.content.parts) ? cand.content.parts.map(p => p.text || '').join('') : '';
+            if(chunkTxt){ got = true; onChunk(chunkTxt); }
+          } catch(e){}
+        }
+      }
+      if(got) return true;
+      lastErr = lastErr || 'AI se jawab nahi mila';
+    } catch(e){ lastErr = String((e && e.message) || e); }
+  }
+  throw new Error(lastErr || 'AI se jawab nahi mila');
+}
+
+async function aiAdvisorSend(){
+  if(aiAdvisorBusy) return;
+  const inp = document.getElementById('aiAdvisorInput');
+  const text = (inp && inp.value || '').trim();
+  if(!text) return;
+
+  // Sale-price commands are reviewed in the same popup used by Scan Bill.
+  const stockPriceUpdate = aiAdvisorTryUpdateSalePrice(text);
+  if(stockPriceUpdate.handled){
+    if(inp) inp.value = '';
+    aiAdvisorRenderMessage('user', text);
+    aiAdvisorHistory.push({ role: 'user', text });
+    // Direct handler now only prepares the proposed update; popup performs the save.
+    aiAdvisorRenderMessage('ai', 'AI ne Stock Record ke liye update taiyar kiya hai. Neeche Review popup mein rate check karke Update Sale Price dabayein.');
+    aiAdvisorHistory.push({ role: 'model', text: 'Sale Price update review ke liye taiyar hai.' });
+    // Chat overlay (z-index 10300) sits above the review popup (z-index 10050),
+    // so it must be closed first or the popup opens hidden behind it.
+    setTimeout(() => { closeAiAdvisorModal(); openAiSalePriceReview(stockPriceUpdate); }, 700);
+    return;
+  }
+
+  if(!geminiKeyReady()){
+    aiAdvisorRenderMessage('error', 'AI abhi setup nahi hai (API key missing).');
+    return;
+  }
+  inp.value = '';
+  aiAdvisorRenderMessage('user', text);
+  aiAdvisorHistory.push({ role: 'user', text });
+
+  aiAdvisorBusy = true;
+  const sendBtn = document.getElementById('aiAdvisorSendBtn');
+  if(sendBtn) sendBtn.disabled = true;
+  const typingEl = document.getElementById('aiAdvisorTyping');
+  if(typingEl) typingEl.style.display = 'block';
+
+  // Ek khaali AI bubble bana dete hain jisme jawab live "type" hoga
+  const box = document.getElementById('aiAdvisorMessages');
+  const bubble = document.createElement('div');
+  bubble.className = 'ai-advisor-msg ai typing-cursor';
+  box.appendChild(bubble);
+  aiAdvisorScrollToBottom();
+
+  // Typewriter pump: jitna text queue mein aata jaata hai, thoda-thoda karke screen par dikhta jaata hai
+  let queue = '', displayed = '', streamDone = false, pumping = false;
+  function pump(){
+    pumping = true;
+    if(queue.length){
+      const take = queue.slice(0, 3);
+      queue = queue.slice(3);
+      displayed += take;
+      bubble.textContent = displayed;
+      aiAdvisorScrollToBottom();
+    }
+    if(queue.length || !streamDone){
+      setTimeout(pump, 16);
+    } else {
+      pumping = false;
+      bubble.classList.remove('typing-cursor');
+    }
+  }
+  function onChunk(t){
+    queue += t;
+    if(typingEl) typingEl.style.display = 'none';
+    if(!pumping) pump();
+  }
+
+  try {
+    const contents = aiAdvisorHistory.slice(-16).map(h => ({ role: h.role, parts: [{ text: h.text }] }));
+    const body = JSON.stringify({
+      systemInstruction: { parts: [{ text: buildAiAdvisorSystemPrompt() }] },
+      contents,
+      generationConfig: { temperature: 0.5, maxOutputTokens: 1024 }
+    });
+
+    let fullText = '';
+    try {
+      await aiAdvisorFetchStream(body, (chunk) => { fullText += chunk; onChunk(chunk); });
+    } catch(streamErr){
+      // Streaming na ho paaye (purana browser / proxy) to normal tareeke se pura jawab le kar
+      // usko bhi typewriter se hi dikha dete hain, taaki dikhne mein farak na aaye.
+      let j = null, lastErr = '';
+      for(const model of GEMINI_MODELS){
+        let resp;
+        try {
+          resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+            body
+          });
+        } catch(e){ lastErr = 'Internet / network problem'; continue; }
+        if(resp.ok){ j = await resp.json(); break; }
+        let msg = '';
+        try { const ej = await resp.json(); msg = (ej.error && ej.error.message) || ''; } catch(e){}
+        lastErr = 'AI error ' + resp.status + (msg ? ' — ' + msg.slice(0, 120) : '');
+        if(resp.status === 401 || resp.status === 403 || /api key/i.test(msg)) throw new Error(lastErr);
+      }
+      if(!j) throw new Error(lastErr || String((streamErr && streamErr.message) || 'AI se jawab nahi mila'));
+      const cand = j.candidates && j.candidates[0];
+      const txt = (cand && cand.content && cand.content.parts) ? cand.content.parts.map(b => b.text || '').join('\n').trim() : '';
+      if(!txt){
+        const br = j.promptFeedback && j.promptFeedback.blockReason;
+        throw new Error('AI ne jawab nahi diya' + (br ? ' (' + br + ')' : ''));
+      }
+      fullText = txt;
+      onChunk(txt);
+    }
+
+    streamDone = true;
+    if(!pumping) pump();
+
+    fullText = fullText.trim();
+    if(!fullText){
+      bubble.remove();
+      throw new Error('AI ne jawab nahi diya.');
+    }
+    aiAdvisorHistory.push({ role: 'model', text: fullText });
+  } catch(err){
+    streamDone = true;
+    bubble.classList.remove('typing-cursor');
+    if(bubble && bubble.parentNode && !bubble.textContent.trim()) bubble.remove();
+    aiAdvisorRenderMessage('error', (err && err.message) || 'Kuch gadbad ho gayi, dobara try karein.');
+  } finally {
+    aiAdvisorBusy = false;
+    if(sendBtn) sendBtn.disabled = false;
+    if(typingEl) typingEl.style.display = 'none';
+  }
+}
+
+// ---- Main entry ----
+function showStockScanLoading(text){
+  document.getElementById('stockScanLoadingText').textContent = text || 'Scanning... please wait';
+  document.getElementById('stockScanLoading').style.display = 'block';
+}
+function hideStockScanLoading(){
+  document.getElementById('stockScanLoading').style.display = 'none';
+}
+
+async function handleStockScanFile(event){
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  stockScanRawText = ''; stockScanPreviewSrc = '';
+  const meta = { source: '', note: '' };
+
+  try {
+    showStockScanLoading('File khul rahi hai...');
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let items = [], sources = [], pdfDoc = null;
+
+    if(isPdf){
+      const pr = await scanReadPdf(file);
+      pdfDoc = pr.pdf;
+      if(pr.embedded){
+        items = pr.embedded;
+        meta.source = '✅ Is app ka bill — data seedha padha gaya, sab sahi hona chahiye.';
+      } else if(pr.textLines.length){
+        stockScanRawText = pr.textLines.join('\n');
+        items = parseScannedTextToItems(stockScanRawText);
+        if(items.length) meta.source = 'PDF ka text padha gaya.';
+      }
+      if(!items.length) sources = await scanRenderPdfPages(pdfDoc, 3, 5);
+    } else {
+      showStockScanLoading('Photo khul rahi hai...');
+      sources = [await scanLoadImage(file)];
+    }
+
+    if(sources.length){
+      stockScanPreviewSrc = scanCanvasFromSource(sources[0], { rot: 0, targetLong: 1400, maxScale: 1 }).toDataURL('image/jpeg', 0.8);
+    }
+
+    // AI Vision (Gemini) — pehle hamesha AI. Fail ho to popup se poochh kar hi OCR chalega.
+    if(!items.length && sources.length){
+      let aiErr = '';
+      try {
+        showStockScanLoading('🤖 AI bill padh raha hai...');
+        const ai = await scanRunAi(sources);
+        stockScanRawText = ai.raw;
+        items = ai.items;
+        if(!items.length) throw new Error('AI ko bill mein koi item nahi mila');
+        meta.source = '🤖 AI (Gemini) se padha gaya — Qty aur Rate ek baar zaroor check karein.' +
+          (ai.mappedCount ? ' ' + ai.mappedCount + ' item ka naam aapke stock ke naam se match kiya gaya.' : '');
+      } catch(e){
+        console.warn('AI scan failed:', e);
+        aiErr = String((e && e.message) || 'error').slice(0, 160);
+        items = [];
+      }
+      if(aiErr){
+        hideStockScanLoading();
+        const useOcr = confirm(
+          '⚠️ Aapka AI scanner fail ho chuka hai.\n(' + aiErr + ')\n\n' +
+          'Kya aap OCR se scan karna chahte hain?\n\n' +
+          'OK dabayein = OCR se scan karein\nCancel dabayein = manually items bharein'
+        );
+        if(!useOcr){
+          meta.note = 'AI scan nahi ho paya (' + aiErr + '). Upar bill ki photo dekhkar items manually bharein.';
+          openStockScanReview([], meta);
+          return;
+        }
+        meta.note = 'AI scan nahi ho paya (' + aiErr + '), isliye OCR se padha gaya.';
+      }
+    }
+
+    // Local OCR
+    if(!items.length && sources.length){
+      let text = '';
+      if(isPdf){
+        for(let p = 0; p < sources.length; p++){
+          const c = scanEnhanceCanvas(scanCanvasFromSource(sources[p], { rot: 0, targetLong: 2400, maxScale: 1 }));
+          text += '\n' + await scanOcr(c, 'eng', `Page ${p + 1} padhi ja rahi hai...`);
+        }
+        items = parseScannedTextToItems(text);
+      } else {
+        const rots = [0, 90, 270];   // photo sideways ho to auto-rotate try karo
+        for(let r = 0; r < rots.length && !items.length; r++){
+          const c = scanEnhanceCanvas(scanCanvasFromSource(sources[0], { rot: rots[r], targetLong: 2200, maxScale: 2.5 }));
+          text = await scanOcr(c, 'eng+hin', r === 0 ? 'Photo padhi ja rahi hai...' : 'Photo ghuma kar dobara padh rahe hain...');
+          items = parseScannedTextToItems(text);
+        }
+      }
+      if(text) stockScanRawText = text;
+      if(items.length) meta.source = 'OCR se padha gaya — sab kuch ek baar check kar lein (⚠️ wale rows khaas).';
+    }
+
+    hideStockScanLoading();
+    if(!items.length){
+      meta.note = (meta.note ? meta.note + ' ' : '') + 'Auto-read nahi ho paya. Upar bill ki photo dekhkar neeche items manually bharein.';
+    }
+    openStockScanReview(items, meta);
+  } catch(err){
+    hideStockScanLoading();
+    console.error('Stock scan failed:', err);
+    alert('Scan nahi ho paya: ' + (err && err.message ? err.message : 'Unknown error'));
+  }
+}
+
+// ---- Review popup (adhura bill complete karne ke liye) ----
+function scanEsc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function openStockScanReview(items, meta){
+  meta = meta || {};
+  const supplierInput = document.getElementById('stockScanSupplier');
+  if(supplierInput) supplierInput.value = '';
+  stockScanParsedItems = (items || []).map(it => Object.assign({ include: true }, it));
+  const title = document.querySelector('#stockScanReviewOverlay .stock-item-modal h3');
+  const saveBtn = document.getElementById('stockScanReviewSaveBtn');
+  if(title){
+    title.textContent = stockScanReviewMode==='aiPriceUpdate' ? 'Review AI Sale Price Update' : (stockScanReviewMode==='billUnknown' ? 'Review New Bill Items' : 'Review Scanned Items');
+  }
+  if(saveBtn){
+    saveBtn.textContent = stockScanReviewMode==='aiPriceUpdate' ? 'Update Sale Price' : (stockScanReviewMode==='billUnknown' ? 'Add Selected to Stock' : 'Add Selected to Stock');
+  }
+  const banner = document.getElementById('stockScanBanner');
+  banner.innerHTML = (meta.source ? `<div>${scanEsc(meta.source)}</div>` : '') + (meta.note ? `<div style="color:#b3261e;margin-top:4px;">${scanEsc(meta.note)}</div>` : '');
+  banner.style.display = (meta.source || meta.note) ? 'block' : 'none';
+
+  const supplierField = document.getElementById('stockScanSupplier')?.closest('.field');
+  if(supplierField) supplierField.style.display = stockScanReviewMode==='scan' ? '' : 'none';
+  const addRowBtn = document.querySelector('#stockScanReviewOverlay .scan-addrow');
+  if(addRowBtn) addRowBtn.style.display = stockScanReviewMode==='aiPriceUpdate' ? 'none' : '';
+  const pv = document.getElementById('stockScanPreviewWrap');
+  if(stockScanReviewMode!=='scan'){ pv.style.display='none'; } else if(stockScanPreviewSrc){
+    document.getElementById('stockScanPreviewImg').src = stockScanPreviewSrc;
+    pv.style.display = 'block';
+  } else pv.style.display = 'none';
+
+  const rawWrap = document.getElementById('stockScanRawWrap');
+  if(stockScanRawText){
+    document.getElementById('stockScanRawText').textContent = stockScanRawText;
+    rawWrap.style.display = 'block'; rawWrap.open = false;
+  } else rawWrap.style.display = 'none';
+
+  renderStockScanRows();
+  document.getElementById('stockScanReviewOverlay').style.display = 'flex';
+}
+function closeStockScanReview(){
+  document.getElementById('stockScanReviewOverlay').style.display = 'none';
+}
+
+function findRecordLowAlert(name, unit){
+  const nm = stockNormName(name), u = String(unit || 'pcs').trim().toLowerCase();
+  if(!nm) return 0;
+  const r = getStockList().find(x => stockNormName(x.itemName) === nm && String(x.unit || 'pcs').trim().toLowerCase() === u);
+  return r && Number(r.lowAlert) > 0 ? Number(r.lowAlert) : 0;
+}
+function scanSaleRowsHTML(idx){
+  const it = stockScanParsedItems[idx];
+  const rows = (it.sales && it.sales.length) ? it.sales : [{ price: 0, unit: '' }];
+  return rows.map((p, k) => `<div class="price-unit-row"><input type="number" step="any" inputmode="decimal" class="scan-in" placeholder="0" value="${Number(p.price) > 0 ? scanEsc(p.price) : ''}" oninput="scanSaleTouched(${idx})" onkeydown="handlePriceUnitEnter(event)"><button type="button" class="unit-pick-btn" data-unit="${scanEsc(p.unit)}" data-scan-sale="${idx}" onclick="openUnitMenu(this)">${p.unit ? scanEsc(p.unit) : 'Unit'}<span class="arr">↕</span></button>${rows.length > 1 ? `<button type="button" class="sale-remove-btn" onclick="removeScanSaleRow(${idx}, ${k})">×</button>` : ''}</div>`).join('');
+}
+function scanRerenderSale(idx){
+  const it = stockScanParsedItems[idx];
+  const box = document.getElementById('scanSaleRows' + idx);
+  if(box) box.innerHTML = scanSaleRowsHTML(idx);
+  const tag = document.getElementById('scanSaleTag' + idx);
+  if(tag) tag.textContent = it.saleFromRecord ? '· Record se liya' : '';
+}
+function scanSaleTouched(idx){
+  const it = stockScanParsedItems[idx];
+  if(it){ it.saleTouched = true; it.saleFromRecord = false; const tag = document.getElementById('scanSaleTag' + idx); if(tag) tag.textContent = ''; }
+}
+function scanLowTouched(idx){ const it = stockScanParsedItems[idx]; if(it) it.lowTouched = true; }
+function addScanSaleRow(idx){
+  syncStockScanFromDOM();
+  const it = stockScanParsedItems[idx]; if(!it) return;
+  it.sales = (it.sales || []).concat([{ price: 0, unit: '' }]);
+  it.saleTouched = true; it.saleFromRecord = false;
+  scanRerenderSale(idx);
+}
+function removeScanSaleRow(idx, k){
+  syncStockScanFromDOM();
+  const it = stockScanParsedItems[idx]; if(!it) return;
+  it.sales.splice(k, 1);
+  if(!it.sales.length) it.sales.push({ price: 0, unit: '' });
+  it.saleTouched = true; it.saleFromRecord = false;
+  scanRerenderSale(idx);
+}
+// Naam ya purchase unit badle to Record se Sale Price / Low Stock Alert dobara utha lo (jab tak user ne khud na bhara ho)
+function scanRecordRefresh(idx){
+  syncStockScanFromDOM();
+  const it = stockScanParsedItems[idx]; if(!it) return;
+  if(stockScanReviewMode !== 'scan'){ refreshStockScanRow(idx); return; }
+  if(!it.saleTouched){
+    const sp = findRecordSalePrices(it.itemName, it.unit);
+    it.sales = sp ? sp.map(p => ({ price: p.price, unit: p.unit })) : [{ price: 0, unit: '' }];
+    it.saleFromRecord = !!sp;
+    scanRerenderSale(idx);
+  }
+  if(!it.lowTouched){
+    it.lowAlert = findRecordLowAlert(it.itemName, it.unit) || 0;
+    const el = document.getElementById('scanLow' + idx);
+    if(el) el.value = it.lowAlert > 0 ? it.lowAlert : '';
+  }
+  refreshStockScanRow(idx);
+}
+
+function renderStockScanRows(){
+  const list = document.getElementById('stockScanReviewList');
+  if(!stockScanParsedItems.length){
+    list.innerHTML = '<div class="stock-scan-empty">Koi item auto-detect nahi hua. Neeche "+ Item add karein" dabakar bharein.</div>';
+    return;
+  }
+  stockScanParsedItems.forEach(it => {
+    if(it.recInit) return;
+    it.recInit = true;
+    // Only real "Scan Bill" mode should pull sale price/low alert from an
+    // existing stock record. AI price-update items already carry the AI's
+    // proposed new price, and billUnknown items are new to stock by
+    // definition (this lookup would just return nothing and zero them out).
+    if(stockScanReviewMode !== 'scan') return;
+    const sp = findRecordSalePrices(it.itemName, it.unit);
+    it.sales = sp ? sp.map(p => ({ price: p.price, unit: p.unit })) : [{ price: 0, unit: '' }];
+    it.saleFromRecord = !!sp;
+    it.lowAlert = findRecordLowAlert(it.itemName, it.unit) || 0;
+  });
+  list.innerHTML = stockScanParsedItems.map((it, idx) => `
+    <div class="scan-card" id="scanCard${idx}">
+      <div class="scan-card-top">
+        <span class="scan-sl">${idx + 1}.</span>
+        <label class="scan-inc"><input type="checkbox" id="scanInclude${idx}" ${it.include === false ? '' : 'checked'}> Add</label>
+        <span class="scan-badge" id="scanBadge${idx}"></span>
+        <button type="button" class="scan-del" onclick="removeStockScanRow(${idx})" aria-label="Row hatayein">✕</button>
+      </div>
+      <input type="text" class="scan-in" id="scanName${idx}" value="${scanEsc(it.itemName)}" placeholder="Item ka naam *" oninput="scanFieldEdited(${idx}, false)" onchange="scanRecordRefresh(${idx})">
+      <div style="margin-top:8px;">
+        <span class="scan-lbl" id="scanQtyLbl${idx}">Qty *</span>
+        <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanQty${idx}" value="${it.quantity == null ? '' : it.quantity}" placeholder="0" oninput="scanFieldEdited(${idx}, true)">
+      </div>
+      <div style="margin-top:8px;">
+        <span class="scan-lbl">Purchase Price (₹) / unit (bill ke hisaab se)</span>
+        <div class="price-unit-row">
+          <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanPrice${idx}" value="${it.rate == null ? '' : it.rate}" placeholder="0" oninput="scanFieldEdited(${idx}, true)" onkeydown="handlePriceUnitEnter(event)">
+          <button type="button" class="unit-pick-btn" id="scanUnitBtn${idx}" data-scan-idx="${idx}" data-unit="${scanEsc(it.unit)}" onclick="openUnitMenu(this)">${it.unit ? scanEsc(it.unit) : 'Unit'}<span class="arr">↕</span></button>
+        </div>
+      </div>
+      <div class="scan-total" id="scanTotal${idx}"></div>
+      <div style="margin-top:8px;">
+        <span class="scan-lbl">Sale Price (₹) <span id="scanSaleTag${idx}" style="color:#1a7a3e;">${it.saleFromRecord ? '· Record se liya' : ''}</span></span>
+        <div id="scanSaleRows${idx}">${scanSaleRowsHTML(idx)}</div>
+        <button type="button" class="add-sale-btn" onclick="addScanSaleRow(${idx})">+ Add another sale price (per kg / bag ...)</button>
+      </div>
+      <div style="margin-top:8px;">
+        <span class="scan-lbl">Low Stock Alert (Qty)</span>
+        <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanLow${idx}" value="${it.lowAlert > 0 ? it.lowAlert : ''}" placeholder="e.g. 5" oninput="scanLowTouched(${idx})">
+      </div>
+      ${it.src ? `<div class="scan-src">${it.srcNote ? '' : 'Scan text: '}${scanEsc(it.src)}</div>` : ''}
+    </div>`).join('');
+  stockScanParsedItems.forEach((_, i) => refreshStockScanRow(i));
+}
+
+function scanFieldEdited(idx, clearsCheck){
+  if(clearsCheck && stockScanParsedItems[idx]) stockScanParsedItems[idx].check = false;
+  refreshStockScanRow(idx);
+}
+
+function refreshStockScanRow(idx){
+  const it = stockScanParsedItems[idx];
+  if(!it) return;
+  const nameEl = document.getElementById('scanName' + idx), qtyEl = document.getElementById('scanQty' + idx), prEl = document.getElementById('scanPrice' + idx);
+  if(!nameEl) return;
+  const qty = parseFloat(qtyEl.value), price = parseFloat(prEl.value);
+  const missName = !nameEl.value.trim(), missQty = !(qty > 0), missPrice = !(price > 0);
+  nameEl.classList.toggle('scan-missing', missName);
+  qtyEl.classList.toggle('scan-missing', missQty);
+  prEl.classList.toggle('scan-missing', missPrice);
+  const unsure = !!it.check && !(missName || missQty || missPrice);
+  qtyEl.classList.toggle('scan-check', unsure);
+  prEl.classList.toggle('scan-check', unsure);
+  const missCount = (missName ? 1 : 0) + (missQty ? 1 : 0) + (missPrice ? 1 : 0);
+  const badge = document.getElementById('scanBadge' + idx);
+  const card = document.getElementById('scanCard' + idx);
+  card.classList.remove('st-ok', 'st-check', 'st-miss');
+  if(missCount){ badge.textContent = '❌ Adhura — laal box bharein'; card.classList.add('st-miss'); }
+  else if(unsure){ badge.textContent = '⚠️ Check karein'; card.classList.add('st-check'); }
+  else { badge.textContent = '✅ OK'; card.classList.add('st-ok'); }
+  const totEl = document.getElementById('scanTotal' + idx);
+  let t = '';
+  if(qty > 0 && price > 0) t = 'Total: ₹' + scanRound2(qty * price);
+  if(it.amount && qty > 0 && price > 0 && Math.abs(qty * price - it.amount) > Math.max(1, it.amount * 0.02)){
+    t += ` &nbsp;⚠️ Bill mein ₹${it.amount} likha tha`;
+  }
+  totEl.innerHTML = t;
+  const ub = document.getElementById('scanUnitBtn' + idx), ql = document.getElementById('scanQtyLbl' + idx);
+  if(ql) ql.textContent = 'Qty' + (ub && ub.dataset.unit ? ' (' + ub.dataset.unit + ')' : '') + ' *';
+}
+
+function syncStockScanFromDOM(){
+  stockScanParsedItems.forEach((it, idx) => {
+    const n = document.getElementById('scanName' + idx);
+    if(!n) return;
+    it.itemName = n.value.trim();
+    const q = parseFloat(document.getElementById('scanQty' + idx).value);
+    const p = parseFloat(document.getElementById('scanPrice' + idx).value);
+    it.quantity = isFinite(q) ? q : null;
+    it.rate = isFinite(p) ? p : null;
+    const ub = document.getElementById('scanUnitBtn' + idx);
+    it.unit = ub ? (ub.dataset.unit || '') : '';
+    const srows = document.querySelectorAll('#scanSaleRows' + idx + ' .price-unit-row');
+    if(srows.length){
+      it.sales = Array.from(srows).map(r => ({ price: parseFloat(r.querySelector('input').value) || 0, unit: (r.querySelector('.unit-pick-btn').dataset.unit || '') }));
+    }
+    const lowEl = document.getElementById('scanLow' + idx);
+    if(lowEl) it.lowAlert = parseFloat(lowEl.value) || 0;
+    it.include = document.getElementById('scanInclude' + idx).checked;
+  });
+}
+function addStockScanRow(){
+  syncStockScanFromDOM();
+  stockScanParsedItems.push({ include: true, itemName: '', quantity: null, unit: '', rate: null, amount: null, check: false, src: '' });
+  renderStockScanRows();
+  const last = document.getElementById('scanName' + (stockScanParsedItems.length - 1));
+  if(last){ last.scrollIntoView({ block: 'center' }); last.focus(); }
+}
+function removeStockScanRow(idx){
+  syncStockScanFromDOM();
+  stockScanParsedItems.splice(idx, 1);
+  renderStockScanRows();
+}
+
+function confirmStockScanReview(){
+  syncStockScanFromDOM();
+  const chosen = stockScanParsedItems.map((it, i) => ({ it, i })).filter(o => o.it.include !== false);
+  if(!chosen.length){ alert('Koi item select nahi hai.'); return; }
+  for(const { it, i } of chosen){
+    if(!it.itemName){
+      const el = document.getElementById('scanName' + i); el.scrollIntoView({ block: 'center' }); el.focus();
+      alert('Item #' + (i + 1) + ' ka naam bharein (ya uska "Add" untick karein).'); return;
+    }
+    if(!(it.quantity > 0)){
+      const el = document.getElementById('scanQty' + i); el.scrollIntoView({ block: 'center' }); el.focus();
+      alert('"' + it.itemName + '" ki Qty bharein (ya "Add" untick karein).'); return;
+    }
+  }
+  const noPrice = chosen.filter(o => !(o.it.rate > 0)).length;
+  if(noPrice && !confirm(noPrice + ' item(s) ka Purchase Price 0 hai. Aise hi add karein? (Baad mein Edit se bhar sakte hain)')) return;
+
+  const list = getStockList();
+  const touched = [];
+  const entryItems = [];
+  let mergedCount = 0;
+  chosen.forEach(({ it }, k) => {
+    const sales = (it.sales || []).filter(p => Number(p.price) > 0);
+    const qtyUnit = it.unit || ((sales.find(p => p.unit) || {}).unit) || 'pcs';
+    const salePrices = sales.length ? sales.map(p => ({ price: Number(p.price), unit: p.unit || qtyUnit })) : [{ price: 0, unit: qtyUnit }];
+    const newItem = {
+      id: 'stk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + k,
+      itemName: it.itemName,
+      quantity: it.quantity,
+      unit: qtyUnit,
+      purchasePrice: it.rate || 0,
+      salePrice: salePrices[0].price,
+      salePrices: salePrices,
+      lowAlert: Number(it.lowAlert) || 0,
+      createdAt: Date.now()
+    };
+    entryItems.push({
+      itemName: newItem.itemName,
+      quantity: newItem.quantity,
+      unit: newItem.unit,
+      purchasePrice: newItem.purchasePrice,
+      amount: newItem.quantity * newItem.purchasePrice
+    });
+    const dup = list.find(x => stockMergeKey(x) === stockMergeKey(newItem));
+    let target = newItem;
+    if(dup){
+      mergeStockInto(dup, newItem); target = dup; mergedCount++;
+      // Review mein jo Sale Price / Low Alert dikha wahi rahe (user ne badla ho to update)
+      if(sales.length){ dup.salePrices = newItem.salePrices; dup.salePrice = newItem.salePrice; }
+      if(newItem.lowAlert > 0) dup.lowAlert = newItem.lowAlert;
+    }
+    else list.push(newItem);
+    if(touched.indexOf(target) < 0) touched.push(target);
+  });
+  saveStockList(list);
+  touched.forEach(t => { if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(t).catch(err => console.warn('Firebase stock save failed:', err)); });
+  const supplierName = (document.getElementById('stockScanSupplier').value || '').trim();
+  logStockEntry(entryItems, supplierName);
+  closeStockScanReview();
+  renderStockList();
+  alert(chosen.length + ' item(s) process hue' + (mergedCount ? ' (' + mergedCount + ' pehle se maujud item mein jod diye gaye)' : '') + '. Sale Price baad mein "Edit" (pencil icon) se add kar sakte hain.');
+}
+
+// ---- Bill photo zoom / rotate (sideways photo ko seedha karke dekhne ke liye) ----
+function openStockScanZoom(){
+  if(!stockScanPreviewSrc) return;
+  stockScanZoomRot = 0;
+  document.getElementById('stockScanZoomImg').src = stockScanPreviewSrc;
+  document.getElementById('stockScanZoomOverlay').style.display = 'block';
+  applyStockScanZoomRot();
+}
+function rotateStockScanZoom(){ stockScanZoomRot = (stockScanZoomRot + 90) % 360; applyStockScanZoomRot(); }
+function closeStockScanZoom(){ document.getElementById('stockScanZoomOverlay').style.display = 'none'; }
+function applyStockScanZoomRot(){
+  const img = document.getElementById('stockScanZoomImg');
+  const sideways = stockScanZoomRot === 90 || stockScanZoomRot === 270;
+  img.style.width = sideways ? '100vh' : '100vw';
+  img.style.height = sideways ? '100vw' : '100vh';
+  img.style.transform = `translate(-50%,-50%) rotate(${stockScanZoomRot}deg)`;
+}
+
+// ---- AI Scan status label ----
+function updateStockAiBtn(){
+  const b = document.getElementById('stockAiSetupBtn');
+  if(b) b.textContent = geminiKeyReady() ? '🤖 AI Scan: ON (Gemini)' : '🤖 AI Scan: OFF — Gemini API key code mein daalni hai';
+}
+try { updateStockAiBtn(); } catch(e){}
 
 // ---------------- NEW BILL ----------------
 function startNewBill(){
@@ -2914,7 +6127,7 @@ function exportCustomerRecordsPDF(){
   function drawHeader(){
     pdf.setFontSize(15);
     pdf.setFont(undefined, 'bold');
-    pdf.text('Hamza Wholesaler & Retailer - Customer Record', pageWidth / 2, y, { align: 'center' });
+    pdf.text('Mittu Wholesaler & Retailer - Customer Record', pageWidth / 2, y, { align: 'center' });
     y += 7;
     pdf.setFontSize(9);
     pdf.setFont(undefined, 'normal');
@@ -2953,7 +6166,7 @@ function exportCustomerRecordsPDF(){
   });
 
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadPDF(pdf, `Hamza_Customer_Records_${stamp}.pdf`);
+  downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
 }
 
 // init
@@ -2962,6 +6175,8 @@ updateLiveClock();
 setInterval(updateLiveClock, 1000);
 generateRandomBillNo();
 addRow();
+attachCustNameAutofill();
+refreshCustNameSuggestions();
 </script>
 </body>
 </html>
