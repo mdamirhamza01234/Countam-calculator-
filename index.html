@@ -5101,12 +5101,30 @@ function applyCustomerScannedOrder(data){
 
 // Shopkeeper ka naya button: bharey hue bill ko check karta hai ki har item
 // Stock Record mein hai ya nahi. Agar koi item stock mein nahi hai to
-// popup dikhata hai aur rokta hai. Sab thik ho to Display par ek review-only
-// card bhej deta hai (Cash/Online buttons ke saath).
+// wahi "Add Selected to Stock" popup khulta hai jo AI se Bill Scan ke baad
+// bhi khulta hai (requestBillFinalAction / getUnknownBillItemsForReview) —
+// stock mein add hote hi ye khud Display par review card bhej deta hai. Sab
+// item pehle se stock mein hon to seedha bhej deta hai.
 function sendBillForCustomerReview(){
   const rows = Array.from(document.querySelectorAll('#itemsBody tr'));
+  const hasAnyItem = rows.some(tr => (tr.querySelector('.itemName')?.value || '').trim());
+  if(!hasAnyItem){
+    alert('Pehle bill mein items add karein (ya upar "AI se Bill Generate karein" / customer request se auto-fill karein).');
+    return;
+  }
+  if(typeof window.pushCustomerReviewCard !== 'function'){
+    alert('Display se connection abhi available nahi hai.');
+    return;
+  }
+  requestBillFinalAction('customerReview');
+}
+
+// Actual push to Display — sirf tab chalta hai jab bill ke saare items ya to
+// pehle se Stock Record mein hon, ya abhi-abhi (missing-item popup se) add
+// kiye ja chuke hon.
+function pushCustomerReviewCardFromBill(){
+  const rows = Array.from(document.querySelectorAll('#itemsBody tr'));
   const items = [];
-  const missing = [];
   let total = 0;
   rows.forEach(tr=>{
     const name = (tr.querySelector('.itemName')?.value || '').trim();
@@ -5117,22 +5135,8 @@ function sendBillForCustomerReview(){
     const amt = qty * rate;
     total += amt;
     items.push({ name, qty, unit, rate, amt: amt.toFixed(2) });
-    const inStock = getStockList().some(s => stockNormName(s.itemName) === stockNormName(name));
-    if(!inStock) missing.push(name);
   });
-
-  if(!items.length){
-    alert('Pehle bill mein items add karein (ya upar "AI se Bill Generate karein" / customer request se auto-fill karein).');
-    return;
-  }
-  if(missing.length){
-    alert('⚠️ Ye item(s) Stock Record mein nahi mile:\n\n' + missing.join('\n') + '\n\nPehle inhe Stock Record mein add karein ya naam sahi karein, uske baad hi Customer Display par bhej sakte hain.');
-    return;
-  }
-  if(typeof window.pushCustomerReviewCard !== 'function'){
-    alert('Display se connection abhi available nahi hai.');
-    return;
-  }
+  if(!items.length) return;
 
   const custName = document.getElementById('custName').value || '';
   const custMobile = document.getElementById('custMobile').value || '';
@@ -5146,22 +5150,71 @@ function sendBillForCustomerReview(){
 // ko alert milta hai. OK dabate hi payment "received" mark hota hai aur
 // bill normal tarike se finalize (PDF save, stock deduct, history) ho jaata
 // hai — bilkul jaise koi normal bill generate hota hai.
+//
+// NOTE: pehle yahan native confirm() use hota tha, lekin Firebase ke async
+// listener callback ke andar se WebView (Median/GoNative) mein confirm()
+// kabhi dikhta hi nahi tha — isliye shopkeeper ko pata hi nahi chalta tha
+// ki customer ne payment select kiya hai, aur Display "Payment confirm ho
+// raha hai..." par hamesha ke liye ruk jaata tha. Ab bilkul showCustomerRequestAlert
+// jaisa hi ek real in-app overlay use hota hai (sound + vibration ke saath),
+// jo har WebView mein reliably dikhta hai.
 function showCustomerPaymentAlert(data){
   const method = data.status === 'cash_selected' ? 'CASH' : 'ONLINE';
   const amount = data.total || '0';
   const who = data.custName || document.getElementById('custName').value || 'Customer';
-  const proceed = confirm('💰 ' + who + ' ne ' + method + ' payment select kiya hai.\nAmount: ₹' + amount + '\n\nPayment mil gaya hai? OK dabayen.');
-  if(!proceed) return;
 
-  if(typeof window.markCustomerPaymentReceived === 'function'){
-    window.markCustomerPaymentReceived(method, amount, who);
+  const old = document.getElementById('mittuLivePaymentAlert');
+  if(old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mittuLivePaymentAlert';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(0,0,0,.58);font-family:Arial,sans-serif;';
+  overlay.innerHTML = `
+    <div style="width:min(94vw,430px);background:#fff;border-radius:22px;padding:24px 20px 20px;box-shadow:0 18px 60px rgba(0,0,0,.35);text-align:center;animation:mittuLivePop .22s ease-out;">
+      <div style="font-size:44px;line-height:1;margin-bottom:10px;">💰</div>
+      <div style="font-size:23px;font-weight:800;color:#a04e00;margin-bottom:8px;">Payment Select Hua</div>
+      <div style="font-size:17px;font-weight:700;color:#222;line-height:1.4;">${_unitEsc(who)} ne <u>${_unitEsc(method)}</u> payment select kiya hai.</div>
+      <div style="font-size:26px;font-weight:900;color:#1b7a3e;margin-top:10px;">₹${_unitEsc(String(amount))}</div>
+      <div style="font-size:14px;color:#666;margin-top:8px;">Payment mil gaya hai?</div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button type="button" id="mittuLivePayCancel" style="flex:1;border:0;background:#f0f0f0;color:#444;border-radius:13px;padding:13px 10px;font-size:15px;font-weight:800;">Abhi Nahi</button>
+        <button type="button" id="mittuLivePayOk" style="flex:1;border:0;background:#1b7a3e;color:#fff;border-radius:13px;padding:13px 10px;font-size:16px;font-weight:800;">✅ Payment Mila</button>
+      </div>
+    </div>`;
+  if(!document.getElementById('mittuLiveCustomerAlertStyle')){
+    const st=document.createElement('style');
+    st.id='mittuLiveCustomerAlertStyle';
+    st.textContent='@keyframes mittuLivePop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}';
+    document.head.appendChild(st);
   }
+  document.body.appendChild(overlay);
+
+  try{ if(navigator.vibrate) navigator.vibrate([250,120,250,120,500]); }catch(e){}
   try{
-    generateBill(false); // save history, deduct stock, download PDF silently — same as a normal bill
-  }catch(e){
-    console.warn('Auto bill finalize after customer payment failed:', e);
-  }
-  // Display apne aap Thank You dikhakar kuch der baad welcome par wapas chala jaayega.
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){
+      const ctx=new AC();
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.value=880; g.gain.value=.045;
+      o.connect(g); g.connect(ctx.destination); o.start();
+      setTimeout(()=>{try{o.stop();ctx.close();}catch(e){}},420);
+    }
+  }catch(e){}
+
+  const close=()=>{ const el=document.getElementById('mittuLivePaymentAlert'); if(el) el.remove(); };
+  document.getElementById('mittuLivePayCancel').onclick = close;
+  document.getElementById('mittuLivePayOk').onclick = () => {
+    close();
+    if(typeof window.markCustomerPaymentReceived === 'function'){
+      window.markCustomerPaymentReceived(method, amount, who);
+    }
+    try{
+      generateBill(false); // save history, deduct stock, download PDF silently — same as a normal bill
+    }catch(e){
+      console.warn('Auto bill finalize after customer payment failed:', e);
+    }
+    // Display apne aap Thank You dikhakar kuch der baad welcome par wapas chala jaayega.
+  };
 }
 
 
@@ -5278,6 +5331,7 @@ function runPendingBillFinalAction(action){
   if(action==='upi') return generateUPIQR();
   if(action==='thermal') return printThermalBill();
   if(action==='whatsapp') return sendWhatsApp();
+  if(action==='customerReview') return pushCustomerReviewCardFromBill();
   return generateBill();
 }
 
