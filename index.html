@@ -499,6 +499,16 @@
       .catch(err => console.warn('Firebase customer review push failed:', err));
   };
 
+  // AI extraction failed on the Mittu phone (e.g. bad/expired AI key, no
+  // internet, etc). Without this, the Display side has no way of knowing
+  // anything went wrong and keeps showing "Thodi der intezaar karein"
+  // forever. Pushing status:'error' lets the Display stop spinning and
+  // show a retry message instead.
+  window.pushCustomerRequestError = function(message){
+    return update(customerReqRef, { status: 'error', errorMessage: message || 'AI se bill fill nahi ho paya.', ts: Date.now() })
+      .catch(err => console.warn('Firebase customer error push failed:', err));
+  };
+
   // Shopkeeper confirms the customer's Cash/Online payment was received.
   window.markCustomerPaymentReceived = function(method, amount, custName){
     return update(customerReqRef, { status: 'completed', paymentMethod: method, paidAmount: amount, custName: custName || '', ts: Date.now() })
@@ -4596,11 +4606,12 @@ async function scanOcr(canvas, lang, label){
 }
 
 // ---- AI Vision (Google Gemini) ----
-// >>> GEMINI API KEY (Google AI Studio 'AQ.' auth key) — badalni ho to sirf neeche wali line badlein <<<
-const GEMINI_API_KEY = 'AQ.Ab8RN6LD1zEnym0E4esf9ti0ZyXI1--oemewuwOeawO-w__dwQ';
+// Gemini API key ab is file mein NAHI hai — server-side /api/gemini proxy
+// (api-proxy/api/gemini.js) mein Vercel Environment Variable se aati hai.
+// Isse browser ke "View Source" mein key kabhi nahi dikhegi.
 // Pehla model try hota hai; na chale (naam badal gaya / quota / busy) to agla try hota hai.
 const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
-function geminiKeyReady(){ return !!GEMINI_API_KEY && !/^PASTE_/i.test(GEMINI_API_KEY); }
+function geminiKeyReady(){ return true; } // key ab server (/api/gemini) sambhalta hai
 
 function buildScanAiPrompt(stockNames){
   let p =
@@ -4649,9 +4660,9 @@ async function scanRunAi(sources){
   for(const model of GEMINI_MODELS){
     let resp;
     try {
-      resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+      resp = await fetch('/api/gemini?model=' + encodeURIComponent(model), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        headers: { 'content-type': 'application/json' },
         body
       });
     } catch(e){ throw new Error('Internet / network problem'); }
@@ -4789,8 +4800,8 @@ async function aiBillCall(contents){
   for(const model of GEMINI_MODELS){
     let resp;
     try{
-      resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
-        method:'POST',headers:{'content-type':'application/json','x-goog-api-key':GEMINI_API_KEY},body
+      resp=await fetch('/api/gemini?model='+encodeURIComponent(model),{
+        method:'POST',headers:{'content-type':'application/json'},body
       });
     }catch(e){ lastErr='Internet / network problem'; continue; }
     if(resp.ok){
@@ -5068,7 +5079,13 @@ async function runCustomerAiBillGenerator(data){
     alert('✅ Bill fields Customer ki request se auto-fill ho gaye hain. Check/edit karke "Customer Display par Review ke liye Bhejein" button dabayen.');
   }catch(err){
     console.error('Customer AI bill generation failed:', err);
-    alert('❌ Customer ka bill AI se fill nahi ho paya: ' + ((err && err.message) || err));
+    const errMsg = (err && err.message) || String(err);
+    alert('❌ Customer ka bill AI se fill nahi ho paya: ' + errMsg);
+    // Tell the Display so it stops spinning "Thodi der intezaar karein"
+    // forever and shows an error / retry message to the customer instead.
+    if(typeof window.pushCustomerRequestError === 'function'){
+      window.pushCustomerRequestError(errMsg);
+    }
   }
 }
 
@@ -5455,9 +5472,9 @@ async function aiAdvisorFetchStream(body, onChunk){
   for(const model of GEMINI_MODELS){
     let resp;
     try {
-      resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?alt=sse', {
+      resp = await fetch('/api/gemini?model=' + encodeURIComponent(model) + '&stream=1', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        headers: { 'content-type': 'application/json' },
         body
       });
     } catch(e){ lastErr = 'Internet / network problem'; continue; }
@@ -5583,9 +5600,9 @@ async function aiAdvisorSend(){
       for(const model of GEMINI_MODELS){
         let resp;
         try {
-          resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+          resp = await fetch('/api/gemini?model=' + encodeURIComponent(model), {
             method: 'POST',
-            headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+            headers: { 'content-type': 'application/json' },
             body
           });
         } catch(e){ lastErr = 'Internet / network problem'; continue; }
