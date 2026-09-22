@@ -18,7 +18,7 @@
 <script type="module">
   // ---------------- FIREBASE (syncs the QR to the old-phone display) ----------------
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, update, remove, get, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, update, remove, get, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -491,6 +491,22 @@
     console.error('Firebase customerRequest listener failed:', error);
     window.__customerRequestListenerError = error;
   });
+
+  // Customer ka naya order Mittu phone par pahuchte hi turant "seen" likhte
+  // hain, taaki Display par "Thodi der intezaar karein" ki jagah "Dukaandar
+  // tak pahuch chuka hai" dikhe — customer ko real-time bharosa milta hai.
+  window.markCustomerRequestSeen = function(){
+    return update(customerReqRef, { status: 'seen', ts: Date.now() })
+      .catch(err => console.warn('Firebase customer seen push failed:', err));
+  };
+
+  // Bill fields auto-fill ho jaane ke baad "reviewing" likhte hain — Display
+  // par "Item Review ho raha hai" dikhta hai jab tak dukaandar check karke
+  // Review card bhej nahi deta.
+  window.markCustomerRequestReviewing = function(){
+    return update(customerReqRef, { status: 'reviewing', ts: Date.now() })
+      .catch(err => console.warn('Firebase customer reviewing push failed:', err));
+  };
 
   // Shopkeeper approves the auto-filled bill -> send a review-only card to
   // the Display, with Cash/Online buttons for the customer.
@@ -4980,6 +4996,11 @@ window.handleCustomerRequestUpdate = function(data){
   if(!data) return;
   if(data.status === 'new' && data.ts && data.ts !== processedCustomerReqTs){
     processedCustomerReqTs = data.ts;
+    // Turant customer ko batao ki order Mittu phone tak pahuch chuka hai,
+    // fields fill hone ka intezaar kiye bina — real-time acknowledgement.
+    if(typeof window.markCustomerRequestSeen === 'function'){
+      window.markCustomerRequestSeen();
+    }
     applyCustomerScannedOrder(data);
   } else if((data.status === 'cash_selected' || data.status === 'online_selected') && data.ts && data.ts !== processedCustomerPayTs){
     processedCustomerPayTs = data.ts;
@@ -5062,6 +5083,10 @@ function applyCustomerScannedOrder(data){
       address: data.customerAddress || data.address || '',
       items: items
     });
+    // Fields fill ho gaye — ab dukaandar review kar raha hai, Display ko batao.
+    if(typeof window.markCustomerRequestReviewing === 'function'){
+      window.markCustomerRequestReviewing();
+    }
     showCustomerRequestAlert(data);
   }catch(err){
     console.error('Applying customer scanned order failed:', err);
