@@ -4967,20 +4967,20 @@ setTimeout(attachAiBillCustomerNavigation,0);
 // CUSTOMER SELF-SERVICE "AI SE BILL" — Display se aane wale requests
 // ==================================================================
 // Customer, Display (purana phone) par khud apna order (text/photo) bhejta
-// hai. Wo yahan customerRequest node mein status:'new' ban kar aata hai.
-// Yeh phone (Mittu) alert deta hai, OK dabane par wahi AI extraction chalti
-// hai jo "AI se Bill Generate karein" button chalata hai (apne live Stock
-// Record ke saath), shopkeeper check karta hai, phir Display par review
-// card bhejta hai jisme customer Cash/Online payment choose karta hai.
+// hai. AI scan Display par hi ho chuka hota hai (items/qty/unit already
+// nikale hue) — is phone (Mittu) ko koi AI call nahi karni padti, bas
+// stock se rate match karke fields turant fill ho jaate hain. Shopkeeper
+// check karta hai, phir Display par review card bhejta hai jisme customer
+// Cash/Online payment choose karta hai.
 
-let processedCustomerReqTs = 0;   // last 'new' request already alerted
+let processedCustomerReqTs = 0;   // last 'new' request already applied
 let processedCustomerPayTs = 0;   // last payment-selection already alerted
 
 window.handleCustomerRequestUpdate = function(data){
   if(!data) return;
   if(data.status === 'new' && data.ts && data.ts !== processedCustomerReqTs){
     processedCustomerReqTs = data.ts;
-    showCustomerRequestAlert(data);
+    applyCustomerScannedOrder(data);
   } else if((data.status === 'cash_selected' || data.status === 'online_selected') && data.ts && data.ts !== processedCustomerPayTs){
     processedCustomerPayTs = data.ts;
     showCustomerPaymentAlert(data);
@@ -4996,10 +4996,10 @@ setTimeout(() => {
   }
 }, 0);
 
-// Shopkeeper ko batata hai ki customer ne khud Bill bheja hai. Browser/WebView
-// mein Firebase ke async callback se confirm() kabhi-kabhi visible nahi hota,
-// isliye ab ek real in-app live alert use hota hai. Iske saath sound + vibration
-// bhi trigger hota hai jab device support kare.
+// Shopkeeper ko batata hai ki customer ne khud Bill bheja hai aur fields
+// fill ho gaye hain. Browser/WebView mein Firebase ke async callback se
+// confirm() kabhi-kabhi visible nahi hota, isliye ek real in-app live alert
+// use hota hai. Iske saath sound + vibration bhi trigger hota hai.
 function showCustomerRequestAlert(data){
   const who = data.customerName ? data.customerName : 'Ek Customer';
   const old = document.getElementById('mittuLiveCustomerAlert');
@@ -5013,10 +5013,9 @@ function showCustomerRequestAlert(data){
       <div style="font-size:44px;line-height:1;margin-bottom:10px;">📩</div>
       <div style="font-size:23px;font-weight:800;color:#a04e00;margin-bottom:8px;">New Bill Entry</div>
       <div style="font-size:17px;font-weight:700;color:#222;line-height:1.4;">${_unitEsc(who)} ne Customer Display se apna Bill bheja hai.</div>
-      <div style="font-size:14px;color:#666;margin-top:8px;">OK dabate hi AI bill fields automatically fill karega.</div>
+      <div style="font-size:14px;color:#666;margin-top:8px;">Bill fields fill ho gaye hain — check karke bhejein.</div>
       <div style="display:flex;gap:10px;margin-top:20px;">
-        <button type="button" id="mittuLiveAlertLater" style="flex:1;border:1px solid #c9c9c9;background:#fff;border-radius:13px;padding:13px 10px;font-size:16px;font-weight:700;color:#555;">Later</button>
-        <button type="button" id="mittuLiveAlertOk" style="flex:1;border:0;background:#a04e00;color:#fff;border-radius:13px;padding:13px 10px;font-size:16px;font-weight:800;">OK — Bill Entry</button>
+        <button type="button" id="mittuLiveAlertOk" style="flex:1;border:0;background:#a04e00;color:#fff;border-radius:13px;padding:13px 10px;font-size:16px;font-weight:800;">OK</button>
       </div>
     </div>`;
   if(!document.getElementById('mittuLiveCustomerAlertStyle')){
@@ -5040,47 +5039,33 @@ function showCustomerRequestAlert(data){
   }catch(e){}
 
   const close=()=>{ const el=document.getElementById('mittuLiveCustomerAlert'); if(el) el.remove(); };
-  document.getElementById('mittuLiveAlertLater').onclick=close;
-  document.getElementById('mittuLiveAlertOk').onclick=()=>{
-    close();
-    runCustomerAiBillGenerator(data);
-  };
+  document.getElementById('mittuLiveAlertOk').onclick=close;
+  // Auto-dismiss on its own too, in case the shopkeeper is mid-task and
+  // never gets to tap OK — it's just a notice, nothing is waiting on it.
+  setTimeout(close, 8000);
 }
 
-// Customer ki request (text + optional photo, base64) ko wahi AI pipeline
-// se guzarta hai jo runAiBillGenerator() use karta hai (same system prompt,
-// same live Stock Record context), phir wahi aiBillApplyResult() se bill
-// fields fill karta hai — bilkul jaise shopkeeper khud "AI se Bill
-// Generate karein" dabakar karta hai.
-async function runCustomerAiBillGenerator(data){
+// Display ne already AI se items/qty/unit nikaal kar bheje hain (koi rate
+// nahi — stock-match yahan is phone ke apne live Stock Record se hota hai,
+// bilkul waise hi jaise aiBillApplyResult normally karta hai). Ye pure
+// local hai, koi network/AI call nahi — isliye turant aur reliably chalta
+// hai, chahe internet dheema ho ya AI service down ho.
+function applyCustomerScannedOrder(data){
   try{
-    const parts = [];
-    if(data.requestText) parts.push({text:'Customer ne Display se ye instructions bheji hain:\n'+data.requestText});
-    if(data.customerName) parts.push({text:'Customer ka naam (agar upar text mein na ho to yahi use karo): '+data.customerName});
-    if(data.customerMobile) parts.push({text:'Customer ka mobile (agar upar text mein na ho to yahi use karo): '+data.customerMobile});
-    if(Array.isArray(data.files)){
-      data.files.forEach(f=>{
-        if(!f || !f.data) return;
-        if(f.mimeType && f.mimeType.startsWith('image/')){
-          parts.push({inline_data:{mime_type:f.mimeType, data:f.data}});
-          parts.push({text:'Upar di gayi photo customer ne Display se apne order ke liye bheji hai, ise padhkar items nikalo.'});
-        } else if(f.mimeType && f.mimeType.startsWith('text/')){
-          try{ parts.push({text:'Customer ki bheji hui text file:\n'+decodeURIComponent(escape(atob(f.data)))}); }catch(e){}
-        }
-      });
+    const items = Array.isArray(data.items) ? data.items : [];
+    if(!items.length){
+      throw new Error('Customer ne koi item nahi bheja tha.');
     }
-    if(!parts.length){
-      alert('Customer ne koi detail nahi bheji thi.');
-      return;
-    }
-    aiBillSetStatus && aiBillSetStatus('Customer ki request se AI bill fields nikaal raha hai...');
-    const resultData = await aiBillCall(parts);
-    aiBillApplyResult(resultData);
-    alert('✅ Bill fields Customer ki request se auto-fill ho gaye hain. Check/edit karke "Customer Display par Review ke liye Bhejein" button dabayen.');
+    aiBillApplyResult({
+      customerName: data.customerName || '',
+      mobile: data.customerMobile || data.mobile || '',
+      address: data.customerAddress || data.address || '',
+      items: items
+    });
+    showCustomerRequestAlert(data);
   }catch(err){
-    console.error('Customer AI bill generation failed:', err);
+    console.error('Applying customer scanned order failed:', err);
     const errMsg = (err && err.message) || String(err);
-    alert('❌ Customer ka bill AI se fill nahi ho paya: ' + errMsg);
     // Tell the Display so it stops spinning "Thodi der intezaar karein"
     // forever and shows an error / retry message to the customer instead.
     if(typeof window.pushCustomerRequestError === 'function'){
