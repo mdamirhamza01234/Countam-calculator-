@@ -18,7 +18,7 @@
 <script type="module">
   // ---------------- FIREBASE (syncs the QR to the old-phone display) ----------------
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, update, remove, get, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, update, remove, get, set, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged, signOut, deleteUser, signInWithEmailAndPassword, createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -534,6 +534,18 @@
   // Clears the customer-request flow entirely (back to Display welcome screen).
   window.clearCustomerRequest = function(){
     return remove(customerReqRef).catch(err => console.warn('Firebase clear customerRequest failed:', err));
+  };
+
+  // ---------------- STAFF DISPLAY (Mittu phone -> Staff phone/tablet) ----------------
+  // Mittu ke button dabate hi bill ke items ki ek nayi "order card" yahan
+  // push hoti hai. Ye list (ek se zyada cards) hai isliye push() se har
+  // order ko apna unique key milta hai — staff-display.html isi node ko
+  // sunta rehta hai aur naye order upar, purane niche dikhata hai.
+  const staffOrdersRef = ref(fbDb, 'staffOrders');
+  window.pushOrderToStaff = function(payload){
+    const newRef = push(staffOrdersRef);
+    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))
+      .catch(err => console.warn('Firebase push to staff failed (staff display may be offline):', err));
   };
 </script>
 <style>
@@ -1765,9 +1777,6 @@
     <button type="button" class="ai-bill-generate-btn ai-bill-top-btn" onclick="openAiBillGenerator()">
       <span class="ai-bill-spark">✦</span> AI se Bill Generate karein
     </button>
-    <button type="button" class="ai-bill-generate-btn ai-bill-top-btn" style="background:#0d6e4e; margin-top:8px;" onclick="sendBillForCustomerReview()">
-      <span class="ai-bill-spark">📤</span> Customer Display par Review ke liye Bhejein
-    </button>
     <h2>Customer &amp; Bill Details</h2>
     <div class="grid2">
       <div class="field">
@@ -1810,6 +1819,15 @@
     </table>
     <button class="add-row-btn" onclick="addRow()">+ Add Row</button>
     <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
+  </div>
+
+  <div class="two-col-btn-row" style="display:flex; gap:10px; margin:14px 0 0;">
+    <button type="button" class="ai-bill-generate-btn" style="background:#0d6e4e; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendBillForCustomerReview()">
+      <span class="ai-bill-spark">📤</span> Customer Review ke liye Bhejein
+    </button>
+    <button type="button" class="ai-bill-generate-btn" style="background:#a04e00; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendListToStaff()">
+      <span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein
+    </button>
   </div>
 
   <button class="upi-btn" onclick="requestBillFinalAction('upi')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> Generate UPI Payment QR (Full Screen)</button>
@@ -3449,6 +3467,120 @@ function switchToStockView(){
 // ---------------- BILL <-> STOCK CONNECTION ----------------
 function stockNormName(n){ return String(n||'').trim().toLowerCase().replace(/\s+/g,' '); }
 
+// ---------------- SMART STOCK NAME MATCHING ----------------
+// Customer/staff kabhi "Aalu", kabhi "Alu", kabhi "Allu", kabhi English mein
+// "Potato" ya usme bhi typo "Potata" likh sakta hai — sab ek hi cheez hai.
+// Ye neeche wala matcher un sab ko Stock Record ke pehle se maujood usi ek
+// item se jod deta hai, taaki har spelling variation se Stock Record mein
+// alag-alag duplicate entries na bane.
+
+// Chhota-mota typo (1-2 letters idhar-udhar) allow karne ke liye simple
+// edit-distance (Levenshtein).
+function _stockLevenshtein(a, b){
+  a = String(a); b = String(b);
+  const m = a.length, n = b.length;
+  if(!m) return n;
+  if(!n) return m;
+  const dp = new Array(n + 1);
+  for(let j = 0; j <= n; j++) dp[j] = j;
+  for(let i = 1; i <= m; i++){
+    let prev = dp[0];
+    dp[0] = i;
+    for(let j = 1; j <= n; j++){
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+// Naam ko aur "loose" bana dete hain: sirf letters/numbers/Devanagari rakho,
+// aur laga-taar repeat hone wale letters ek kar do — isse "Aalu", "Allu",
+// "Aaloo", "Alu" sab bahut kareeb ho jaate hain, spelling kuch bhi ho.
+function stockLooseNorm(n){
+  return String(n || '')
+    .trim().toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097F]+/g, '')
+    .replace(/(.)\1+/g, '$1');
+}
+
+// Roz-mar ke kirana/grocery items ke common naam/spelling variants + English
+// translation — isse "potata" (potato) seedha "Aalu" se match ho jaata hai,
+// chahe letters bilkul alag hon. Zaroorat ho to naye group yahan jod sakte
+// hain (har group ek hi cheez ke alag-alag naam hain).
+const STOCK_SYNONYM_GROUPS = [
+  ['aalu','aaloo','alu','allu','aalo','potato','potatoes','potata','patato'],
+  ['pyaaz','pyaz','pyau','kanda','onion','onions'],
+  ['tamatar','tamater','tomato','tomatoes'],
+  ['chawal','chaval','rice'],
+  ['gehu','gehun','atta','wheat'],
+  ['maida','flour'],
+  ['dal','daal','lentil','lentils','pulses'],
+  ['adrak','adarak','ginger'],
+  ['lahsun','lehsun','lasun','garlic'],
+  ['mirch','mirchi','chilli','chili','chillies'],
+  ['dhaniya','coriander','cilantro'],
+  ['haldi','turmeric'],
+  ['namak','salt'],
+  ['cheeni','chini','shakkar','sugar'],
+  ['doodh','dudh','milk'],
+  ['anda','ande','egg','eggs'],
+  ['nimbu','nimboo','lemon','lemons'],
+  ['gobhi','gobi','phoolgobhi','cauliflower'],
+  ['bhindi','okra','ladyfinger'],
+  ['baingan','brinjal','eggplant'],
+  ['ghee','clarifiedbutter'],
+  ['tel','oil'],
+  ['sabun','soap'],
+  ['biscuit','biscuits','biskut'],
+  ['chai','tea','chaipatti']
+];
+const _stockSynonymIndex = new Map();
+STOCK_SYNONYM_GROUPS.forEach((group, gi) => {
+  group.forEach(word => _stockSynonymIndex.set(stockLooseNorm(word), gi));
+});
+function stockSynonymGroup(name){
+  const idx = _stockSynonymIndex.get(stockLooseNorm(name));
+  return idx == null ? null : idx;
+}
+
+// Sabse zaroori function: bill/customer ke likhe hue kisi bhi naam (jaise
+// "allu", "alu", "potata") ke liye Stock Record mein sahi item dhoondhta
+// hai — pehle exact naam, fir jaani-pehchani spelling/language variants,
+// fir chhota-mota typo (edit distance) allow karke. Kuch na mile to null.
+function smartFindStock(name, list){
+  list = list || getStockList();
+  const exactKey = stockNormName(name);
+  if(!exactKey) return null;
+
+  // 1) Bilkul same naam
+  let hit = list.find(s => stockNormName(s.itemName) === exactKey);
+  if(hit) return hit;
+
+  // 2) Jaani-pehchani spelling / language variants (potato <-> aalu, etc.)
+  const group = stockSynonymGroup(name);
+  if(group != null){
+    hit = list.find(s => stockSynonymGroup(s.itemName) === group);
+    if(hit) return hit;
+  }
+  const looseKey = stockLooseNorm(name);
+  hit = list.find(s => stockLooseNorm(s.itemName) === looseKey);
+  if(hit) return hit;
+
+  // 3) Chhota-mota typo (1-2 letters idhar-udhar) — sirf tab jab naam kaafi
+  // milta-julta ho, taaki bilkul alag items galti se match na ho jaayein.
+  let best = null, bestDist = Infinity;
+  list.forEach(s => {
+    const sn = stockLooseNorm(s.itemName);
+    if(!sn) return;
+    const dist = _stockLevenshtein(looseKey, sn);
+    const threshold = (looseKey.length <= 4 || sn.length <= 4) ? 1 : 2;
+    if(dist <= threshold && dist < bestDist){ bestDist = dist; best = s; }
+  });
+  return best;
+}
+
 function showStockToast(msg, isWarn){
   let t = document.getElementById('stockToast');
   if(!t){
@@ -3474,7 +3606,7 @@ function deductStockForBill(items){
     const key = stockNormName(it.name);
     const qty = Number(it.qty) || 0;
     if(!key || qty <= 0) return;
-    const stock = list.find(s => stockNormName(s.itemName) === key);
+    const stock = smartFindStock(it.name, list);
     if(!stock) return;
     const bu = String(it.unit || '').trim().toLowerCase();
     const su = String(stock.unit || '').trim().toLowerCase();
@@ -3599,12 +3731,15 @@ function attachStockAutofill(tr){
       }, 30);
     });
   }
-  const findStock = () => {
-    const key = stockNormName(nameInput.value);
-    return getStockList().find(s => stockNormName(s.itemName) === key);
-  };
+  const findStock = () => smartFindStock(nameInput.value);
   nameInput.addEventListener('change', () => {
     const stock = findStock();
+    if(stock && stockNormName(stock.itemName) !== stockNormName(nameInput.value)){
+      // Alag spelling mein likha tha (jaise "Alu"/"Potata") — Stock Record
+      // ke sahi/maujooda naam se match ho gaya, isliye box mein wahi naam
+      // dikhega taaki Stock Record mein duplicate item na bane.
+      nameInput.value = stock.itemName;
+    }
     if(!stock){
       const saved = autoSaveUnknownBillItem(nameInput.value, rateInput.value, unitInput ? unitInput.value : 'pcs');
       // Naye item ke liye bill mein jo rate/unit diya hai wahi Stock Record mein save hoga.
@@ -4768,7 +4903,11 @@ function aiBillStockMatch(name, stockMatch){
   if(hit) return hit;
   // AI usually supplies stock_match; fallback exact item name is useful for short/manual prompts.
   hit = list.find(x => aiBillNormalize(x.itemName) === aiBillNormalize(name));
-  return hit || null;
+  if(hit) return hit;
+  // Spelling/language variants aur chhote typo bhi try karo (jaise customer
+  // Display se "potata" aaya ho aur Stock Record mein "Aalu" ho) — isse
+  // Stock Record mein galti se duplicate item nahi banta.
+  return smartFindStock(stockMatch || name, list) || smartFindStock(name, list);
 }
 function aiBillRateFromStock(stock, unit){
   if(!stock) return null;
@@ -4799,9 +4938,10 @@ Rules:
 1. Customer name, 10-digit mobile aur address ko alag fields mein nikalo.
 2. Items mein sirf beche ja rahe items nikalo; dukaan ka naam, date, bill no, total, GST ko item mat banao.
 3. Qty aur unit ko alag karo. "5kg aalu" => qty 5, unit "kg", name "aalu".
-4. Agar exact stock item milta hai to stock_match mein uska naam BILKUL stock list jaisa likho. Translation/spelling variation (potato/aalu, rice/chawal) ko match kar sakte ho, lekin alag item ko match mat karo.
-5. Agar qty/rate document mein nahi hai to null rakho; andaza mat lagao.
-6. Mobile mein sirf 10 digits do.
+4. Unit ko HAMESHA in standard tokens mein normalize karo: kg, g, pkt, bag, box, ltr, dozen, qtl, pcs. Photo/text mein unit chahe kisi bhi spelling, short-form, Hindi/Hinglish, ya plural mein likha ho, uska meaning dekh kar sahi standard token pick karo — jaise "kilo/किलो/kg./kgs" => kg, "gram/gm/ग्राम/grams" => g, "packet/pkt./पैकेट/pkts" => pkt, "boriya/बोरी/बैग/bags" => bag, "dabba/डिब्बा/बॉक्स/boxes" => box, "litre/liter/लीटर/ltrs" => ltr, "darjan/दर्जन" => dozen, "quintal/क्विंटल" => qtl, "piece/pc/nag/नग/पीस/pieces" => pcs. Agar koi unit list mein fit na ho to jo likha hai wahi rakho.
+5. Agar exact stock item milta hai to stock_match mein uska naam BILKUL stock list jaisa likho. Translation/spelling variation (potato/aalu, rice/chawal) ko match kar sakte ho, lekin alag item ko match mat karo.
+6. Agar qty/rate document mein nahi hai to null rakho; andaza mat lagao.
+7. Mobile mein sirf 10 digits do.
 CURRENT STOCK RECORD:
 ${aiBillStockContext()}`;
 }
@@ -5146,6 +5286,51 @@ function pushCustomerReviewCardFromBill(){
   alert('✅ Bill Customer Display par review ke liye bhej diya gaya hai. Customer ab Cash ya Online payment choose kar sakta hai.');
 }
 
+// ---------------- SEND SAMAN LIST TO STAFF DISPLAY ----------------
+// Mittu apne phone par ye button dabata hai to bill mein abhi tak jo items
+// bhare hain unki ek "order card" Staff ke display (staff-display.html) par
+// bhej di jaati hai. Staff card kholkar har item ke saamne tick lagata hai
+// jaise-jaise saman uthata hai.
+function sendListToStaff(){
+  const rows = Array.from(document.querySelectorAll('#itemsBody tr'));
+  const hasAnyItem = rows.some(tr => (tr.querySelector('.itemName')?.value || '').trim());
+  if(!hasAnyItem){
+    alert('Pehle bill mein items add karein (jo saman staff ko laana hai).');
+    return;
+  }
+  if(typeof window.pushOrderToStaff !== 'function'){
+    alert('Staff Display se connection abhi available nahi hai.');
+    return;
+  }
+
+  const items = [];
+  let total = 0;
+  rows.forEach(tr => {
+    const name = (tr.querySelector('.itemName')?.value || '').trim();
+    if(!name) return;
+    const qty = parseFloat(tr.querySelector('.itemQty')?.value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate')?.value) || 0;
+    const unit = (tr.querySelector('.itemUnit')?.value || '').trim() || 'pcs';
+    const amt = qty * rate;
+    total += amt;
+    items.push({ name, qty, unit, rate, amt: amt.toFixed(2) });
+  });
+  if(!items.length) return;
+
+  const custName = document.getElementById('custName').value.trim() || 'Customer';
+  const billNo = document.getElementById('sno').value || '';
+
+  window.pushOrderToStaff({
+    custName,
+    billNo,
+    totalItems: items.length,
+    totalAmount: total.toFixed(2),
+    items
+  });
+
+  alert('✅ Saman ki list Staff ke Display par bhej di gayi hai.');
+}
+
 // Customer ne Display par Cash ya Online payment button dabaya — shopkeeper
 // ko alert milta hai. OK dabate hi payment "received" mark hota hai aur
 // bill normal tarike se finalize (PDF save, stock deduct, history) ho jaata
@@ -5293,12 +5478,19 @@ function getUnknownBillItemsForReview(){
   const stock = getStockList();
   const map = new Map();
   document.querySelectorAll('#itemsBody tr').forEach(tr => {
-    const name = String(tr.querySelector('.itemName')?.value || '').trim();
+    const nameInput = tr.querySelector('.itemName');
+    const name = String(nameInput?.value || '').trim();
     const rate = Number(tr.querySelector('.itemRate')?.value || 0);
     const unit = String(tr.querySelector('.itemUnit')?.value || 'pcs').trim() || 'pcs';
     if(!name) return;
-    const exists = stock.some(s => stockNormName(s.itemName) === stockNormName(name));
-    if(exists) return;
+    // Sirf exact naam hi nahi, spelling variants/typo (Aalu/Alu/Allu/Potata
+    // jaisa kuch bhi) bhi Stock Record ke maujooda item se match karo —
+    // isse har chhoti spelling variation se naya duplicate item nahi banta.
+    const matched = smartFindStock(name, stock);
+    if(matched){
+      if(nameInput && stockNormName(matched.itemName) !== stockNormName(name)) nameInput.value = matched.itemName;
+      return;
+    }
     const key = stockNormName(name) + '|' + stockNormName(unit);
     if(!map.has(key)) map.set(key, { include:true, itemName:name, quantity:0, unit, rate:0, amount:0, check:false, sales:[{price:rate,unit}], billUnknown:true, lowAlert:0 });
     else {
@@ -5373,7 +5565,7 @@ function confirmBillUnknownStockAndContinue(){
     const quantity=Number(it.quantity)||0;
     const purchasePrice=Number(it.rate)||0;
     const lowAlert=Number(it.lowAlert)||0;
-    const existing=list.find(x=>stockNormName(x.itemName)===stockNormName(it.itemName));
+    const existing=smartFindStock(it.itemName, list);
     if(existing){
       existing.quantity=(Number(existing.quantity)||0)+quantity;
       if(purchasePrice>0) existing.purchasePrice=purchasePrice;
