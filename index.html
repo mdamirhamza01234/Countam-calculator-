@@ -242,6 +242,9 @@
             console.warn('Firebase bill history restore failed:', err)
           );
         }
+        if(typeof window.restoreUdharFromFirebase === 'function') {
+          window.restoreUdharFromFirebase().catch(err => console.warn('Firebase udhar restore failed:', err));
+        }
         if(typeof window.restoreStockFromFirebase === 'function') {
           window.restoreStockFromFirebase().catch(err =>
             console.warn('Firebase stock restore failed:', err)
@@ -384,6 +387,52 @@
     ));
 
     window.dispatchEvent(new CustomEvent('mittuFirebaseStockReady'));
+    return merged;
+  };
+
+  window.saveUdharToFirebase = async function(rec){
+    const u = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!u || !rec || !rec.id) return false;
+    await set(ref(fbDb, 'users/' + u.uid + '/udhar/' + rec.id), rec);
+    return true;
+  };
+  window.deleteUdharFromFirebase = async function(id){
+    const u = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!u || !id) return false;
+    const dk = 'mittu_udhar_deleted_' + u.uid;
+    try { const d = JSON.parse(localStorage.getItem(dk) || '[]'); if(d.indexOf(id) < 0) d.push(id); localStorage.setItem(dk, JSON.stringify(d)); } catch(e) {}
+    await set(ref(fbDb, 'users/' + u.uid + '/udharDeleted/' + id), true);
+    await remove(ref(fbDb, 'users/' + u.uid + '/udhar/' + id));
+    return true;
+  };
+  window.restoreUdharFromFirebase = async function(){
+    const u = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!u) return [];
+    const [snap, dsnap] = await Promise.all([get(ref(fbDb, 'users/' + u.uid + '/udhar')), get(ref(fbDb, 'users/' + u.uid + '/udharDeleted'))]);
+    const cloud = snap.exists() ? Object.values(snap.val() || {}) : [];
+    const deleted = new Set(dsnap.exists() ? Object.keys(dsnap.val() || {}) : []);
+    const key = 'mittu_udhar_ledger_' + u.uid;
+    try { JSON.parse(localStorage.getItem('mittu_udhar_deleted_' + u.uid) || '[]').forEach(x => deleted.add(x)); } catch(e) {}
+    let local = [];
+    try {
+      const sc = localStorage.getItem(key);
+      if(sc) local = JSON.parse(sc) || [];
+      else {
+        const lg = localStorage.getItem('mittu_udhar_ledger');
+        if(lg){ local = JSON.parse(lg) || []; localStorage.removeItem('mittu_udhar_ledger'); }
+      }
+    } catch(e) { local = []; }
+    const map = new Map();
+    cloud.concat(local).forEach(r => {
+      if(!r || !r.id || deleted.has(r.id)) return;
+      const old = map.get(r.id);
+      if(!old || (r.editedAt || 0) > (old.editedAt || 0)) map.set(r.id, r);
+    });
+    const merged = Array.from(map.values()).sort((a,b) => (parseInt(String(b.id).split('-')[0],10)||0) - (parseInt(String(a.id).split('-')[0],10)||0));
+    try { localStorage.setItem(key, JSON.stringify(merged)); } catch(e) {}
+    const cm = new Map(cloud.map(r => [r && r.id, r]));
+    await Promise.all(merged.filter(r => { const c = cm.get(r.id); return !c || (r.editedAt || 0) > (c.editedAt || 0); }).map(r => set(ref(fbDb, 'users/' + u.uid + '/udhar/' + r.id), r)));
+    window.dispatchEvent(new CustomEvent('mittuUdharReady'));
     return merged;
   };
 
@@ -1139,6 +1188,22 @@
     margin-top: 12px;
   }
   .upi-btn:hover { opacity: .92; }
+  .udhar-btn-row { display:flex; gap:9px; margin-top:12px; }
+  .udhar-btn-row button {
+    flex:1;
+    min-height:46px;
+    border:none;
+    border-radius:8px;
+    color:#fff;
+    font-weight:800;
+    font-size:13.5px;
+    cursor:pointer;
+    padding:8px 6px;
+  }
+  .udhar-settle-btn { background: linear-gradient(90deg,#1a7a3e,#0f5c2c); }
+  .udhar-settle-btn:hover { opacity:.92; }
+  .udhar-add-btn { background: linear-gradient(90deg,#c0392b,#a04e00); }
+  .udhar-add-btn:hover { opacity:.92; }
   .history-btn {
     display: block;
     width: 100%;
@@ -1568,6 +1633,7 @@
     <div class="drawer-item" onclick="openSearchBill()"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span> Search Bill</div>
     <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> View All Bills Record</div>
     <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span> Customer Record PDF</button>
+    <button class="drawer-item" onclick="closeDrawer(); openUdharBook();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 0 6.5 19H20v3H6.5"/><path d="M9 7h7M9 11h5"/></svg></span> Udhar Khata Book Management</button>
     <div class="drawer-recents-title">Recents</div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
     <div class="drawer-account-spacer"></div>
@@ -1843,6 +1909,11 @@
 
   <button class="whatsapp-btn" onclick="requestBillFinalAction('whatsapp')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.5 3.5A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.12.56 4.11 1.62 5.82L0 24l6.35-1.66A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.5-8.5ZM12 21.82c-1.9 0-3.76-.51-5.4-1.48l-.39-.23-3.77.98 1-3.67-.25-.4A9.79 9.79 0 0 1 2.18 12C2.18 6.58 6.58 2.18 12 2.18S21.82 6.58 21.82 12 17.42 21.82 12 21.82Zm5.37-7.34c-.29-.15-1.72-.85-1.99-.95-.27-.1-.46-.15-.65.15-.19.29-.74.95-.91 1.15-.17.19-.34.22-.63.07-.29-.15-1.23-.45-2.34-1.44-.87-.78-1.46-1.74-1.63-2.03-.17-.29-.02-.45.13-.6.13-.13.29-.34.43-.51.15-.17.19-.29.29-.48.1-.19.05-.36-.02-.51-.07-.15-.65-1.58-.89-2.17-.23-.57-.47-.5-.65-.51h-.55c-.19 0-.51.07-.78.36-.27.29-1.02 1-1.02 2.43s1.05 2.82 1.2 3.01c.15.19 2.06 3.14 4.99 4.4.7.3 1.25.48 1.68.61.71.23 1.36.2 1.87.12.57-.08 1.72-.7 1.96-1.37.24-.67.24-1.25.17-1.37-.07-.12-.27-.19-.56-.34Z"/></svg> Send Bill PDF via WhatsApp</button>
 
+  <div class="udhar-btn-row">
+    <button type="button" class="udhar-settle-btn" onclick="openUdharSettleModal()">💰 उधार बकाया चुकता करें</button>
+    <button type="button" class="udhar-add-btn" onclick="openUdharAddModal()">➕ उधार खाते में जोड़ें</button>
+  </div>
+
   <button class="generate-btn" onclick="requestBillFinalAction('pdf')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
 
 </div>
@@ -1881,6 +1952,240 @@
   </div>
 </div>
 
+
+<!-- ============ UDHAR KHATA BOOK MANAGEMENT (hamburger menu se khulta hai) ============ -->
+<div id="udharBookOverlay" style="display:none; position:fixed; inset:0; background:#eef1f5; z-index:9998; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+  <div style="display:flex; align-items:center; gap:12px; padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px; background:#fff; position:sticky; top:0; z-index:2; box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+    <button onclick="udharBookGoBack()" aria-label="Wapas jaayein" style="background:#f3f5f8; border:none; width:42px; height:42px; border-radius:50%; font-size:20px; color:#16325c; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;">←</button>
+    <h2 id="udharBookHeaderTitle" style="margin:0; color:#16325c; font-size:18px; font-weight:800; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📒 Udhar Khata Book</h2>
+  </div>
+
+  <!-- ===== Screen 1: Sabhi customers + kul hisaab ===== -->
+  <div id="udharBookListScreen" style="max-width:520px; margin:0 auto; padding:14px 16px 40px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+      <div style="background:#fff; border-radius:12px; padding:10px 8px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Kul Udhar Diya</div>
+        <div id="udharBookTotDue" style="font-size:15px; font-weight:800; color:#a04e00; margin-top:3px;">₹0.00</div>
+      </div>
+      <div style="background:#fff; border-radius:12px; padding:10px 8px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Kul Jama (Chukta)</div>
+        <div id="udharBookTotPaid" style="font-size:15px; font-weight:800; color:#1a7a3e; margin-top:3px;">₹0.00</div>
+      </div>
+      <div style="background:#fff; border-radius:12px; padding:10px 8px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Kul Bakaya</div>
+        <div id="udharBookTotBal" style="font-size:15px; font-weight:800; color:#c0392b; margin-top:3px;">₹0.00</div>
+      </div>
+    </div>
+    <div id="udharBookCountLine" style="font-size:12px; color:#666; text-align:center; margin-bottom:12px;"></div>
+
+    <div style="display:flex; gap:9px; margin-bottom:12px;">
+      <button type="button" onclick="udharBookStartAdd(false)" style="flex:1; padding:12px 8px; border:none; border-radius:10px; background:linear-gradient(90deg,#c0392b,#a04e00); color:#fff; font-weight:800; font-size:13.5px; cursor:pointer;">➕ Naya Udhar Jodein</button>
+      <button type="button" onclick="downloadUdharBookPdf()" style="flex:0 0 auto; padding:12px 12px; border:1px solid #16325c; border-radius:10px; background:#fff; color:#16325c; font-weight:800; font-size:13px; cursor:pointer;">📄 PDF</button>
+    </div>
+
+    <input type="text" id="udharBookSearch" placeholder="Naam ya mobile number se dhoondein..." oninput="renderUdharBookList()"
+      style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:14px; margin-bottom:8px; background:#fff;">
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <select id="udharBookFilter" onchange="renderUdharBookList()" style="flex:1; padding:9px 8px; border:1px solid #ddd; border-radius:10px; font-size:13px; background:#fff;">
+        <option value="pending">Bakaya baaki hai</option>
+        <option value="all">Sabhi customers</option>
+        <option value="cleared">Poora chukta ho chuka</option>
+      </select>
+      <select id="udharBookSort" onchange="renderUdharBookList()" style="flex:1; padding:9px 8px; border:1px solid #ddd; border-radius:10px; font-size:13px; background:#fff;">
+        <option value="highest">Sabse zyada bakaya</option>
+        <option value="newest">Naya udhar pehle</option>
+        <option value="oldest">Purana udhar pehle</option>
+        <option value="az">A → Z</option>
+      </select>
+    </div>
+    <div id="udharBookCustomerList"></div>
+  </div>
+
+  <!-- ===== Screen 2: Ek customer ka poora hisaab ===== -->
+  <div id="udharBookDetailScreen" style="display:none; max-width:520px; margin:0 auto; padding:14px 16px 40px;">
+    <div id="udharBookCustInfo" style="font-size:13px; color:#555; margin-bottom:10px;"></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+      <div style="background:#fff; border-radius:12px; padding:10px 6px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Kul Udhar</div>
+        <div id="udharBookDDue" style="font-size:15px; font-weight:800; color:#a04e00; margin-top:3px;">₹0.00</div>
+      </div>
+      <div style="background:#fff; border-radius:12px; padding:10px 6px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Kul Jama</div>
+        <div id="udharBookDPaid" style="font-size:15px; font-weight:800; color:#1a7a3e; margin-top:3px;">₹0.00</div>
+      </div>
+      <div style="background:#fff; border-radius:12px; padding:10px 6px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <div style="font-size:11px; color:#777;">Bakaya</div>
+        <div id="udharBookDBal" style="font-size:15px; font-weight:800; color:#c0392b; margin-top:3px;">₹0.00</div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:12px;">
+      <label style="font-size:13px; font-weight:700; color:#333;">Bakaya chukta karein — kitni raashi mili?</label>
+      <input type="number" id="udharBookSettleAmount" min="0" step="0.01" placeholder="Amount"
+        style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:16px; margin-top:6px;">
+      <button type="button" onclick="udharBookSettle()" style="width:100%; margin-top:10px; padding:12px; border:none; border-radius:10px; background:#1a7a3e; color:#fff; font-weight:800; font-size:14px; cursor:pointer;">💰 Bakaya Chukta Karein</button>
+      <button type="button" onclick="udharBookStartAdd(true)" style="width:100%; margin-top:8px; padding:12px; border:none; border-radius:10px; background:linear-gradient(90deg,#c0392b,#a04e00); color:#fff; font-weight:800; font-size:14px; cursor:pointer;">➕ Aur Udhar Jodein</button>
+    </div>
+
+    <div style="background:#fffaf0; border:1px solid #f0d8b0; border-radius:12px; padding:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:8px;">
+        <h3 style="margin:0; font-size:14px; color:#a04e00;">Poora Hisaab (Sl.No-wise)</h3>
+        <button type="button" onclick="downloadUdharBookCustomerPdf()" style="padding:6px 10px; border:1px solid #16325c; border-radius:8px; background:#fff; color:#16325c; font-weight:700; font-size:12px; cursor:pointer;">📄 PDF</button>
+      </div>
+      <div id="udharBookLedgerList"></div>
+    </div>
+  </div>
+
+  <!-- ===== Screen 3: Naya udhar jodna ===== -->
+  <div id="udharBookAddScreen" style="display:none; max-width:520px; margin:0 auto; padding:14px 16px 40px;">
+    <div style="background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <label style="font-size:13px; font-weight:700; color:#333;">Customer ka naam</label>
+      <input type="text" id="udharBookAddName" placeholder="Naam"
+        style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:15px; margin:6px 0 12px;">
+      <label style="font-size:13px; font-weight:700; color:#333;">Mobile number (10 digit)</label>
+      <input type="tel" inputmode="numeric" id="udharBookAddMobile" maxlength="14" placeholder="Mobile number"
+        style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:15px; margin:6px 0 12px;">
+      <label style="font-size:13px; font-weight:700; color:#333;">Udhar ki raashi</label>
+      <input type="number" id="udharBookAddAmount" min="0" step="0.01" placeholder="Amount"
+        style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:16px; margin:6px 0 12px;">
+      <label style="font-size:13px; font-weight:700; color:#333;">Note / saman ka vivaran (optional)</label>
+      <input type="text" id="udharBookAddNote" placeholder="Jaise: 2 bori chawal"
+        style="width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid #ddd; border-radius:10px; font-size:15px; margin:6px 0 4px;">
+      <div style="font-size:11.5px; color:#888; margin-bottom:12px;">Tareekh aur samay apne aap darj ho jayega.</div>
+      <button type="button" onclick="saveUdharBookAdd()" style="width:100%; padding:13px; border:none; border-radius:10px; background:linear-gradient(90deg,#c0392b,#a04e00); color:#fff; font-weight:800; font-size:15px; cursor:pointer;">Save — Udhar Khate Mein Jodein</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ UDHAR (CREDIT ACCOUNT) OVERLAYS ============ -->
+
+<!-- "Udhar khate mein jodein" full page (popup/modal jaisa nahi — asli topbar jaisa header
+     ke saath, app ke normal background par, jaise ek naya "screen" khulta hai) -->
+<div id="udharAddOverlay" style="display:none; position:fixed; inset:0; background:#eef1f5; z-index:9998; overflow-y:auto;">
+  <div style="position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; padding:calc(14px + env(safe-area-inset-top, 0px)) 16px 14px; background:#eef1f5; border-bottom:1px solid #dfe3ea;">
+    <button onclick="closeUdharAddModal()" aria-label="Wapas jaayein" style="background:#fff; border:none; width:42px; height:42px; border-radius:50%; box-shadow:0 1px 5px rgba(0,0,0,0.08); font-size:20px; color:#16325c; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;">←</button>
+    <h2 style="margin:0; color:#16325c; font-size:19px; font-weight:800;">➕ उधार खाते में जोड़ें</h2>
+  </div>
+
+  <div style="max-width:520px; margin:0 auto; padding:16px 18px 40px;">
+    <div style="background:#fff8e6; border:1px solid #f2d98a; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+      <div style="font-size:12px; color:#7a5a00;">Is bill ki total raashi</div>
+      <div id="udharAddBillTotal" style="font-size:20px; font-weight:800; color:#a04e00;">₹0.00</div>
+    </div>
+
+    <label style="font-size:13px; font-weight:700; color:#333;">Udhar khate mein kitni raashi jodni hai?</label>
+    <input type="number" id="udharAddAmountInput" min="0" step="0.01" placeholder="Amount"
+      style="width:100%; padding:12px; margin-top:6px; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing:border-box; background:#fff;">
+    <div style="font-size:11px; color:#888; margin-top:4px;">(Bill ki total raashi se kam ya barabar amount daalein)</div>
+
+    <button class="add-row-btn" style="width:100%; margin-top:14px;" onclick="saveUdharAdd()">Save</button>
+
+    <div style="background:#fff; border:1px solid #e3d8c0; border-radius:8px; padding:12px 14px; margin-top:18px;">
+      <div style="font-size:13.5px; color:#333; margin-bottom:5px;"><b style="color:#16325c;">Customer Name:</b> <span id="udharAddCustName">-</span></div>
+      <div style="font-size:13.5px; color:#333; margin-bottom:5px;"><b style="color:#16325c;">Mobile Number:</b> <span id="udharAddCustMobile">-</span></div>
+      <div style="font-size:13.5px; color:#333;"><b style="color:#16325c;">Address:</b> <span id="udharAddCustAddr">-</span></div>
+    </div>
+
+    <div style="background:#fdeaea; border:1px solid #f0c0c0; border-radius:8px; padding:10px 12px; margin-top:12px;">
+      <div style="font-size:12px; color:#a04e00;">Ab tak ka total udhar</div>
+      <div id="udharAddTotalUdhar" style="font-size:20px; font-weight:800; color:#c0392b;">₹0.00</div>
+    </div>
+
+    <div style="margin-top:20px; border-top:1px solid #dfe3ea; padding-top:12px;">
+      <h3 style="margin:0 0 10px; font-size:14px; color:#a04e00;">Is customer ka purana udhar hisaab</h3>
+      <div id="udharAddLedgerList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settle / pay off credit due — poore page ki tarah khulta hai. Pehle sabhi
+     udhari customers ki searchable list, phir customer chunte hi unka settle form. -->
+<div id="udharSettleOverlay" style="display:none; position:fixed; inset:0; background:#eef1f5; z-index:9998; overflow-y:auto;">
+  <div style="position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px; padding:calc(14px + env(safe-area-inset-top, 0px)) 16px 14px; background:#eef1f5; border-bottom:1px solid #dfe3ea;">
+    <button onclick="udharSettleGoBack()" aria-label="Wapas jaayein" style="background:#fff; border:none; width:42px; height:42px; border-radius:50%; box-shadow:0 1px 5px rgba(0,0,0,0.08); font-size:20px; color:#16325c; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;">←</button>
+    <h2 id="udharSettleHeaderTitle" style="margin:0; color:#16325c; font-size:19px; font-weight:800;">💰 उधार बकाया चुकता करें</h2>
+  </div>
+
+  <!-- Screen 1: sabhi udhar-khata customers ki searchable list -->
+  <div id="udharSettleListScreen" style="max-width:520px; margin:0 auto; padding:16px 18px 40px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+      <div style="flex:1; display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #ddd; border-radius:10px; padding:10px 12px;">
+        <span style="font-size:16px;">🔍</span>
+        <input type="text" id="udharSettleSearchInput" placeholder="Naam ya mobile number se dhoondein..." oninput="renderUdharSettleCustomerList()"
+          style="flex:1; border:none; outline:none; font-size:15px; background:transparent; min-width:0;">
+      </div>
+      <button onclick="openUdharSettleMenu()" aria-label="Aur options" style="flex-shrink:0; background:#fff; border:1px solid #ddd; width:42px; height:42px; border-radius:10px; font-size:20px; line-height:1; color:#16325c; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">⋮</button>
+    </div>
+    <div id="udharSettleCustomerList"></div>
+  </div>
+
+  <!-- "⋮" tap karne par yeh chhota menu khulta hai: Sort By / Download Udhar PDF -->
+  <div class="account-overlay" id="udharSettleMenuOverlay" onclick="closeUdharSettleMenu()">
+    <div class="account-sheet" onclick="event.stopPropagation()">
+      <button class="account-option" onclick="closeUdharSettleMenu(); openUdharSettleSortSheet();">
+        <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg> Sort By
+      </button>
+      <button class="account-option" onclick="closeUdharSettleMenu(); downloadUdharPdf();">
+        <svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> Download Udhar PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- "Sort By" ke sub-options -->
+  <div class="account-overlay" id="udharSettleSortOverlay" onclick="closeUdharSettleSortSheet()">
+    <div class="account-sheet" onclick="event.stopPropagation()">
+      <div style="font-weight:800; font-size:15px; color:#16325c; padding:4px 8px 12px; border-bottom:1px solid #eee; margin-bottom:2px;">Sort By</div>
+      <button class="account-option" data-sort="newest" onclick="applyUdharSettleSort('newest')">🆕 Newest First</button>
+      <button class="account-option" data-sort="oldest" onclick="applyUdharSettleSort('oldest')">🕰️ Oldest First</button>
+      <button class="account-option" data-sort="highest" onclick="applyUdharSettleSort('highest')">⬆️ Highest Udhar Bakaya</button>
+      <button class="account-option" data-sort="lowest" onclick="applyUdharSettleSort('lowest')">⬇️ Lowest Udhar Bakaya</button>
+      <button class="account-option" data-sort="az" onclick="applyUdharSettleSort('az')">A → Z</button>
+      <button class="account-option" data-sort="za" onclick="applyUdharSettleSort('za')">Z → A</button>
+    </div>
+  </div>
+
+  <!-- Screen 2: chune gaye customer ka settle form -->
+  <div id="udharSettleDetailScreen" style="display:none; max-width:520px; margin:0 auto; padding:16px 18px 40px;">
+    <div id="udharSettleCustInfo" style="font-size:13px; color:#555; margin-bottom:10px;"></div>
+
+    <div style="background:#eafaf1; border:1px solid #b7e4c7; border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+      <div style="font-size:12px; color:#1a7a3e;">Kul bakaya (total due)</div>
+      <div id="udharSettleTotalDue" style="font-size:20px; font-weight:800; color:#1a7a3e;">₹0.00</div>
+    </div>
+
+    <label style="font-size:13px; font-weight:700; color:#333;">Kitni raashi chukta karni hai?</label>
+    <input type="number" id="udharSettleAmountInput" min="0" step="0.01" placeholder="Amount"
+      style="width:100%; padding:12px; margin-top:6px; border:1px solid #ddd; border-radius:8px; font-size:16px; box-sizing:border-box; background:#fff;">
+
+    <button class="add-row-btn" style="width:100%; margin-top:14px; background:#1a7a3e;" onclick="proceedUdharSettlePayment()">Payment ke liye aage badhein</button>
+
+    <div style="margin-top:20px; border-top:1px solid #dfe3ea; padding-top:12px;">
+      <h3 style="margin:0 0 10px; font-size:14px; color:#1a7a3e;">Is customer ka purana udhar hisaab</h3>
+      <div id="udharSettleLedgerList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Payment method choice popup (Online / Cash) -->
+<div id="udharPaymentMethodOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+  <div style="max-width:360px; width:100%; margin:0 auto; background:#fff; border-radius:12px; padding:20px; text-align:center;">
+    <h3 style="margin:0 0 6px; color:#0c1f4a;">Payment kaise le rahe hain?</h3>
+    <div style="font-size:13px; color:#555; margin-bottom:14px;">Raashi: <b id="udharPaymentAmountDisplay">₹0.00</b></div>
+    <button type="button" style="display:block; width:100%; padding:13px; margin-bottom:10px; border:none; border-radius:8px; background:linear-gradient(90deg,#5f27cd,#a04e00); color:#fff; font-weight:800; font-size:14px; cursor:pointer;" onclick="chooseUdharPaymentMethod('online')">📱 Online Payment (QR)</button>
+    <button type="button" style="display:block; width:100%; padding:13px; margin-bottom:10px; border:none; border-radius:8px; background:linear-gradient(90deg,#1a7a3e,#0f5c2c); color:#fff; font-weight:800; font-size:14px; cursor:pointer;" onclick="chooseUdharPaymentMethod('cash')">💵 Cash Payment</button>
+    <button type="button" style="display:block; width:100%; padding:11px; border:1px solid #ddd; border-radius:8px; background:#fff; color:#555; font-weight:700; font-size:13px; cursor:pointer;" onclick="cancelUdharPayment()">Cancel</button>
+  </div>
+</div>
+
+<!-- Online payment QR (fixed amount) for settling udhar -->
+<div id="udharQrOverlay" style="display:none; position:fixed; inset:0; background:#0c1f4a; z-index:9999; align-items:center; justify-content:center; flex-direction:column; padding:20px; text-align:center;">
+  <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:4px;" id="udharQrCustName"></div>
+  <div style="color:#fff; font-size:13px; opacity:0.85; margin-bottom:14px;">Is amount ka fix QR scan karke payment karein</div>
+  <div id="udharQrDiv" style="position:relative; background:#fff; padding:14px; border-radius:12px; display:inline-block;"></div>
+  <div style="color:#fff; font-size:26px; font-weight:900; margin-top:16px;">₹ <span id="udharQrAmount">0.00</span></div>
+  <button type="button" style="margin-top:22px; padding:13px 20px; border:none; border-radius:8px; background:#1a7a3e; color:#fff; font-weight:800; font-size:14px; cursor:pointer;" onclick="confirmUdharOnlinePaymentReceived()">✅ Payment Prapt Hua (Confirm)</button>
+  <button type="button" style="margin-top:10px; padding:11px 20px; border:1px solid #fff; border-radius:8px; background:transparent; color:#fff; font-weight:700; font-size:13px; cursor:pointer;" onclick="cancelUdharPayment()">Band Karein</button>
+</div>
 
 <!-- Bill history overlay -->
 <div id="historyOverlay" style="display:none; position:fixed; inset:0; background:rgba(58,29,0,0.92); z-index:9998; padding:20px; padding-top:max(20px, env(safe-area-inset-top, 20px)); overflow-y:auto;">
@@ -2389,6 +2694,19 @@ function generateBill(openFile = true){
     el.style.left = '-9999px';
     downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
 
+    // Bill save/print ho chuka hai — ab customer ke fields (naam, mobile,
+    // address) aur items ko clear kar do taaki agla bill genuinely NAYE
+    // customer se shuru ho. Pehle yeh fields bhare hi reh jaate the, isliye
+    // agar mobile number update karna bhool jaayein to naye customer ka
+    // udhar galti se purane customer ke mobile-based khate mein jud jaata
+    // tha (kyunki udhar ab sirf mobile number se match hota hai).
+    document.getElementById('custName').value = '';
+    document.getElementById('custMobile').value = '';
+    document.getElementById('custAddr').value = '';
+    document.getElementById('itemsBody').innerHTML = '';
+    rowCount = 0;
+    addRow();
+
     // Auto-generate a fresh random bill number for the next bill
     generateRandomBillNo();
   });
@@ -2430,6 +2748,1090 @@ function getBillHistory(){
     return null; // storage blocked (e.g. Claude preview sandbox)
   }
 }
+
+// ---------------- UDHAR / CREDIT ACCOUNT LEDGER (localStorage) ----------------
+const UDHAR_LEDGER_KEY = 'mittu_udhar_ledger';
+
+function getUdharLedgerStorageKey(){
+  const user = window.currentFirebaseUser;
+  return user && user.uid ? ('mittu_udhar_ledger_' + user.uid) : UDHAR_LEDGER_KEY;
+}
+
+function getUdharLedger(){
+  try {
+    return JSON.parse(localStorage.getItem(getUdharLedgerStorageKey()) || '[]');
+  } catch(e){
+    return null; // storage blocked (e.g. Claude preview sandbox)
+  }
+}
+
+function saveUdharLedgerFull(list){
+  try {
+    localStorage.setItem(getUdharLedgerStorageKey(), JSON.stringify(list));
+  } catch(e){
+    console.warn('Udhar ledger storage not available in this environment:', e);
+  }
+}
+
+// Customer identity for the ledger: mobile number ONLY. Naam ke bharose
+// customer ko pehchanna theek nahi hai — do alag-alag customers ka naam
+// same ho sakta hai (jaise "Ramesh", "Suresh"), aur pehle jab naam se bhi
+// khata ban jaata tha to un sabhi same-naam customers ka udhar ek hi khate
+// mein mix ho jaata tha. Ab sirf mobile number hi khata banata/match karta
+// hai, taaki har customer ka apna hi alag udhar khata khule.
+function udharNormMobile(m){
+  let d = String(m || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('91')) d = d.slice(2);
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? d : '';
+}
+function getUdharCustomerId(name, mobile){
+  const m = udharNormMobile(mobile);
+  return m ? 'm:' + m : '';
+}
+// Purani entries (bina normalize kiye mobile ke saath) bhi isi se sahi khate me judti hain.
+function udharEntryCustId(e){
+  const m = udharNormMobile(e.custMobile || String(e.custId || '').replace(/^m:/, ''));
+  return m ? 'm:' + m : (e.custId || '');
+}
+let _udharLockUntil = 0;
+function udharLock(ms){ const n = Date.now(); if (n < _udharLockUntil) return false; _udharLockUntil = n + (ms || 1500); return true; }
+
+function addUdharLedgerEntry(entry){
+  const list = getUdharLedger();
+  if (list === null){
+    alert('Storage is not available in this environment.');
+    return null;
+  }
+  const record = Object.assign({
+    id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    dateTime: `${formatNowParts().date}, ${formatNowParts().time}`
+  }, entry);
+  list.unshift(record); // newest first
+  saveUdharLedgerFull(list);
+  if (window.saveUdharToFirebase) window.saveUdharToFirebase(record).catch(e => console.warn('Udhar cloud save failed:', e));
+  return record;
+}
+
+function getUdharEntriesForCustomer(custId){
+  const list = getUdharLedger() || [];
+  return list.filter(r => udharEntryCustId(r) === custId);
+}
+
+function computeUdharBalance(entries){
+  let bal = 0;
+  entries.forEach(e => {
+    if (e.type === 'due') bal += (parseFloat(e.amount) || 0);
+    else if (e.type === 'settle') bal -= (parseFloat(e.amount) || 0);
+  });
+  return bal;
+}
+
+// Builds a full Sl.No-wise table of a customer's udhar history (oldest at
+// the bottom is not required — shown newest first with a running balance
+// column, same "sabse naya top par" convention used elsewhere in this app).
+function renderUdharLedgerTable(containerId, entries, showBalance){
+  if (showBalance === undefined) showBalance = true;
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!entries.length){
+    el.innerHTML = '<p style="text-align:center; color:#777; font-size:12px; padding:10px;">Abhi tak koi udhar record nahi hai.</p>';
+    return;
+  }
+  const chron = entries.slice().reverse();
+  let running = 0; const queue = [];
+  const rows = chron.map(e => {
+    const amt = parseFloat(e.amount) || 0;
+    let detail;
+    if (e.type === 'due'){
+      running += amt; queue.push({ bill: e.billNo, rem: amt });
+      detail = 'Udhar' + (e.billNo ? ' \u2022 Bill ' + e.billNo : '');
+    } else {
+      running -= amt; let left = amt; const bills = [];
+      while (left > 0.005 && queue.length){
+        const q = queue[0]; const t = Math.min(q.rem, left);
+        q.rem -= t; left -= t;
+        if (q.bill && bills.indexOf(String(q.bill)) < 0) bills.push(String(q.bill));
+        if (q.rem <= 0.005) queue.shift();
+      }
+      detail = 'Jama' + (e.method ? ' (' + e.method + ')' : '') + (bills.length ? ' \u2022 Bill ' + bills.join(', ') : '');
+    }
+    if (e.note) detail += ' \u2022 ' + e.note;
+    if (e.editedAt) detail += ' (edited)';
+    return { e, amt, detail, bal: running };
+  }).reverse();
+  const th = 'padding:6px 4px; border-bottom:1px solid #f0d8b0;';
+  const td = 'padding:6px 4px; border-bottom:1px solid #f5eee0;';
+  let html = '<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:12px;">';
+  html += '<tr style="background:#fff3e0; color:#a04e00; font-weight:700;"><td style="'+th+'">Sl.No</td><td style="'+th+'">Date &amp; Time</td><td style="'+th+'">Details</td><td style="'+th+' text-align:right;">Amount</td>' +
+          (showBalance ? '<td style="'+th+' text-align:right;">Balance</td>' : '') + '<td style="'+th+'"></td></tr>';
+  rows.forEach((r, i) => {
+    const id = escapeHtml(r.e.id);
+    html += '<tr><td style="'+td+'">' + (i + 1) + '</td><td style="'+td+'">' + escapeHtml(r.e.dateTime || '-') + '</td>' +
+      '<td style="'+td+' color:' + (r.e.type === 'due' ? '#c0392b' : '#1a7a3e') + ';">' + escapeHtml(r.detail) + '</td>' +
+      '<td style="'+td+' text-align:right;">\u20b9' + r.amt.toFixed(2) + '</td>' +
+      (showBalance ? '<td style="'+td+' text-align:right; font-weight:700;">\u20b9' + r.bal.toFixed(2) + '</td>' : '') +
+      '<td style="'+td+' white-space:nowrap;"><button type="button" onclick="editUdharEntry(\''+id+'\')" style="border:none;background:none;font-size:14px;cursor:pointer;">\u270f\ufe0f</button>' +
+      '<button type="button" onclick="deleteUdharEntry(\''+id+'\')" style="border:none;background:none;font-size:14px;cursor:pointer;">\U0001F5D1\ufe0f</button></td></tr>';
+  });
+  html += '</table></div>';
+  el.innerHTML = html;
+}
+
+function udharLedgerValid(list, custId){
+  let run = 0;
+  const mine = list.filter(r => udharEntryCustId(r) === custId).reverse();
+  for (const e of mine){
+    run += (e.type === 'due' ? 1 : -1) * (parseFloat(e.amount) || 0);
+    if (run < -0.01) return false;
+  }
+  return true;
+}
+function refreshUdharViews(custId){
+  try { if (typeof refreshUdharBook === 'function') refreshUdharBook(); } catch(err){ console.warn(err); }
+  const entries = getUdharEntriesForCustomer(custId);
+  const bal = Math.max(computeUdharBalance(entries), 0);
+  const det = document.getElementById('udharSettleDetailScreen');
+  if (det && det.style.display === 'block'){
+    renderUdharLedgerTable('udharSettleLedgerList', entries);
+    document.getElementById('udharSettleTotalDue').textContent = '\u20b9' + bal.toFixed(2);
+    const a = document.getElementById('udharSettleAmountInput');
+    a.value = bal > 0 ? bal.toFixed(2) : ''; a.max = bal > 0 ? bal.toFixed(2) : '';
+  }
+  const add = document.getElementById('udharAddOverlay');
+  if (add && add.style.display === 'block'){
+    renderUdharLedgerTable('udharAddLedgerList', entries, false);
+    document.getElementById('udharAddTotalUdhar').textContent = '\u20b9' + bal.toFixed(2);
+  }
+}
+function editUdharEntry(id){
+  const list = getUdharLedger(); if (!list) return;
+  const e = list.find(x => x.id === id); if (!e) return;
+  const v = prompt('Nayi raashi darj karein (abhi \u20b9' + (parseFloat(e.amount) || 0).toFixed(2) + '):', e.amount);
+  if (v === null) return;
+  const amt = parseFloat(v);
+  if (!amt || amt <= 0){ alert('Kripya sahi raashi darj karein.'); return; }
+  const old = e.amount; e.amount = amt;
+  if (!udharLedgerValid(list, udharEntryCustId(e))){
+    e.amount = old;
+    alert('Is badlav se kisi samay bakaya minus (negative) ho jayega, isliye badlav nahi ho sakta.');
+    return;
+  }
+  e.oldAmount = old; e.editedAt = Date.now();
+  saveUdharLedgerFull(list);
+  if (window.saveUdharToFirebase) window.saveUdharToFirebase(e).catch(err => console.warn(err));
+  refreshUdharViews(udharEntryCustId(e));
+}
+function deleteUdharEntry(id){
+  const list = getUdharLedger(); if (!list) return;
+  const idx = list.findIndex(x => x.id === id); if (idx < 0) return;
+  const e = list[idx], cid = udharEntryCustId(e);
+  if (!confirm('Yeh entry (\u20b9' + (parseFloat(e.amount) || 0).toFixed(2) + ') delete karein? Yeh wapas nahi aayegi.')) return;
+  const rest = list.slice(); rest.splice(idx, 1);
+  if (!udharLedgerValid(rest, cid)){
+    alert('Is entry ko hatane se bakaya minus (negative) ho jayega, isliye delete nahi ho sakta.');
+    return;
+  }
+  saveUdharLedgerFull(rest);
+  if (window.deleteUdharFromFirebase) window.deleteUdharFromFirebase(id).catch(err => console.warn(err));
+  refreshUdharViews(cid);
+}
+// Galat mobile/naam theek karna, ya do khate merge karna (naya mobile kisi maujooda khate ka ho to).
+function editUdharCustomer(custId){
+  const list = getUdharLedger(); if (!list) return;
+  const mine = list.filter(e => udharEntryCustId(e) === custId); if (!mine.length) return;
+  const nm = prompt('Customer ka naam:', mine[0].custName || ''); if (nm === null) return;
+  const mb = prompt('Sahi 10-digit mobile number\n(kisi doosre khate ka number daloge to dono khate merge ho jayenge):', mine[0].custMobile || ''); if (mb === null) return;
+  const nmob = udharNormMobile(mb);
+  if (!nmob){ alert('Sahi 10-digit mobile number darj karein.'); return; }
+  const newId = 'm:' + nmob;
+  if (newId !== custId && list.some(e => udharEntryCustId(e) === newId) &&
+      !confirm('Yeh mobile number pehle se ek khate me hai. Dono khate merge kar dein?')) return;
+  mine.forEach(e => { e.custId = newId; e.custMobile = nmob; });
+  list.forEach(e => {
+    if (udharEntryCustId(e) !== newId) return;
+    if (nm.trim()) e.custName = nm.trim();
+    e.editedAt = Date.now();
+    if (window.saveUdharToFirebase) window.saveUdharToFirebase(e).catch(err => console.warn(err));
+  });
+  saveUdharLedgerFull(list);
+  selectUdharSettleCustomer(newId);
+}
+window.addEventListener('mittuUdharReady', () => {
+  const o = document.getElementById('udharSettleOverlay');
+  if (o && o.style.display === 'block' && window._udharSettleScreen === 'list') renderUdharSettleCustomerList();
+});
+
+// Reads the customer identity currently typed into the bill form.
+function getCurrentBillCustomer(){
+  const name = (document.getElementById('custName') && document.getElementById('custName').value || '').trim();
+  const mobile = (document.getElementById('custMobile') && document.getElementById('custMobile').value || '').trim();
+  const address = (document.getElementById('custAddr') && document.getElementById('custAddr').value || '').trim();
+  return { name, mobile, address, custId: getUdharCustomerId(name, mobile) };
+}
+
+// ---- "Udhar khate mein jodein" (Add to credit account) — ab yeh popup ki jagah
+// isi tab ke andar poore-page ki tarah khulta hai (billing screen hide karke). ----
+// Note: window.open()/naya tab is app ke webview wrapper (median/gonative) mein
+// reliably kaam nahi karta tha (blank/"couldn't find" error deta tha), isliye
+// yeh version bina naya tab/window khole, seedha DOM mein full-page switch karta hai.
+function openUdharAddModal(){
+  const cust = getCurrentBillCustomer();
+  if (!cust.custId){
+    alert('Udhar khate ke liye Customer ka sahi 10-digit mobile number bharna zaroori hai (isi se customer ko pehchana jaata hai).');
+    return;
+  }
+  cust.mobile = udharNormMobile(cust.mobile);
+  // Safety check: agar yeh mobile number pehle se kisi ALAG naam ke saath
+  // udhar khate mein dark hai, to confirm karwao — taaki form field galti
+  // se update karna bhool jaane par bhi do alag customers ka udhar mix na ho.
+  const existingEntries = getUdharEntriesForCustomer(cust.custId);
+  if (existingEntries.length){
+    const existingName = (existingEntries[0].custName || '').trim().toLowerCase();
+    const typedName = cust.name.trim().toLowerCase();
+    if (existingName && typedName && existingName !== typedName){
+      const proceed = confirm(
+        'Yeh mobile number (' + cust.mobile + ') pehle se "' + existingEntries[0].custName + '" ke udhar khate mein darj hai, ' +
+        'lekin abhi naam "' + cust.name + '" bhara hai.\n\nKya yeh dono ek hi customer hain aur isi khate mein jodna hai?'
+      );
+      if (!proceed) return;
+    }
+  }
+  const total = calcTotal();
+  const billNo = document.getElementById('sno') ? document.getElementById('sno').value : '';
+
+  window._udharAddCustomer = cust;
+  window._udharAddFullPage = true;
+  window._udharAddFullPageBillTotal = total;
+  window._udharAddFullPageBillNo = billNo;
+
+  // Billing screen ko hide karke, sirf yeh form poore screen par dikhao.
+  const topbar = document.querySelector('.topbar');
+  const appWrap = document.getElementById('appWrap');
+  if (topbar) topbar.style.display = 'none';
+  if (appWrap) appWrap.style.display = 'none';
+  window.scrollTo(0, 0);
+
+  document.getElementById('udharAddBillTotal').textContent = '₹' + total.toFixed(2);
+  const amtInput = document.getElementById('udharAddAmountInput');
+  amtInput.value = total > 0 ? total.toFixed(2) : '';
+  amtInput.max = total > 0 ? total.toFixed(2) : '';
+
+  document.getElementById('udharAddCustName').textContent = cust.name || '-';
+  document.getElementById('udharAddCustMobile').textContent = cust.mobile || '-';
+  document.getElementById('udharAddCustAddr').textContent = cust.address || '-';
+
+  const entries = getUdharEntriesForCustomer(cust.custId);
+  document.getElementById('udharAddTotalUdhar').textContent = '₹' + Math.max(computeUdharBalance(entries), 0).toFixed(2);
+  renderUdharLedgerTable('udharAddLedgerList', entries, false);
+
+  document.getElementById('udharAddOverlay').style.display = 'block';
+}
+
+function closeUdharAddModal(){
+  document.getElementById('udharAddOverlay').style.display = 'none';
+  if (window._udharAddFullPage){
+    // Wapas billing screen par le jao.
+    const topbar = document.querySelector('.topbar');
+    const appWrap = document.getElementById('appWrap');
+    if (topbar) topbar.style.display = '';
+    if (appWrap) appWrap.style.display = '';
+    window._udharAddFullPage = false;
+  }
+}
+
+function saveUdharAdd(){
+  const cust = window._udharAddCustomer;
+  if (!cust || !cust.custId){
+    alert('Customer information missing. Pehle modal dobara kholein.');
+    return;
+  }
+  const amount = parseFloat(document.getElementById('udharAddAmountInput').value);
+  if (!amount || amount <= 0){
+    alert('Kripya sahi raashi darj karein.');
+    return;
+  }
+  const billTotal = window._udharAddFullPage ? window._udharAddFullPageBillTotal : calcTotal();
+  if (billTotal > 0 && amount > billTotal + 0.01){
+    alert('Udhar khate mein jodi jaane wali raashi is bill ki total raashi se zyada nahi ho sakti.');
+    return;
+  }
+  const billNo = window._udharAddFullPage
+    ? window._udharAddFullPageBillNo
+    : (document.getElementById('sno') ? document.getElementById('sno').value : '');
+  if (billNo && billTotal > 0){
+    const already = getUdharEntriesForCustomer(cust.custId)
+      .filter(e => e.type === 'due' && String(e.billNo) === String(billNo))
+      .reduce((t, e) => t + (parseFloat(e.amount) || 0), 0);
+    if (already >= billTotal - 0.01){
+      alert('Bill No. ' + billNo + ' ka poora udhar pehle hi khate me jod diya gaya hai.');
+      return;
+    }
+    if (amount > billTotal - already + 0.01){
+      alert('Is bill ka \u20b9' + already.toFixed(2) + ' pehle hi joda ja chuka hai. Ab zyada se zyada \u20b9' + (billTotal - already).toFixed(2) + ' joda ja sakta hai.');
+      return;
+    }
+  }
+  if (!udharLock()) return;
+  const rec = addUdharLedgerEntry({
+    custId: cust.custId,
+    custName: cust.name,
+    custMobile: cust.mobile,
+    billNo: billNo,
+    type: 'due',
+    amount: amount
+  });
+  if (!rec) return;
+  alert('₹' + amount.toFixed(2) + ' ' + (cust.name || 'customer') + ' ke udhar khate mein jod diya gaya.');
+  const entries = getUdharEntriesForCustomer(cust.custId);
+  document.getElementById('udharAddTotalUdhar').textContent = '₹' + Math.max(computeUdharBalance(entries), 0).toFixed(2);
+  renderUdharLedgerTable('udharAddLedgerList', entries, false);
+  document.getElementById('udharAddAmountInput').value = '';
+}
+
+// ---- "Udhar bakaya chukta karein" — ab poore page ki tarah khulta hai:
+// pehle sabhi udhari customers ki searchable list, phir customer chunte hi settle form. ----
+function escapeHtml(str){
+  return String(str == null ? '' : str).replace(/[&<>"']/g, function(ch){
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch];
+  });
+}
+
+// Ledger ke sabhi entries ko customer-wise group karke, har customer ka naam,
+// mobile, aakhri "udhar li" date, aur current bakaya (balance) nikalta hai.
+function getUdharCustomersSummary(){
+  const list = getUdharLedger() || [];
+  const map = {};
+  list.forEach(e => {
+    const cid = udharEntryCustId(e);
+    if (!cid) return;
+    if (!map[cid]){
+      map[cid] = { custId: cid, custName: e.custName || '', custMobile: e.custMobile || '', lastDueDate: null, lastDueTimestamp: 0, entries: [] };
+    }
+    map[cid].entries.push(e);
+    // list newest-first hai, isliye pehla 'due' entry hi sabse naya udhar-liya-hua date hai.
+    if (e.type === 'due' && !map[cid].lastDueDate){
+      map[cid].lastDueDate = e.dateTime;
+      map[cid].lastDueTimestamp = parseInt(String(e.id || '').split('-')[0], 10) || 0;
+    }
+  });
+  return Object.keys(map).map(custId => {
+    const c = map[custId];
+    return {
+      custId: c.custId,
+      custName: c.custName,
+      custMobile: c.custMobile,
+      lastDueDate: c.lastDueDate,
+      lastDueTimestamp: c.lastDueTimestamp,
+      balance: computeUdharBalance(c.entries)
+    };
+  });
+}
+
+// Sort-by option ke hisaab se customers ki list ko arrange karta hai.
+function sortUdharCustomers(customers, mode){
+  const arr = customers.slice();
+  switch(mode){
+    case 'oldest':
+      arr.sort((a, b) => (a.lastDueTimestamp || 0) - (b.lastDueTimestamp || 0));
+      break;
+    case 'highest':
+      arr.sort((a, b) => b.balance - a.balance);
+      break;
+    case 'lowest':
+      arr.sort((a, b) => a.balance - b.balance);
+      break;
+    case 'az':
+      arr.sort((a, b) => (a.custName || '').localeCompare(b.custName || ''));
+      break;
+    case 'za':
+      arr.sort((a, b) => (b.custName || '').localeCompare(a.custName || ''));
+      break;
+    case 'newest':
+    default:
+      arr.sort((a, b) => (b.lastDueTimestamp || 0) - (a.lastDueTimestamp || 0));
+  }
+  return arr;
+}
+
+function renderUdharSettleCustomerList(){
+  const query = (document.getElementById('udharSettleSearchInput').value || '').trim().toLowerCase();
+  const listEl = document.getElementById('udharSettleCustomerList');
+  const sortMode = window._udharSettleSortMode || 'newest';
+
+  const customers = sortUdharCustomers(
+    getUdharCustomersSummary()
+      .filter(c => c.balance > 0.01) // sirf woh customer jinka abhi bakaya hai
+      .filter(c => !query || (c.custName || '').toLowerCase().includes(query) || (c.custMobile || '').toLowerCase().includes(query)),
+    sortMode
+  );
+
+  if (!customers.length){
+    listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">' +
+      (query ? 'Koi matching customer nahi mila.' : 'Abhi kisi bhi customer ka udhar bakaya nahi hai.') + '</p>';
+    return;
+  }
+
+  listEl.innerHTML = customers.map(c => `
+    <div class="udhar-settle-cust-card" data-custid="${escapeHtml(c.custId)}"
+      style="background:#fff; border:1px solid #e3d8c0; border-radius:10px; padding:12px 14px; margin-bottom:10px; cursor:pointer;">
+      <div style="font-weight:700; font-size:14.5px; color:#16325c;">
+        ${escapeHtml(c.custName || 'Customer')}${c.custMobile ? ' <span style="color:#777; font-weight:500;">(' + escapeHtml(c.custMobile) + ')</span>' : ''}
+      </div>
+      <div style="font-size:12px; color:#777; margin-top:3px;">Aakhri udhar: ${escapeHtml(c.lastDueDate || '-')}</div>
+      <div style="font-size:13.5px; font-weight:800; color:#c0392b; margin-top:5px;">Bakaya: ₹${c.balance.toFixed(2)}</div>
+    </div>
+  `).join('');
+}
+
+// ---- "⋮" menu (Sort By / Download Udhar PDF) ----
+function openUdharSettleMenu(){
+  document.getElementById('udharSettleMenuOverlay').style.display = 'flex';
+}
+function closeUdharSettleMenu(){
+  document.getElementById('udharSettleMenuOverlay').style.display = 'none';
+}
+
+// ---- "Sort By" sheet ----
+function openUdharSettleSortSheet(){
+  document.getElementById('udharSettleSortOverlay').style.display = 'flex';
+}
+function closeUdharSettleSortSheet(){
+  document.getElementById('udharSettleSortOverlay').style.display = 'none';
+}
+function applyUdharSettleSort(mode){
+  window._udharSettleSortMode = mode;
+  closeUdharSettleSortSheet();
+  renderUdharSettleCustomerList();
+}
+
+// ---- "Download Udhar PDF" — sabhi udhari customers ki PDF (current Sort By order mein) ----
+function downloadUdharPdf(){
+  const sortMode = window._udharSettleSortMode || 'newest';
+  const customers = sortUdharCustomers(
+    getUdharCustomersSummary().filter(c => c.balance > 0.01),
+    sortMode
+  );
+
+  if (!customers.length){
+    alert('Abhi kisi bhi customer ka udhar bakaya nahi hai.');
+    return;
+  }
+
+  const totalBakaya = customers.reduce((sum, c) => sum + c.balance, 0);
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const pageWidth = 210, pageHeight = 297, marginX = 12;
+  const bottomLimit = pageHeight - 15;
+  let y = 20;
+
+  const cols = [
+    { label: 'Sl.No',                    x: marginX,       w: 12 },
+    { label: 'Customer Name',            x: marginX + 12,  w: 44 },
+    { label: 'Mobile Number',            x: marginX + 58,  w: 30 },
+    { label: 'Last Udhar Date & Time',   x: marginX + 90,  w: 58 },
+    { label: 'Total Udhar Amount',       x: marginX + 150, w: 36 }
+  ];
+
+  function drawHeader(){
+    pdf.setFontSize(17);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('Mittu Wholesaler & Retailer', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+    pdf.setFontSize(12.5);
+    pdf.text('Total Udhar Bakaya Amount: Rs. ' + totalBakaya.toFixed(2), pageWidth / 2, y, { align: 'center' });
+    y += 6.5;
+    pdf.setFontSize(9);
+    pdf.setFont(undefined, 'normal');
+    pdf.text('Generated: ' + formatNow(), pageWidth / 2, y, { align: 'center' });
+    y += 8;
+    pdf.setFontSize(9.5);
+    pdf.setFont(undefined, 'bold');
+    cols.forEach(c => pdf.text(c.label, c.x, y, { maxWidth: c.w - 2 }));
+    y += 2;
+    pdf.setLineWidth(0.3);
+    pdf.line(marginX, y, pageWidth - marginX, y);
+    y += 6;
+    pdf.setFont(undefined, 'normal');
+    pdf.setFontSize(9);
+  }
+
+  drawHeader();
+
+  // customers pehle se hi wahi Sort By order mein hain jo list screen par chuna gaya tha.
+  customers.forEach((c, i) => {
+    if (y > bottomLimit){
+      pdf.addPage();
+      y = 20;
+      drawHeader();
+    }
+    pdf.text(String(i + 1), cols[0].x, y);
+    pdf.text((c.custName || 'Customer').toString(), cols[1].x, y, { maxWidth: cols[1].w - 2 });
+    pdf.text((c.custMobile || '-').toString(), cols[2].x, y, { maxWidth: cols[2].w - 2 });
+    pdf.text((c.lastDueDate || '-').toString(), cols[3].x, y, { maxWidth: cols[3].w - 2 });
+    pdf.text('Rs. ' + c.balance.toFixed(2), cols[4].x, y, { maxWidth: cols[4].w - 2 });
+    y += 8;
+  });
+
+  const stamp = formatNow().replace(/[/,: ]/g, '-');
+  downloadPDF(pdf, `Mittu_Udhar_Bakaya_${stamp}.pdf`);
+}
+
+// Customer list card par click hone par uska settle form (Screen 2) dikhata hai.
+function selectUdharSettleCustomer(custId){
+  const entries = getUdharEntriesForCustomer(custId);
+  if (!entries.length) return;
+  const latest = entries[0]; // newest-first
+  const cust = { custId: custId, name: latest.custName || '', mobile: latest.custMobile || '' };
+  const balance = computeUdharBalance(entries);
+  window._udharSettleCustomer = cust;
+
+  document.getElementById('udharSettleCustInfo').innerHTML =
+    'Customer: ' + escapeHtml(cust.name || 'Customer') + (cust.mobile ? ' (' + escapeHtml(cust.mobile) + ')' : '') +
+    ' <button type="button" data-cid="' + escapeHtml(custId) + '" onclick="editUdharCustomer(this.dataset.cid)" style="margin-left:6px; padding:3px 8px; border:1px solid #a04e00; border-radius:6px; background:#fff; color:#a04e00; font-size:11px; font-weight:700; cursor:pointer;">\u270f\ufe0f Naam/Mobile badlein</button>';
+  document.getElementById('udharSettleTotalDue').textContent = '₹' + Math.max(balance, 0).toFixed(2);
+  const amtInput = document.getElementById('udharSettleAmountInput');
+  amtInput.value = balance > 0 ? balance.toFixed(2) : '';
+  amtInput.max = balance > 0 ? balance.toFixed(2) : '';
+
+  renderUdharLedgerTable('udharSettleLedgerList', entries);
+
+  window._udharSettleScreen = 'detail';
+  document.getElementById('udharSettleListScreen').style.display = 'none';
+  document.getElementById('udharSettleDetailScreen').style.display = 'block';
+  document.getElementById('udharSettleHeaderTitle').textContent =
+    '💰 ' + (cust.name || 'Customer') + (cust.mobile ? ' (' + cust.mobile + ')' : '');
+  window.scrollTo(0, 0);
+}
+// List container par ek hi baar click-listener laga do (event delegation), taaki
+// customer naam mein khaas characters (' " < >) hone par bhi koi dikkat na ho.
+document.getElementById('udharSettleCustomerList').addEventListener('click', function(e){
+  const card = e.target.closest('.udhar-settle-cust-card');
+  if (!card) return;
+  selectUdharSettleCustomer(card.dataset.custid);
+});
+
+function openUdharSettleModal(){
+  window._udharSettleFullPage = true;
+  window._udharSettleScreen = 'list';
+
+  // Billing screen ko hide karke, sirf yeh page poore screen par dikhao.
+  const topbar = document.querySelector('.topbar');
+  const appWrap = document.getElementById('appWrap');
+  if (topbar) topbar.style.display = 'none';
+  if (appWrap) appWrap.style.display = 'none';
+  window.scrollTo(0, 0);
+
+  document.getElementById('udharSettleHeaderTitle').textContent = '💰 उधार बकाया चुकता करें';
+  document.getElementById('udharSettleSearchInput').value = '';
+  closeUdharSettleMenu();
+  closeUdharSettleSortSheet();
+  renderUdharSettleCustomerList();
+  document.getElementById('udharSettleListScreen').style.display = 'block';
+  document.getElementById('udharSettleDetailScreen').style.display = 'none';
+
+  document.getElementById('udharSettleOverlay').style.display = 'block';
+}
+
+// Header ka ← button: detail screen se list par wapas, list screen se poori tarah band.
+function udharSettleGoBack(){
+  if (window._udharSettleScreen === 'detail'){
+    window._udharPendingSettle = null;
+    window._udharSettleScreen = 'list';
+    document.getElementById('udharSettleHeaderTitle').textContent = '💰 उधार बकाया चुकता करें';
+    document.getElementById('udharSettleDetailScreen').style.display = 'none';
+    document.getElementById('udharSettleListScreen').style.display = 'block';
+    renderUdharSettleCustomerList(); // taaki abhi-abhi chukta hua bakaya list mein turant update dikhe
+    window.scrollTo(0, 0);
+    return;
+  }
+  closeUdharSettleModal();
+}
+
+function closeUdharSettleModal(){
+  window._udharPendingSettle = null;
+  document.getElementById('udharSettleOverlay').style.display = 'none';
+  if (window._udharSettleFullPage){
+    // Wapas billing screen par le jao.
+    const topbar = document.querySelector('.topbar');
+    const appWrap = document.getElementById('appWrap');
+    if (topbar) topbar.style.display = '';
+    if (appWrap) appWrap.style.display = '';
+    window._udharSettleFullPage = false;
+  }
+}
+
+function proceedUdharSettlePayment(){
+  const cust = window._udharSettleCustomer;
+  if (!cust || !cust.custId){
+    alert('Customer information missing. Pehle modal dobara kholein.');
+    return;
+  }
+  const entries = getUdharEntriesForCustomer(cust.custId);
+  const balance = computeUdharBalance(entries);
+  const amount = parseFloat(document.getElementById('udharSettleAmountInput').value);
+  if (!amount || amount <= 0){
+    alert('Kripya sahi raashi darj karein.');
+    return;
+  }
+  if (amount > balance + 0.01){
+    alert('Chukta ki jaane wali raashi kul bakaya se zyada nahi ho sakti.');
+    return;
+  }
+  window._udharPendingSettle = { custId: cust.custId, custName: cust.name, custMobile: cust.mobile, amount: amount };
+  document.getElementById('udharPaymentAmountDisplay').textContent = '₹' + amount.toFixed(2);
+  document.getElementById('udharPaymentMethodOverlay').style.display = 'flex';
+}
+
+function closeUdharPaymentMethodOverlay(){
+  document.getElementById('udharPaymentMethodOverlay').style.display = 'none';
+}
+
+function cancelUdharPayment(){
+  window._udharPendingSettle = null;
+  document.getElementById('udharPaymentMethodOverlay').style.display = 'none';
+  document.getElementById('udharQrOverlay').style.display = 'none';
+  if (window.clearDisplayBill) window.clearDisplayBill();
+}
+
+function finalizeUdharSettle(method){
+  const pending = window._udharPendingSettle;
+  if (!pending) return false;
+  window._udharPendingSettle = null; // pehle hi clear: dobara tap se duplicate entry na bane
+  const bal = computeUdharBalance(getUdharEntriesForCustomer(pending.custId));
+  if (pending.amount > bal + 0.01){
+    alert('Khata badal chuka hai (ab bakaya \u20b9' + Math.max(bal, 0).toFixed(2) + '). Dobara raashi daal kar koshish karein.');
+    refreshUdharViews(pending.custId);
+    return false;
+  }
+  addUdharLedgerEntry({
+    custId: pending.custId,
+    custName: pending.custName,
+    custMobile: pending.custMobile,
+    type: 'settle',
+    method: method,
+    amount: pending.amount
+  });
+  refreshUdharViews(pending.custId);
+  return true;
+}
+
+function chooseUdharPaymentMethod(method){
+  const pending = window._udharPendingSettle;
+  if (!pending) return;
+  closeUdharPaymentMethodOverlay();
+  if (method === 'cash'){
+    if (finalizeUdharSettle('cash')) alert('₹' + pending.amount.toFixed(2) + ' cash mein prapt ho gaya. Khata update ho gaya.');
+    return;
+  }
+  // Online: show a fixed-amount QR for the customer to scan.
+  generateUdharQR(pending.amount, pending.custName);
+}
+
+function generateUdharQR(amount, custName){
+  const pend = window._udharPendingSettle || {};
+  const billNo = 'UDHAR-' + (pend.custMobile || '');
+  const upiUrl = buildUpiUrl(amount, billNo, 'Udhar Khata ' + (pend.custMobile || ''));
+
+  // Sync this fixed amount to the old-phone customer display too, same as
+  // the main bill QR does.
+  if (window.pushBillToDisplay) window.pushBillToDisplay(billNo, amount.toFixed(2), upiUrl);
+
+  const qrSize = Math.max(180, Math.min(window.innerWidth - 90, 280));
+  const qrDiv = document.getElementById('udharQrDiv');
+  qrDiv.innerHTML = '';
+  new QRCode(qrDiv, {
+    text: upiUrl,
+    width: qrSize,
+    height: qrSize,
+    colorDark: '#0c1f4a',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  document.getElementById('udharQrCustName').textContent = custName ? ('Customer: ' + custName) : '';
+  document.getElementById('udharQrAmount').textContent = amount.toFixed(2);
+  document.getElementById('udharQrOverlay').style.display = 'flex';
+}
+
+function closeUdharQrOverlay(){
+  document.getElementById('udharQrOverlay').style.display = 'none';
+}
+
+// Shopkeeper taps this after checking (in their own bank/UPI app) that the
+// scanned payment actually came in — a webpage can't detect that on its own.
+function confirmUdharOnlinePaymentReceived(){
+  const pending = window._udharPendingSettle;
+  if (!pending){
+    closeUdharQrOverlay();
+    return;
+  }
+  const ok = finalizeUdharSettle('online');
+  closeUdharQrOverlay();
+  if (window.markDisplayPaid) window.markDisplayPaid();
+  if (window.clearDisplayBill) setTimeout(() => window.clearDisplayBill(), 4500);
+  if (ok) alert('₹' + pending.amount.toFixed(2) + ' online payment prapt ho gaya. Khata update ho gaya.');
+}
+
+// =====================================================================
+// UDHAR KHATA BOOK MANAGEMENT (hamburger menu)
+// Yeh section wahi purana udhar ledger (getUdharLedger / addUdharLedgerEntry)
+// use karta hai, isliye bill ke andar se joda gaya udhar aur yahan se joda
+// gaya udhar ek hi khate mein dikhta hai.
+// =====================================================================
+function udharBookMoney(n){ return '\u20b9' + (parseFloat(n) || 0).toFixed(2); }
+
+// Har customer ka: kul udhar, kul jama, bakaya, aakhri udhar ki date.
+function udharBookSummary(){
+  const list = getUdharLedger() || [];
+  const map = {};
+  list.forEach(e => {
+    const cid = udharEntryCustId(e);
+    if (!cid) return;
+    const c = map[cid] || (map[cid] = { custId: cid, custName: '', custMobile: '', due: 0, paid: 0, lastTs: 0, lastDate: '', count: 0 });
+    if (!c.custName && e.custName) c.custName = e.custName;   // list newest-first hai
+    if (!c.custMobile && e.custMobile) c.custMobile = e.custMobile;
+    const a = parseFloat(e.amount) || 0;
+    if (e.type === 'due') c.due += a; else if (e.type === 'settle') c.paid += a;
+    c.count++;
+    if (e.type === 'due'){
+      const ts = parseInt(String(e.id || '').split('-')[0], 10) || 0;
+      if (ts >= c.lastTs){ c.lastTs = ts; c.lastDate = e.dateTime || ''; }
+    }
+  });
+  return Object.keys(map).map(k => { const c = map[k]; c.balance = c.due - c.paid; return c; });
+}
+
+function udharBookIsOpen(){
+  const o = document.getElementById('udharBookOverlay');
+  return !!o && o.style.display === 'block';
+}
+
+function openUdharBook(){
+  const tb = document.querySelector('.topbar');
+  const aw = document.getElementById('appWrap');
+  const sp = document.getElementById('stockRecordPanel');
+  window._udharBookPrev = { tb: tb ? tb.style.display : '', aw: aw ? aw.style.display : '', sp: sp ? sp.style.display : '' };
+  if (tb) tb.style.display = 'none';
+  if (aw) aw.style.display = 'none';
+  if (sp) sp.style.display = 'none';
+  document.getElementById('udharBookSearch').value = '';
+  document.getElementById('udharBookOverlay').style.display = 'block';
+  showUdharBookScreen('list');
+  renderUdharBookList();
+}
+
+function closeUdharBook(){
+  document.getElementById('udharBookOverlay').style.display = 'none';
+  const p = window._udharBookPrev || { tb: '', aw: '', sp: 'none' };
+  const tb = document.querySelector('.topbar');
+  const aw = document.getElementById('appWrap');
+  const sp = document.getElementById('stockRecordPanel');
+  if (tb) tb.style.display = p.tb;
+  if (aw) aw.style.display = p.aw;
+  if (sp) sp.style.display = p.sp;
+  window._udharBookPrev = null;
+}
+
+function showUdharBookScreen(name){
+  window._udharBookScreen = name;
+  document.getElementById('udharBookListScreen').style.display = name === 'list' ? 'block' : 'none';
+  document.getElementById('udharBookDetailScreen').style.display = name === 'detail' ? 'block' : 'none';
+  document.getElementById('udharBookAddScreen').style.display = name === 'add' ? 'block' : 'none';
+  const t = document.getElementById('udharBookHeaderTitle');
+  if (name === 'list') t.textContent = '\ud83d\udcd2 Udhar Khata Book';
+  else if (name === 'add') t.textContent = '\u2795 Naya Udhar Jodein';
+  const o = document.getElementById('udharBookOverlay');
+  o.scrollTop = 0;
+}
+
+function udharBookGoBack(){
+  const s = window._udharBookScreen;
+  if (s === 'add' && window._udharBookAddFromDetail && window._udharBookCust &&
+      getUdharEntriesForCustomer(window._udharBookCust).length){
+    renderUdharBookDetail();
+    return;
+  }
+  if (s === 'detail' || s === 'add'){
+    window._udharBookCust = null;
+    showUdharBookScreen('list');
+    renderUdharBookList();
+    return;
+  }
+  closeUdharBook();
+}
+
+// ---------- Screen 1: customer list ----------
+function renderUdharBookList(){
+  const all = udharBookSummary();
+  const totDue = all.reduce((s, c) => s + c.due, 0);
+  const totPaid = all.reduce((s, c) => s + c.paid, 0);
+  const totBal = all.reduce((s, c) => s + Math.max(c.balance, 0), 0);
+  document.getElementById('udharBookTotDue').textContent = udharBookMoney(totDue);
+  document.getElementById('udharBookTotPaid').textContent = udharBookMoney(totPaid);
+  document.getElementById('udharBookTotBal').textContent = udharBookMoney(totBal);
+  const pendingCount = all.filter(c => c.balance > 0.01).length;
+  document.getElementById('udharBookCountLine').textContent =
+    all.length ? ('Kul ' + all.length + ' customer \u2022 ' + pendingCount + ' ka bakaya baaki') : '';
+
+  const q = (document.getElementById('udharBookSearch').value || '').trim().toLowerCase();
+  const filter = document.getElementById('udharBookFilter').value;
+  const sort = document.getElementById('udharBookSort').value;
+
+  let rows = all.filter(c => {
+    if (filter === 'pending' && !(c.balance > 0.01)) return false;
+    if (filter === 'cleared' && c.balance > 0.01) return false;
+    if (!q) return true;
+    return (c.custName || '').toLowerCase().includes(q) || (c.custMobile || '').toLowerCase().includes(q);
+  });
+  rows.sort((a, b) => {
+    if (sort === 'newest') return b.lastTs - a.lastTs;
+    if (sort === 'oldest') return a.lastTs - b.lastTs;
+    if (sort === 'az') return (a.custName || '').localeCompare(b.custName || '');
+    return b.balance - a.balance;
+  });
+
+  const el = document.getElementById('udharBookCustomerList');
+  if (!rows.length){
+    el.innerHTML = '<p style="text-align:center; color:#777; padding:20px; font-size:13px;">' +
+      (all.length ? 'Is filter mein koi customer nahi mila.' : 'Abhi koi udhar khata nahi hai. Upar "Naya Udhar Jodein" se shuru karein.') + '</p>';
+    return;
+  }
+  el.innerHTML = rows.map(c => {
+    const pend = c.balance > 0.01;
+    return '<div class="udhar-book-cust-card" data-cid="' + escapeHtml(c.custId) + '" style="background:#fff; border:1px solid #e3d8c0; border-radius:12px; padding:12px 14px; margin-bottom:10px; cursor:pointer;">' +
+      '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">' +
+        '<div style="min-width:0;"><div style="font-weight:700; font-size:14.5px; color:#16325c;">' + escapeHtml(c.custName || 'Customer') + '</div>' +
+        '<div style="font-size:12px; color:#777; margin-top:2px;">' + escapeHtml(c.custMobile || '') + '</div></div>' +
+        '<div style="text-align:right; flex-shrink:0;"><div style="font-size:11px; color:#777;">Bakaya</div>' +
+        '<div style="font-size:15px; font-weight:800; color:' + (pend ? '#c0392b' : '#1a7a3e') + ';">' + (pend ? udharBookMoney(c.balance) : '\u2713 Chukta') + '</div></div>' +
+      '</div>' +
+      '<div style="display:flex; gap:14px; font-size:12px; color:#666; margin-top:7px;">' +
+        '<span>Udhar: <b style="color:#a04e00;">' + udharBookMoney(c.due) + '</b></span>' +
+        '<span>Jama: <b style="color:#1a7a3e;">' + udharBookMoney(c.paid) + '</b></span></div>' +
+      (c.lastDate ? '<div style="font-size:11.5px; color:#999; margin-top:4px;">Aakhri udhar: ' + escapeHtml(c.lastDate) + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+// ---------- Screen 2: ek customer ka poora hisaab ----------
+function openUdharBookDetail(custId){
+  window._udharBookCust = custId;
+  renderUdharBookDetail();
+}
+
+function renderUdharBookDetail(){
+  const custId = window._udharBookCust;
+  const entries = custId ? getUdharEntriesForCustomer(custId) : [];
+  if (!entries.length){
+    window._udharBookCust = null;
+    showUdharBookScreen('list');
+    renderUdharBookList();
+    return;
+  }
+  const name = entries.map(e => e.custName).find(Boolean) || 'Customer';
+  const mobile = entries.map(e => e.custMobile).find(Boolean) || '';
+  let due = 0, paid = 0;
+  entries.forEach(e => {
+    const a = parseFloat(e.amount) || 0;
+    if (e.type === 'due') due += a; else if (e.type === 'settle') paid += a;
+  });
+  const bal = Math.max(due - paid, 0);
+
+  document.getElementById('udharBookCustInfo').innerHTML =
+    '<b style="color:#16325c; font-size:15px;">' + escapeHtml(name) + '</b>' + (mobile ? ' (' + escapeHtml(mobile) + ')' : '') +
+    ' <button type="button" onclick="udharBookEditCustomer()" style="margin-left:6px; padding:3px 8px; border:1px solid #a04e00; border-radius:6px; background:#fff; color:#a04e00; font-size:11px; font-weight:700; cursor:pointer;">\u270f\ufe0f Naam/Mobile badlein</button>';
+  document.getElementById('udharBookDDue').textContent = udharBookMoney(due);
+  document.getElementById('udharBookDPaid').textContent = udharBookMoney(paid);
+  document.getElementById('udharBookDBal').textContent = udharBookMoney(bal);
+  const inp = document.getElementById('udharBookSettleAmount');
+  inp.value = bal > 0 ? bal.toFixed(2) : '';
+  inp.max = bal > 0 ? bal.toFixed(2) : '';
+  renderUdharLedgerTable('udharBookLedgerList', entries, true);
+
+  showUdharBookScreen('detail');
+  document.getElementById('udharBookHeaderTitle').textContent = '\ud83d\udcd2 ' + name;
+}
+
+function udharBookEditCustomer(){
+  const cid = window._udharBookCust;
+  if (!cid) return;
+  window._udharSettleCustomer = null;
+  editUdharCustomer(cid);      // purana prompt-based editor
+  if (window._udharSettleCustomer && window._udharSettleCustomer.custId){
+    window._udharBookCust = window._udharSettleCustomer.custId;
+  }
+  renderUdharBookDetail();
+}
+
+// Bakaya chukta: raashi check karke purana payment-method (Cash / Online QR) flow chalata hai.
+function udharBookSettle(){
+  const cid = window._udharBookCust;
+  if (!cid) return;
+  const entries = getUdharEntriesForCustomer(cid);
+  const bal = computeUdharBalance(entries);
+  if (bal <= 0.01){ alert('Is customer ka koi bakaya nahi hai.'); return; }
+  const amount = parseFloat(document.getElementById('udharBookSettleAmount').value);
+  if (!amount || amount <= 0){ alert('Kripya sahi raashi darj karein.'); return; }
+  if (amount > bal + 0.01){ alert('Chukta ki jaane wali raashi kul bakaya (' + udharBookMoney(bal) + ') se zyada nahi ho sakti.'); return; }
+  const name = entries.map(e => e.custName).find(Boolean) || '';
+  const mobile = entries.map(e => e.custMobile).find(Boolean) || '';
+  window._udharPendingSettle = { custId: cid, custName: name, custMobile: mobile, amount: amount };
+  document.getElementById('udharPaymentAmountDisplay').textContent = udharBookMoney(amount);
+  document.getElementById('udharPaymentMethodOverlay').style.display = 'flex';
+}
+
+// ---------- Screen 3: naya udhar jodna ----------
+function udharBookStartAdd(fromDetail){
+  window._udharBookAddFromDetail = !!fromDetail;
+  const nameEl = document.getElementById('udharBookAddName');
+  const mobEl = document.getElementById('udharBookAddMobile');
+  nameEl.value = ''; mobEl.value = '';
+  nameEl.readOnly = false; mobEl.readOnly = false;
+  nameEl.style.background = mobEl.style.background = '';
+  document.getElementById('udharBookAddAmount').value = '';
+  document.getElementById('udharBookAddNote').value = '';
+  if (fromDetail && window._udharBookCust){
+    const entries = getUdharEntriesForCustomer(window._udharBookCust);
+    nameEl.value = entries.map(e => e.custName).find(Boolean) || '';
+    mobEl.value = entries.map(e => e.custMobile).find(Boolean) || '';
+    mobEl.readOnly = true; mobEl.style.background = '#f3f5f8';
+  }
+  showUdharBookScreen('add');
+}
+
+function saveUdharBookAdd(){
+  const name = (document.getElementById('udharBookAddName').value || '').trim();
+  const mobile = udharNormMobile(document.getElementById('udharBookAddMobile').value);
+  const amount = parseFloat(document.getElementById('udharBookAddAmount').value);
+  const note = (document.getElementById('udharBookAddNote').value || '').trim();
+  if (!name){ alert('Kripya customer ka naam darj karein.'); return; }
+  if (!mobile){ alert('Sahi 10-digit mobile number darj karein (isi se customer ka khata pehchana jaata hai).'); return; }
+  if (!amount || amount <= 0){ alert('Kripya sahi udhar ki raashi darj karein.'); return; }
+  const custId = getUdharCustomerId(name, mobile);
+  const existing = getUdharEntriesForCustomer(custId);
+  if (existing.length){
+    const exName = (existing.map(e => e.custName).find(Boolean) || '').trim();
+    if (exName && exName.toLowerCase() !== name.toLowerCase() &&
+        !confirm('Yeh mobile number pehle se "' + exName + '" ke khate mein hai, lekin abhi naam "' + name + '" bhara hai.\n\nKya yeh dono ek hi customer hain aur isi khate mein jodna hai?')) return;
+  }
+  if (!udharLock()) return;
+  const rec = addUdharLedgerEntry({ custId: custId, custName: name, custMobile: mobile, billNo: '', note: note, type: 'due', amount: amount });
+  if (!rec) return;
+  alert(udharBookMoney(amount) + ' ' + name + ' ke udhar khate mein jod diya gaya.');
+  window._udharBookAddFromDetail = false;
+  openUdharBookDetail(custId);
+}
+
+// Ledger badalne par (edit/delete/settle) yeh book ki screen refresh karta hai.
+function refreshUdharBook(){
+  if (!udharBookIsOpen()) return;
+  const s = window._udharBookScreen;
+  if (s === 'detail') renderUdharBookDetail();
+  else if (s === 'list') renderUdharBookList();
+}
+
+// ---------- PDF: sabhi customers ka kul hisaab ----------
+function downloadUdharBookPdf(){
+  const rows = udharBookSummary().sort((a, b) => b.balance - a.balance);
+  if (!rows.length){ alert('Abhi koi udhar khata nahi hai.'); return; }
+  const totDue = rows.reduce((s, c) => s + c.due, 0);
+  const totPaid = rows.reduce((s, c) => s + c.paid, 0);
+  const totBal = rows.reduce((s, c) => s + Math.max(c.balance, 0), 0);
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const W = 210, mx = 12, bottom = 282;
+  const cols = [
+    { l: 'Sl.No', x: mx, w: 11 }, { l: 'Customer', x: mx + 11, w: 42 }, { l: 'Mobile', x: mx + 54, w: 28 },
+    { l: 'Total Udhar', x: mx + 84, w: 32 }, { l: 'Total Jama', x: mx + 118, w: 32 }, { l: 'Bakaya', x: mx + 152, w: 32 }
+  ];
+  let y = 18;
+  function head(){
+    pdf.setFont(undefined, 'bold'); pdf.setFontSize(16);
+    pdf.text('Mittu Wholesaler & Retailer', W / 2, y, { align: 'center' }); y += 7;
+    pdf.setFontSize(12); pdf.text('Udhar Khata Book - Kul Hisaab', W / 2, y, { align: 'center' }); y += 6;
+    pdf.setFontSize(10);
+    pdf.text('Udhar: Rs. ' + totDue.toFixed(2) + '   Jama: Rs. ' + totPaid.toFixed(2) + '   Bakaya: Rs. ' + totBal.toFixed(2), W / 2, y, { align: 'center' }); y += 5;
+    pdf.setFont(undefined, 'normal'); pdf.setFontSize(9);
+    pdf.text('Generated: ' + formatNow(), W / 2, y, { align: 'center' }); y += 8;
+    pdf.setFont(undefined, 'bold'); pdf.setFontSize(9.5);
+    cols.forEach(c => pdf.text(c.l, c.x, y));
+    y += 2; pdf.setLineWidth(0.3); pdf.line(mx, y, W - mx, y); y += 6;
+    pdf.setFont(undefined, 'normal'); pdf.setFontSize(9);
+  }
+  head();
+  rows.forEach((c, i) => {
+    if (y > bottom){ pdf.addPage(); y = 18; head(); }
+    pdf.text(String(i + 1), cols[0].x, y);
+    pdf.text(String(c.custName || 'Customer'), cols[1].x, y, { maxWidth: cols[1].w - 2 });
+    pdf.text(String(c.custMobile || '-'), cols[2].x, y, { maxWidth: cols[2].w - 2 });
+    pdf.text('Rs. ' + c.due.toFixed(2), cols[3].x, y);
+    pdf.text('Rs. ' + c.paid.toFixed(2), cols[4].x, y);
+    pdf.text('Rs. ' + Math.max(c.balance, 0).toFixed(2), cols[5].x, y);
+    y += 8;
+  });
+  downloadPDF(pdf, 'Mittu_Udhar_Khata_Book_' + formatNow().replace(/[/,: ]/g, '-') + '.pdf');
+}
+
+// ---------- PDF: ek customer ka statement ----------
+function downloadUdharBookCustomerPdf(){
+  const cid = window._udharBookCust;
+  if (!cid) return;
+  const entries = getUdharEntriesForCustomer(cid).slice().reverse(); // purana pehle
+  if (!entries.length) return;
+  const name = entries.map(e => e.custName).find(Boolean) || 'Customer';
+  const mobile = entries.map(e => e.custMobile).find(Boolean) || '-';
+  let due = 0, paid = 0;
+  entries.forEach(e => { const a = parseFloat(e.amount) || 0; if (e.type === 'due') due += a; else if (e.type === 'settle') paid += a; });
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  const W = 210, mx = 12, bottom = 282;
+  const cols = [
+    { l: 'Sl.No', x: mx, w: 11 }, { l: 'Date & Time', x: mx + 11, w: 44 }, { l: 'Details', x: mx + 57, w: 52 },
+    { l: 'Udhar', x: mx + 111, w: 24 }, { l: 'Jama', x: mx + 137, w: 24 }, { l: 'Balance', x: mx + 163, w: 24 }
+  ];
+  let y = 18;
+  function head(){
+    pdf.setFont(undefined, 'bold'); pdf.setFontSize(16);
+    pdf.text('Mittu Wholesaler & Retailer', W / 2, y, { align: 'center' }); y += 7;
+    pdf.setFontSize(12); pdf.text('Udhar Khata Statement', W / 2, y, { align: 'center' }); y += 6;
+    pdf.setFontSize(10); pdf.text('Customer: ' + name + '   Mobile: ' + mobile, W / 2, y, { align: 'center' }); y += 5;
+    pdf.text('Udhar: Rs. ' + due.toFixed(2) + '   Jama: Rs. ' + paid.toFixed(2) + '   Bakaya: Rs. ' + Math.max(due - paid, 0).toFixed(2), W / 2, y, { align: 'center' }); y += 5;
+    pdf.setFont(undefined, 'normal'); pdf.setFontSize(9);
+    pdf.text('Generated: ' + formatNow(), W / 2, y, { align: 'center' }); y += 8;
+    pdf.setFont(undefined, 'bold'); pdf.setFontSize(9.5);
+    cols.forEach(c => pdf.text(c.l, c.x, y));
+    y += 2; pdf.setLineWidth(0.3); pdf.line(mx, y, W - mx, y); y += 6;
+    pdf.setFont(undefined, 'normal'); pdf.setFontSize(8.5);
+  }
+  head();
+  let run = 0;
+  entries.forEach((e, i) => {
+    if (y > bottom){ pdf.addPage(); y = 18; head(); }
+    const a = parseFloat(e.amount) || 0;
+    let detail;
+    if (e.type === 'due'){ run += a; detail = 'Udhar' + (e.billNo ? ' (Bill ' + e.billNo + ')' : '') + (e.note ? ' - ' + e.note : ''); }
+    else { run -= a; detail = 'Jama' + (e.method ? ' (' + e.method + ')' : ''); }
+    pdf.text(String(i + 1), cols[0].x, y);
+    pdf.text(String(e.dateTime || '-'), cols[1].x, y, { maxWidth: cols[1].w - 2 });
+    pdf.text(detail, cols[2].x, y, { maxWidth: cols[2].w - 2 });
+    pdf.text(e.type === 'due' ? a.toFixed(2) : '-', cols[3].x, y);
+    pdf.text(e.type === 'settle' ? a.toFixed(2) : '-', cols[4].x, y);
+    pdf.text(run.toFixed(2), cols[5].x, y);
+    y += 8;
+  });
+  downloadPDF(pdf, 'Udhar_Statement_' + name.replace(/[^A-Za-z0-9]+/g, '_') + '_' + formatNow().replace(/[/,: ]/g, '-') + '.pdf');
+}
+
+// Customer card tap -> uska poora hisaab (event delegation).
+document.getElementById('udharBookCustomerList').addEventListener('click', function(ev){
+  const card = ev.target.closest('.udhar-book-cust-card');
+  if (!card) return;
+  openUdharBookDetail(card.dataset.cid);
+});
+// Cloud se udhar data aane par book refresh ho.
+window.addEventListener('mittuUdharReady', refreshUdharBook);
 
 // When cloud history arrives after Google login, refresh the open history UI.
 window.addEventListener('mittuFirebaseBillHistoryReady', () => {
@@ -2952,10 +4354,10 @@ function sendWhatsApp(){
   });
 }
 
-function buildUpiUrl(total, billNo){
+function buildUpiUrl(total, billNo, note){
   const upiId = '7303714309@axl';
   const payeeName = 'MITTU WHOLESALER & RETAILER';
-  return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill No '+billNo)}`;
+  return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note || ('Bill No '+billNo))}`;
 }
 
 // QR button: ONLY generates and shows the QR full-screen for scanning.
