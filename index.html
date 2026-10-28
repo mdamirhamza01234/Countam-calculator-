@@ -1654,9 +1654,29 @@
     </div>
     <button class="account-option" onclick="switchMittuAccount()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Account Change / Switch Account</button>
     <button class="account-option" onclick="window.open('https://console.firebase.google.com/u/4/project/mittu-billing/database/usage/current-billing/connections','_blank'); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg> See Your Data on Google Database</button>
+    <button class="account-option" onclick="openGeminiKeyModal(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L21 2"/><path d="M17 6l3 3"/><path d="M14 9l2 2"/></svg> Gemini API Key</button>
     <button class="account-option" onclick="window.openSetPasswordModal(false); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Change Login Password</button>
     <button class="account-option" onclick="logoutMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-5"/><path d="M14 21h5a2 2 0 0 0 2-2"/></svg> Log Out</button>
     <button class="account-option delete" onclick="deleteMittuAccount(); closeAccountSheet();"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Account</button>
+  </div>
+</div>
+
+
+<div id="geminiKeyOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10001; align-items:center; justify-content:center; padding:16px;" onclick="closeGeminiKeyModal()">
+  <div style="background:#fff; border-radius:14px; padding:18px; width:100%; max-width:420px;" onclick="event.stopPropagation()">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <h3 style="margin:0; font-size:18px;">🔑 Gemini API Key</h3>
+      <button class="drawer-close" onclick="closeGeminiKeyModal()">✕</button>
+    </div>
+    <p style="margin:0 0 10px; font-size:13px; color:#555;">Apni Google AI Studio (aistudio.google.com/apikey) wali key yahan daalein. Ye sirf is phone/browser mein save hoti hai. Khali chhodne par app server wali key chalegi.</p>
+    <input id="geminiKeyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza..." style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-size:15px; box-sizing:border-box;">
+    <label style="display:flex; gap:6px; align-items:center; font-size:13px; margin:8px 0;"><input type="checkbox" onchange="document.getElementById('geminiKeyInput').type = this.checked ? 'text' : 'password'"> Key dikhayein</label>
+    <div id="geminiKeyStatus" style="font-size:13px; min-height:18px; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="account-option" style="flex:1; justify-content:center;" onclick="saveGeminiKey()">Save</button>
+      <button class="account-option" style="flex:1; justify-content:center;" onclick="testGeminiKey()">Test Key</button>
+      <button class="account-option delete" style="flex:1; justify-content:center;" onclick="removeGeminiKey()">Remove</button>
+    </div>
   </div>
 </div>
 
@@ -6164,7 +6184,54 @@ async function scanOcr(canvas, lang, label){
 // Isse browser ke "View Source" mein key kabhi nahi dikhegi.
 // Pehla model try hota hai; na chale (naam badal gaya / quota / busy) to agla try hota hai.
 const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
-function geminiKeyReady(){ return true; } // key ab server (/api/gemini) sambhalta hai
+function geminiKeyReady(){ return true; } // key ab server (/api/gemini) ya user ki apni key sambhalti hai
+
+// User ki apni Gemini API key (My Account se). Browser ke localStorage mein sirf is device par rehti hai.
+function getUserGeminiKey(){ try { return (localStorage.getItem('user_gemini_api_key') || '').trim(); } catch(e){ return ''; } }
+// Key ho to seedha Google ko call; na ho to server proxy (/api/gemini).
+function geminiFetch(model, body, stream){
+  const key = getUserGeminiKey();
+  if(key){
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) +
+      (stream ? ':streamGenerateContent?alt=sse' : ':generateContent');
+    return fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key }, body });
+  }
+  return fetch('/api/gemini?model=' + encodeURIComponent(model) + (stream ? '&stream=1' : ''), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body
+  });
+}
+function openGeminiKeyModal(){
+  const k = getUserGeminiKey();
+  document.getElementById('geminiKeyInput').value = k;
+  document.getElementById('geminiKeyInput').type = 'password';
+  document.getElementById('geminiKeyStatus').textContent = k ? '✅ Aapki apni key set hai (' + k.slice(0,4) + '••••' + k.slice(-4) + ')' : 'Abhi apni key set nahi hai — app server wali key use kar raha hai.';
+  document.getElementById('geminiKeyOverlay').style.display = 'flex';
+}
+function closeGeminiKeyModal(){ document.getElementById('geminiKeyOverlay').style.display = 'none'; }
+function saveGeminiKey(){
+  const v = document.getElementById('geminiKeyInput').value.trim();
+  if(!v){ alert('Pehle Gemini API key paste karein, ya "Remove Key" dabayein.'); return; }
+  if(!/^AIza[0-9A-Za-z_\-]{20,}$/.test(v) && !confirm('Ye key aam Gemini key jaisi (AIza...) nahi lag rahi. Phir bhi save karein?')) return;
+  try { localStorage.setItem('user_gemini_api_key', v); } catch(e){ alert('Key save nahi ho payi (browser storage band hai).'); return; }
+  closeGeminiKeyModal(); alert('✅ Gemini API key save ho gayi. Ab AI features aapki key se chalenge.');
+}
+function removeGeminiKey(){
+  try { localStorage.removeItem('user_gemini_api_key'); } catch(e){}
+  closeGeminiKeyModal(); alert('Key hata di gayi. Ab app server wali key use karega.');
+}
+async function testGeminiKey(){
+  const st = document.getElementById('geminiKeyStatus'), v = document.getElementById('geminiKeyInput').value.trim();
+  if(!v){ st.textContent = 'Pehle key paste karein.'; return; }
+  st.textContent = '⏳ Key check ho rahi hai...';
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method:'POST', headers:{'content-type':'application/json','x-goog-api-key':v},
+      body: JSON.stringify({contents:[{role:'user',parts:[{text:'Reply with OK'}]}],generationConfig:{maxOutputTokens:8}})
+    });
+    if(r.ok) st.textContent = '✅ Key sahi hai aur kaam kar rahi hai.';
+    else { let m=''; try{ m=((await r.json()).error||{}).message||''; }catch(e){} st.textContent = '❌ Key kaam nahi kar rahi (' + r.status + ')' + (m ? ': ' + m.slice(0,100) : ''); }
+  } catch(e){ st.textContent = '❌ Internet / network problem.'; }
+}
 
 function buildScanAiPrompt(stockNames){
   let p =
@@ -6213,11 +6280,7 @@ async function scanRunAi(sources){
   for(const model of GEMINI_MODELS){
     let resp;
     try {
-      resp = await fetch('/api/gemini?model=' + encodeURIComponent(model), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body
-      });
+      resp = await geminiFetch(model, body);
     } catch(e){ throw new Error('Internet / network problem'); }
     if(resp.ok){ j = await resp.json(); break; }
     let msg = '';
@@ -6358,9 +6421,7 @@ async function aiBillCall(contents){
   for(const model of GEMINI_MODELS){
     let resp;
     try{
-      resp=await fetch('/api/gemini?model='+encodeURIComponent(model),{
-        method:'POST',headers:{'content-type':'application/json'},body
-      });
+      resp=await geminiFetch(model, body);
     }catch(e){ lastErr='Internet / network problem'; continue; }
     if(resp.ok){
       const j=await resp.json();
@@ -7130,11 +7191,7 @@ async function aiAdvisorFetchStream(body, onChunk){
   for(const model of GEMINI_MODELS){
     let resp;
     try {
-      resp = await fetch('/api/gemini?model=' + encodeURIComponent(model) + '&stream=1', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body
-      });
+      resp = await geminiFetch(model, body, true);
     } catch(e){ lastErr = 'Internet / network problem'; continue; }
     if(!resp.ok){
       let msg = '';
@@ -7258,11 +7315,7 @@ async function aiAdvisorSend(){
       for(const model of GEMINI_MODELS){
         let resp;
         try {
-          resp = await fetch('/api/gemini?model=' + encodeURIComponent(model), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body
-          });
+          resp = await geminiFetch(model, body);
         } catch(e){ lastErr = 'Internet / network problem'; continue; }
         if(resp.ok){ j = await resp.json(); break; }
         let msg = '';
