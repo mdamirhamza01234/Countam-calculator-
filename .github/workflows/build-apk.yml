@@ -40,13 +40,13 @@ jobs:
       - name: Patch (signing, permissions, google-services)
         run: node scripts/patch-android.js
 
-      - name: App icon (optional resources/icon.png)
+      - name: App icon (resources/)
         run: |
-          if [ -f resources/icon.png ]; then
+          if [ -f resources/icon-only.png ]; then
             npm install --no-save @capacitor/assets
             npx capacitor-assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff'
           else
-            echo "resources/icon.png nahi hai — default icon use hoga"
+            echo "resources/icon-only.png nahi hai — default icon use hoga"
           fi
 
       - name: Sync

@@ -16,7 +16,7 @@ isliye website update hote hi app mein bhi update aa jaata hai — har baar naya
 4. Actions se APK dobara build karein.
 
 ## Icon (optional)
-`resources/icon.png` (1024x1024) upload karein — build mein apne aap icon ban jayega.
+`resources/` mein icon-only.png, icon-foreground.png, icon-background.png hain (Mittu Wholesale logo). Naya logo ho to inhe replace karein.
 
 ## Dhyan
 - `android-signing/mittu.keystore` APK ko hamesha ek hi signature deta hai (SHA-1 nahi badalta). Repo public hai, isliye

@@ -43,4 +43,13 @@ if (fs.existsSync(gs)) {
 } else {
   console.warn('WARNING: google-services.json repo root mein nahi mili — Google login APK mein kaam nahi karega.');
 }
+// 4) Android 12+ system splash: black background (white flash nahi)
+try {
+  const stylesPath = path.join(appDir, 'src', 'main', 'res', 'values', 'styles.xml');
+  let styles = fs.readFileSync(stylesPath, 'utf8');
+  if (!styles.includes('windowSplashScreenBackground')) {
+    styles = styles.replace(/(<style name="AppTheme.NoActionBarLaunch"[^>]*>)/, '$1\n        <item name="android:windowSplashScreenBackground">#000000</item>');
+    fs.writeFileSync(stylesPath, styles);
+  }
+} catch (e) { console.warn('styles.xml patch skip:', e.message); }
 console.log('Android project patch ho gaya');
