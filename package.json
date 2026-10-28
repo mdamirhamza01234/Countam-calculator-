@@ -1,0 +1,15 @@
+{
+  "name": "mittu-billing-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mittu Wholesaler & Retailer - Capacitor Android wrapper",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/share": "^7.0.0",
+    "@capacitor-firebase/authentication": "^7.0.0",
+    "firebase": "^11.0.0"
+  }
+}

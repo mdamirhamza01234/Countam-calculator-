@@ -11,6 +11,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 <script>
+// ---- Capacitor APK: downloads -> native Share sheet (Save / Open / WhatsApp) ----
+(function(){
+  function isNative(){ return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem && window.Capacitor.Plugins.Share); }
+  window.capIsNative = isNative;
+  window.capShareBlob = async function(blob, name){
+    const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.onerror = () => rej(new Error('File read nahi hui')); fr.readAsDataURL(blob); });
+    const safe = String(name || 'file').replace(/[\\/:*?"<>|]+/g, '_');
+    const w = await window.Capacitor.Plugins.Filesystem.writeFile({ path: safe, data: b64, directory: 'CACHE', recursive: true });
+    await window.Capacitor.Plugins.Share.share({ title: safe, url: w.uri, dialogTitle: 'File ka kya karein?' });
+  };
+  const origClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function(){
+    try {
+      if (isNative() && this.hasAttribute('download') && /^(data:|blob:)/i.test(this.href)) {
+        const name = this.getAttribute('download') || 'file';
+        fetch(this.href).then(r => r.blob()).then(b => window.capShareBlob(b, name)).catch(e => console.warn('native share failed', e));
+        return;
+      }
+    } catch(e) {}
+    return origClick.apply(this, arguments);
+  };
+  // jsPDF .save() fallback bhi native share se
+  try {
+    if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API) {
+      const origSave = window.jspdf.jsPDF.API.save;
+      window.jspdf.jsPDF.API.save = function(name){
+        if (isNative()) { window.capShareBlob(this.output('blob'), name || 'document.pdf').catch(e => console.warn(e)); return this; }
+        return origSave.apply(this, arguments);
+      };
+    }
+  } catch(e) {}
+})();
+</script>
+<script>
   if (window['pdfjsLib']) {
     window['pdfjsLib'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
@@ -50,7 +84,16 @@
         (window.median && window.median.socialLogin && window.median.socialLogin.google) ||
         (window.gonative && window.gonative.socialLogin && window.gonative.socialLogin.google);
 
-      if (medianGoogle && typeof medianGoogle.login === 'function') {
+      const capAuth = (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() &&
+                       window.Capacitor.Plugins && window.Capacitor.Plugins.FirebaseAuthentication) || null;
+
+      if (capAuth) {
+        // Capacitor APK ke andar: native Google Sign-In (Chrome/popup nahi khulta).
+        const r = await capAuth.signInWithGoogle();
+        const idToken = r && r.credential && r.credential.idToken;
+        if (!idToken) throw new Error('Google login cancel ya fail ho gaya.');
+        await signInWithCredential(fbAuth, GoogleAuthProvider.credential(idToken));
+      } else if (medianGoogle && typeof medianGoogle.login === 'function') {
         // Median app ke andar: native Google Sign-In use karo (Chrome nahi khulega).
         const result = await new Promise((resolve, reject) => {
           let done = false;
@@ -260,6 +303,7 @@
   // ---------------- ACCOUNT ACTIONS ----------------
   window.logoutMittuAccount = async function(){
     try {
+      try { if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.FirebaseAuthentication) await window.Capacitor.Plugins.FirebaseAuthentication.signOut(); } catch(e) {}
       await signOut(fbAuth);
       closeDrawer();
     } catch(err) {
@@ -4182,6 +4226,10 @@ function redownloadBill(idx){
 // in which case a proper native/Capacitor rebuild is the only real fix.
 
 function downloadPDF(pdf, filename, openFile = true){
+  if (window.capIsNative && window.capIsNative()) {
+    window.capShareBlob(pdf.output('blob'), filename).catch(e => alert('File save/share nahi ho payi: ' + (e && e.message || e)));
+    return;
+  }
   // Prefer Median's own native download bridge when running inside the
   // Median-wrapped app. Unlike a plain <a download> click (which the
   // webview just treats as a raw data: navigation, with no native
@@ -4229,6 +4277,7 @@ function downloadPDF(pdf, filename, openFile = true){
 // set up yet), it falls back to a normal local download so it's never
 // completely broken.
 async function openPdfInApp(pdf, filename){
+  if (window.capIsNative && window.capIsNative()) { downloadPDF(pdf, filename); return; }
   try {
     if (window.uploadPdfToFirebase){
       const blob = pdf.output('blob');

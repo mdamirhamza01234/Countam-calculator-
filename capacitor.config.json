@@ -1,0 +1,21 @@
+{
+  "appId": "com.mittu.billing",
+  "appName": "Mittu Wholesaler",
+  "webDir": "www",
+  "server": {
+    "url": "https://kiranabillgenerator.vercel.app",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "kiranabillgenerator.vercel.app",
+      "*.firebaseapp.com",
+      "*.googleapis.com",
+      "accounts.google.com"
+    ]
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": ["google.com"]
+    }
+  }
+}

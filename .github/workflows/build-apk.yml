@@ -1,0 +1,72 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'scripts/**'
+      - 'www/**'
+      - 'google-services.json'
+      - 'resources/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Patch (signing, permissions, google-services)
+        run: node scripts/patch-android.js
+
+      - name: App icon (optional resources/icon.png)
+        run: |
+          if [ -f resources/icon.png ]; then
+            npm install --no-save @capacitor/assets
+            npx capacitor-assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff'
+          else
+            echo "resources/icon.png nahi hai — default icon use hoga"
+          fi
+
+      - name: Sync
+        run: npx cap sync android
+
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mittu-Wholesaler.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mittu-Wholesaler-apk
+          path: Mittu-Wholesaler.apk
+
+      - name: Publish as GitHub Release (easy phone download)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest -y --cleanup-tag || true
+          gh release create apk-latest Mittu-Wholesaler.apk --title "Mittu Wholesaler APK (latest)" --notes "Auto-built APK. Phone par download karke install karein."
