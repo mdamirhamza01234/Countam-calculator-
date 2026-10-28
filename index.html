@@ -1090,6 +1090,11 @@
   .scan-card .scan-check { border-color: #e0a800 !important; background: #fff8dc; }
   .scan-total { font-size: 12px; color: #1a7a3e; font-weight: 700; margin-top: 6px; }
   .scan-src { font-size: 10.5px; color: #999; margin-top: 4px; word-break: break-word; }
+  .mg-row { display:flex; align-items:center; gap:10px; margin:8px 0 2px; }
+  .mg-row .mg-lbl { font-size:12px; font-weight:700; color:#6b4a2a; white-space:nowrap; }
+  .mg-row input[type=range] { flex:1; min-width:0; accent-color:#a04e00; height:28px; }
+  .mg-row input[type=range]:disabled { opacity:.4; }
+  .mg-row .mg-val { min-width:70px; text-align:right; font-weight:800; color:#a04e00; font-size:13.5px; }
   .scan-addrow { width: 100%; padding: 10px; border: 1.5px dashed #a04e00; background: #fff7ee; color: #a04e00; border-radius: 9px; font-weight: 800; font-size: 13.5px; cursor: pointer; margin-bottom: 8px; }
   h1 {
     text-align: center;
@@ -1893,13 +1898,14 @@
     <div class="field">
       <label>Purchase Price (₹)</label>
       <div class="price-unit-row">
-        <input type="number" id="stockItemPurchasePrice" placeholder="0" onkeydown="handlePriceUnitEnter(event)">
+        <input type="number" id="stockItemPurchasePrice" placeholder="0" oninput="mgPurchaseChanged('stock')" onkeydown="handlePriceUnitEnter(event)">
         <button type="button" class="unit-pick-btn" id="stockPurchaseUnitBtn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>
       </div>
     </div>
     <div class="field">
       <label>Sale Price (₹)</label>
       <div id="stockSalePriceRows"></div>
+      <div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" id="stockMgSlider" min="0" max="100" step="0.01" value="5" oninput="mgSliderChanged('stock')"><span class="mg-val" id="stockMgVal">5.00%</span></div>
       <button type="button" class="add-sale-btn" onclick="addSalePriceRow('', '')">+ Add another sale price (per kg / bag ...)</button>
     </div>
     <div class="field">
@@ -5341,6 +5347,7 @@ function openUnitMenu(btn){
     const d = document.createElement('div');
     d.textContent = u;
     d.onclick = () => {
+      const oldUnit = btn.dataset.unit || '';
       let val = u;
       if(u === 'Other…'){
         val = (prompt('Unit likhein (jaise kg, bag, box):') || '').trim();
@@ -5348,9 +5355,10 @@ function openUnitMenu(btn){
       }
       setUnitBtn(btn, val);
       closeUnitMenu();
-      if(btn.id === 'stockPurchaseUnitBtn') updateStockQtyLabel();
-      if(btn.dataset.scanIdx !== undefined) scanRecordRefresh(+btn.dataset.scanIdx);
-      if(btn.dataset.scanSale !== undefined) scanSaleTouched(+btn.dataset.scanSale);
+      if(btn.id === 'stockPurchaseUnitBtn'){ updateStockQtyLabel(); mgUnitChanged('stock', null, oldUnit); }
+      if(btn.dataset.scanIdx !== undefined){ scanRecordRefresh(+btn.dataset.scanIdx); mgUnitChanged('scan', +btn.dataset.scanIdx, oldUnit); }
+      if(btn.dataset.scanSale !== undefined){ scanSaleTouched(+btn.dataset.scanSale); mgUnitsCheck(mgCtx('scan', +btn.dataset.scanSale)); }
+      if(btn.closest && btn.closest('#stockSalePriceRows')){ mgUnitsCheck(mgCtx('stock')); mgAfterRender('stock'); }
     };
     m.appendChild(d);
   });
@@ -5372,7 +5380,7 @@ function addSalePriceRow(price, unit){
   const box = document.getElementById('stockSalePriceRows');
   const row = document.createElement('div');
   row.className = 'price-unit-row';
-  row.innerHTML = '<input type="number" class="stockSalePriceInput" placeholder="0" onkeydown="handlePriceUnitEnter(event)">' +
+  row.innerHTML = '<input type="number" class="stockSalePriceInput" placeholder="0" oninput="mgSaleChanged(\'stock\', null, this)" onkeydown="handlePriceUnitEnter(event)">' +
     '<button type="button" class="unit-pick-btn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>' +
     '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.price-unit-row\').remove(); refreshSaleRemoveBtns();">×</button>';
   box.appendChild(row);
@@ -5387,6 +5395,102 @@ function getSalePrices(item){
     return item.salePrices.map(p => ({ price: Number(p.price) || 0, unit: String(p.unit || fb) }));
   }
   return [{ price: Number(item.salePrice) || 0, unit: fb }];
+}
+
+
+// ---------------- PROFIT % SLIDER (Purchase Price -> Sale Price) ----------------
+// Sale Price = Purchase Price + X%.  Slider 0-100% (default 5%).  Slider hilao to
+// pehla Sale Price badalta hai; Sale Price likho to slider apne aap us % par aa jata hai.
+// Pehle Sale Price ki unit hamesha Purchase unit wali hoti hai (jab tak user khud alag unit na chune).
+const MG_DEFAULT = 5;
+let stockMgState = {};
+function mgRound2(n){ return Math.round(n * 100) / 100; }
+function mgCtx(kind, idx){
+  if(kind === 'scan'){
+    const it = stockScanParsedItems[idx]; if(!it) return null;
+    return { kind, idx, state: it, purchase: document.getElementById('scanPrice' + idx), pBtn: document.getElementById('scanUnitBtn' + idx),
+             box: document.getElementById('scanSaleRows' + idx), slider: document.getElementById('scanMg' + idx), label: document.getElementById('scanMgVal' + idx) };
+  }
+  return { kind, idx: null, state: stockMgState, purchase: document.getElementById('stockItemPurchasePrice'), pBtn: document.getElementById('stockPurchaseUnitBtn'),
+           box: document.getElementById('stockSalePriceRows'), slider: document.getElementById('stockMgSlider'), label: document.getElementById('stockMgVal') };
+}
+function mgFirst(c){
+  const row = c.box && c.box.querySelector('.price-unit-row');
+  return { input: row ? row.querySelector('input') : null, btn: row ? row.querySelector('.unit-pick-btn') : null };
+}
+function mgSetSlider(c, pct){
+  if(!isFinite(pct)) pct = MG_DEFAULT;
+  c.state.mgPct = pct;
+  if(c.slider) c.slider.value = Math.min(100, Math.max(0, pct));
+  if(c.label) c.label.textContent = c.slider && c.slider.disabled ? 'alag unit' : (Math.round(pct * 100) / 100).toFixed(2) + '%';
+}
+function mgUnitsCheck(c){
+  if(!c || !c.slider) return;
+  const f = mgFirst(c);
+  const pu = c.pBtn ? (c.pBtn.dataset.unit || '') : '', su = f.btn ? (f.btn.dataset.unit || '') : '';
+  c.slider.disabled = !!(pu && su && pu !== su);
+  if(c.slider.disabled && c.label) c.label.textContent = 'alag unit';
+}
+function mgAfterRender(kind, idx){
+  const c = mgCtx(kind, idx); if(!c || !c.slider) return;
+  const st = c.state, f = mgFirst(c);
+  const pu = c.pBtn ? (c.pBtn.dataset.unit || '') : '';
+  if(f.btn && !f.btn.dataset.unit && pu) setUnitBtn(f.btn, pu);
+  mgUnitsCheck(c);
+  const p = parseFloat(c.purchase && c.purchase.value) || 0;
+  let s = parseFloat(f.input && f.input.value) || 0;
+  if(st.mgSrc === undefined) st.mgSrc = (s > 0 || (kind === 'scan' && stockScanReviewMode === 'aiPriceUpdate')) ? 'sale' : 'pct';
+  const pct0 = st.mgPct === undefined ? MG_DEFAULT : st.mgPct;
+  if(st.mgSrc === 'pct' && p > 0 && !(s > 0) && f.input && !c.slider.disabled){
+    s = mgRound2(p * (1 + pct0 / 100)); f.input.value = s;
+  }
+  if(st.mgSrc === 'sale' && p > 0 && s > 0 && !c.slider.disabled) mgSetSlider(c, (s / p - 1) * 100);
+  else mgSetSlider(c, pct0);
+}
+function mgSliderChanged(kind, idx){
+  const c = mgCtx(kind, idx); if(!c || !c.slider || c.slider.disabled) return;
+  const pct = parseFloat(c.slider.value) || 0;
+  c.state.mgSrc = 'pct';
+  mgSetSlider(c, pct);
+  const p = parseFloat(c.purchase.value) || 0, f = mgFirst(c);
+  if(p > 0 && f.input){
+    f.input.value = mgRound2(p * (1 + pct / 100));
+    if(kind === 'scan') scanSaleTouched(idx);
+  }
+}
+function mgSaleChanged(kind, idx, inputEl){
+  const c = mgCtx(kind, idx); if(!c || !c.slider) return;
+  const f = mgFirst(c);
+  if(inputEl && f.input !== inputEl) return;      // sirf pehla Sale Price slider se juda hai
+  if(c.slider.disabled) return;
+  const s = parseFloat(f.input.value) || 0, p = parseFloat(c.purchase.value) || 0;
+  if(s > 0){
+    c.state.mgSrc = 'sale';
+    if(p > 0) mgSetSlider(c, (s / p - 1) * 100);
+  } else {
+    c.state.mgSrc = 'pct';
+  }
+}
+function mgPurchaseChanged(kind, idx){
+  const c = mgCtx(kind, idx); if(!c || !c.slider || c.slider.disabled) return;
+  const f = mgFirst(c);
+  const p = parseFloat(c.purchase.value) || 0, s = parseFloat(f.input && f.input.value) || 0;
+  if(c.state.mgSrc === 'sale' && s > 0){
+    if(p > 0) mgSetSlider(c, (s / p - 1) * 100);
+    return;
+  }
+  const pct = c.state.mgPct === undefined ? MG_DEFAULT : c.state.mgPct;
+  c.state.mgSrc = 'pct';
+  if(f.input){
+    if(p > 0) f.input.value = mgRound2(p * (1 + pct / 100));
+    else f.input.value = '';
+  }
+}
+function mgUnitChanged(kind, idx, oldUnit){
+  const c = mgCtx(kind, idx); if(!c || !c.slider) return;
+  const f = mgFirst(c), nu = c.pBtn ? (c.pBtn.dataset.unit || '') : '';
+  if(nu && f.btn && (!f.btn.dataset.unit || f.btn.dataset.unit === oldUnit)) setUnitBtn(f.btn, nu);
+  mgAfterRender(kind, idx);
 }
 
 // ---------------- STOCK RECORD ----------------
@@ -5815,6 +5919,7 @@ function openStockItemModal(id){
   const rowsBox = document.getElementById('stockSalePriceRows');
   rowsBox.innerHTML = '';
   const pBtn = document.getElementById('stockPurchaseUnitBtn');
+  stockMgState = {};
   const item = id ? getStockList().find(it => it.id === id) : null;
   if(item){
     document.getElementById('stockItemName').value = item.itemName || '';
@@ -5830,6 +5935,7 @@ function openStockItemModal(id){
     setUnitBtn(pBtn, '');
     addSalePriceRow('', '');
   }
+  mgAfterRender('stock');
   // Supplier name sirf is purchase-entry ke liye hai, item ke saath permanently save nahi hoti
   document.getElementById('stockItemSupplier').value = '';
   const supplierField = document.getElementById('stockItemSupplierField');
@@ -7598,7 +7704,7 @@ function findRecordLowAlert(name, unit){
 function scanSaleRowsHTML(idx){
   const it = stockScanParsedItems[idx];
   const rows = (it.sales && it.sales.length) ? it.sales : [{ price: 0, unit: '' }];
-  return rows.map((p, k) => `<div class="price-unit-row"><input type="number" step="any" inputmode="decimal" class="scan-in" placeholder="0" value="${Number(p.price) > 0 ? scanEsc(p.price) : ''}" oninput="scanSaleTouched(${idx})" onkeydown="handlePriceUnitEnter(event)"><button type="button" class="unit-pick-btn" data-unit="${scanEsc(p.unit)}" data-scan-sale="${idx}" onclick="openUnitMenu(this)">${p.unit ? scanEsc(p.unit) : 'Unit'}<span class="arr">↕</span></button>${rows.length > 1 ? `<button type="button" class="sale-remove-btn" onclick="removeScanSaleRow(${idx}, ${k})">×</button>` : ''}</div>`).join('');
+  return rows.map((p, k) => `<div class="price-unit-row"><input type="number" step="any" inputmode="decimal" class="scan-in" placeholder="0" value="${Number(p.price) > 0 ? scanEsc(p.price) : ''}" oninput="scanSaleTouched(${idx});${k === 0 ? ` mgSaleChanged('scan', ${idx}, this)` : ''}" onkeydown="handlePriceUnitEnter(event)"><button type="button" class="unit-pick-btn" data-unit="${scanEsc(p.unit)}" data-scan-sale="${idx}" onclick="openUnitMenu(this)">${p.unit ? scanEsc(p.unit) : 'Unit'}<span class="arr">↕</span></button>${rows.length > 1 ? `<button type="button" class="sale-remove-btn" onclick="removeScanSaleRow(${idx}, ${k})">×</button>` : ''}</div>`).join('');
 }
 function scanRerenderSale(idx){
   const it = stockScanParsedItems[idx];
@@ -7606,6 +7712,7 @@ function scanRerenderSale(idx){
   if(box) box.innerHTML = scanSaleRowsHTML(idx);
   const tag = document.getElementById('scanSaleTag' + idx);
   if(tag) tag.textContent = it.saleFromRecord ? '· Record se liya' : '';
+  mgAfterRender('scan', idx);
 }
 function scanSaleTouched(idx){
   const it = stockScanParsedItems[idx];
@@ -7636,6 +7743,7 @@ function scanRecordRefresh(idx){
     const sp = findRecordSalePrices(it.itemName, it.unit);
     it.sales = sp ? sp.map(p => ({ price: p.price, unit: p.unit })) : [{ price: 0, unit: '' }];
     it.saleFromRecord = !!sp;
+    it.mgSrc = sp ? 'sale' : 'pct';
     scanRerenderSale(idx);
   }
   if(!it.lowTouched){
@@ -7663,6 +7771,7 @@ function renderStockScanRows(){
     const sp = findRecordSalePrices(it.itemName, it.unit);
     it.sales = sp ? sp.map(p => ({ price: p.price, unit: p.unit })) : [{ price: 0, unit: '' }];
     it.saleFromRecord = !!sp;
+    it.mgSrc = sp ? 'sale' : 'pct';
     it.lowAlert = findRecordLowAlert(it.itemName, it.unit) || 0;
   });
   list.innerHTML = stockScanParsedItems.map((it, idx) => `
@@ -7681,7 +7790,7 @@ function renderStockScanRows(){
       <div style="margin-top:8px;">
         <span class="scan-lbl">Purchase Price (₹) / unit (bill ke hisaab se)</span>
         <div class="price-unit-row">
-          <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanPrice${idx}" value="${it.rate == null ? '' : it.rate}" placeholder="0" oninput="scanFieldEdited(${idx}, true)" onkeydown="handlePriceUnitEnter(event)">
+          <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanPrice${idx}" value="${it.rate == null ? '' : it.rate}" placeholder="0" oninput="scanFieldEdited(${idx}, true); mgPurchaseChanged('scan', ${idx})" onkeydown="handlePriceUnitEnter(event)">
           <button type="button" class="unit-pick-btn" id="scanUnitBtn${idx}" data-scan-idx="${idx}" data-unit="${scanEsc(it.unit)}" onclick="openUnitMenu(this)">${it.unit ? scanEsc(it.unit) : 'Unit'}<span class="arr">↕</span></button>
         </div>
       </div>
@@ -7689,6 +7798,7 @@ function renderStockScanRows(){
       <div style="margin-top:8px;">
         <span class="scan-lbl">Sale Price (₹) <span id="scanSaleTag${idx}" style="color:#1a7a3e;">${it.saleFromRecord ? '· Record se liya' : ''}</span></span>
         <div id="scanSaleRows${idx}">${scanSaleRowsHTML(idx)}</div>
+        <div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" id="scanMg${idx}" min="0" max="100" step="0.01" value="5" oninput="mgSliderChanged('scan', ${idx})"><span class="mg-val" id="scanMgVal${idx}">5.00%</span></div>
         <button type="button" class="add-sale-btn" onclick="addScanSaleRow(${idx})">+ Add another sale price (per kg / bag ...)</button>
       </div>
       <div style="margin-top:8px;">
@@ -7697,7 +7807,7 @@ function renderStockScanRows(){
       </div>
       ${it.src ? `<div class="scan-src">${it.srcNote ? '' : 'Scan text: '}${scanEsc(it.src)}</div>` : ''}
     </div>`).join('');
-  stockScanParsedItems.forEach((_, i) => refreshStockScanRow(i));
+  stockScanParsedItems.forEach((_, i) => { mgAfterRender('scan', i); refreshStockScanRow(i); });
 }
 
 function scanFieldEdited(idx, clearsCheck){
