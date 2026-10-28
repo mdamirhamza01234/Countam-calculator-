@@ -1726,7 +1726,7 @@
   <button type="button" class="stock-scan-btn" onclick="document.getElementById('stockScanFileInput').click()">🤖 AI Through Scan Bill / Invoice (Printed ya Handwritten) — Auto Add Items</button>
   <button type="button" class="stock-entries-toggle-btn" id="stockEntriesToggleBtn" onclick="toggleStockEntriesList()">🧾 Stocks Data Entry List</button>
   <div id="stockEntriesListContainer" style="display:none;"></div>
-  <input type="file" id="stockScanFileInput" accept="image/*,application/pdf" style="display:none" onchange="handleStockScanFile(event)">
+  <input type="file" id="stockScanFileInput" accept=".pdf,.docx,.txt,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,image/*" style="display:none" onchange="handleStockScanFile(event)">
   <div id="stockScanLoading" style="display:none;">
     <div class="stock-scan-spinner"></div>
     <div id="stockScanLoadingText">Scanning... please wait</div>
@@ -7321,7 +7321,27 @@ async function handleStockScanFile(event){
   try {
     showStockScanLoading('File khul rahi hai...');
     const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const isDocx = /\.docx$/i.test(file.name) || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const isTextFile = /\.(txt|csv)$/i.test(file.name) || (file.type || '').indexOf('text/') === 0;
     let items = [], sources = [], pdfDoc = null;
+
+    if(isDocx || isTextFile){
+      // DOCX / TXT / CSV: seedha text padho, OCR ya photo ki zaroorat nahi
+      let txt = '';
+      if(isDocx){
+        if(!window.mammoth) throw new Error('DOCX reader load nahi hua. Internet on karke dobara try karein.');
+        txt = (await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value || '';
+      } else {
+        txt = await file.text();
+      }
+      stockScanRawText = txt;
+      items = parseScannedTextToItems(txt);
+      meta.source = items.length ? 'File ka text padha gaya — sab kuch ek baar check kar lein.' : '';
+      hideStockScanLoading();
+      if(!items.length) meta.note = 'File mein se items auto-read nahi ho paye. Neeche items manually bharein.';
+      openStockScanReview(items, meta);
+      return;
+    }
 
     if(isPdf){
       const pr = await scanReadPdf(file);
