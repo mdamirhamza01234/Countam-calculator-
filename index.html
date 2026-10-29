@@ -1076,6 +1076,15 @@
   .scan-legend .leg-no { display:inline-block; min-width:26px; text-align:center; padding:1px 7px; margin:0 3px 3px 0; border-radius:12px; font-weight:800; font-size:12px; cursor:pointer; }
   .scan-legend .leg-check { background:#fff3cd; color:#8a5a00; border:1px solid #f0c36d; }
   .scan-legend .leg-miss { background:#fde8e8; color:#b3261e; border:1px solid #f1a9a4; }
+  .sort-switch-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-4px 0 10px; padding:8px 10px; background:#fff7ee; border:1px solid #f0d9bd; border-radius:10px; }
+  .sort-switch-row .sw-txt { font-size:12.5px; color:#6b4a2a; line-height:1.35; }
+  .sort-switch-row .sw-txt b { color:#a04e00; }
+  .sw { position:relative; width:46px; height:26px; flex:none; }
+  .sw input { opacity:0; width:100%; height:100%; margin:0; position:absolute; inset:0; cursor:pointer; z-index:2; }
+  .sw .sw-track { position:absolute; inset:0; border-radius:26px; background:#c9c2b8; transition:background .2s; }
+  .sw .sw-track::after { content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition:transform .2s; }
+  .sw input:checked + .sw-track { background:#a04e00; }
+  .sw input:checked + .sw-track::after { transform:translateX(20px); }
   .scan-view-btn { display:inline-flex; align-items:center; gap:5px; margin:0 0 4px 8px; padding:3px 11px; border-radius:12px; border:1.5px solid #1a7a3e; background:#fff; color:#1a7a3e; font-weight:800; font-size:12.5px; cursor:pointer; vertical-align:top; }
   .scan-view-btn svg { width:16px; height:16px; }
   #scanDocViewer { display:none; position:fixed; inset:0; z-index:10200; background:#1c1c1c; flex-direction:column; }
@@ -1980,6 +1989,10 @@
 
   <div class="panel">
     <h2>Items / Particulars (Item name and price)</h2>
+    <div class="sort-switch-row">
+      <div class="sw-txt" id="itemSortText"></div>
+      <label class="sw" aria-label="Item suggestion sort"><input type="checkbox" id="itemSortSwitch" onchange="setItemSortMode(this.checked)"><span class="sw-track"></span></label>
+    </div>
     <table id="itemsTable">
       <thead>
         <tr>
@@ -5196,11 +5209,45 @@ function refreshBillStockNames(){
     document.body.appendChild(dl);
   }
   dl.innerHTML = '';
-  getStockList().forEach(st => {
+  const list = getStockList().slice();
+  const byAlpha = (a, b) => String(a.itemName || '').localeCompare(String(b.itemName || ''), undefined, { sensitivity: 'base', numeric: true });
+  if(getItemSortMode()){
+    // ON: jo item Bill mein sabse zyada baar likha gaya wo sabse upar (barabar hone par A-Z)
+    const cnt = billItemUsageCounts();
+    list.sort((a, b) => ((cnt.get(stockNormName(b.itemName)) || 0) - (cnt.get(stockNormName(a.itemName)) || 0)) || byAlpha(a, b));
+  } else {
+    list.sort(byAlpha);     // OFF: A-Z
+  }
+  list.forEach(st => {
     const o = document.createElement('option');
     o.value = st.itemName;
     dl.appendChild(o);
   });
+}
+// ---- Item suggestion sort: ON = sabse zyada use hone wale pehle, OFF = alphabet (A-Z) ----
+function getItemSortMode(){
+  try { return localStorage.getItem('mittu_item_sort_usage') !== '0'; } catch(e){ return true; }
+}
+function setItemSortMode(on){
+  try { localStorage.setItem('mittu_item_sort_usage', on ? '1' : '0'); } catch(e){}
+  syncItemSortSwitch();
+  refreshBillStockNames();
+}
+function syncItemSortSwitch(){
+  const on = getItemSortMode();
+  const sw = document.getElementById('itemSortSwitch'); if(sw) sw.checked = on;
+  const t = document.getElementById('itemSortText');
+  if(t) t.innerHTML = on ? '<b>Suggestion: Zyada use wale pehle</b><br>Jo saman bill mein sabse zyada likha gaya wo upar' : '<b>Suggestion: A–Z (alphabet order)</b><br>Saman ke naam alphabet ke hisaab se';
+}
+function billItemUsageCounts(){
+  const m = new Map();
+  try {
+    (getBillHistory() || []).forEach(rec => (rec.items || []).forEach(it => {
+      const k = stockNormName(it && (it.name || it.itemName));
+      if(k) m.set(k, (m.get(k) || 0) + 1);
+    }));
+  } catch(e){}
+  return m;
 }
 let _saleUnitListSeq = 0;
 // Bill mein aisa naya item likha jaye jo Stock Record mein nahi hai,
@@ -5221,6 +5268,7 @@ function attachStockAutofill(tr){
   if(!nameInput || nameInput.dataset.stockBound) return;
   nameInput.dataset.stockBound = '1';
   nameInput.setAttribute('list', 'billStockNames');
+  nameInput.addEventListener('focus', () => { if(getItemSortMode()) refreshBillStockNames(); });   // naye bill ke baad count update
   // Dropdown se word select karte hi keypad band kiye bina agle box mein chale jao
   const listPicked = (e, inp) => {
     if(e.inputType && e.inputType !== 'insertReplacementText') return false;   // normal typing nahi
@@ -8255,6 +8303,7 @@ setInterval(updateLiveClock, 1000);
 generateRandomBillNo();
 addRow();
 attachCustNameAutofill();
+syncItemSortSwitch();
 refreshCustNameSuggestions();
 </script>
 </body>
