@@ -1076,6 +1076,16 @@
   .scan-legend .leg-no { display:inline-block; min-width:26px; text-align:center; padding:1px 7px; margin:0 3px 3px 0; border-radius:12px; font-weight:800; font-size:12px; cursor:pointer; }
   .scan-legend .leg-check { background:#fff3cd; color:#8a5a00; border:1px solid #f0c36d; }
   .scan-legend .leg-miss { background:#fde8e8; color:#b3261e; border:1px solid #f1a9a4; }
+  .scan-view-btn { display:inline-flex; align-items:center; gap:5px; margin:0 0 4px 8px; padding:3px 11px; border-radius:12px; border:1.5px solid #1a7a3e; background:#fff; color:#1a7a3e; font-weight:800; font-size:12.5px; cursor:pointer; vertical-align:top; }
+  .scan-view-btn svg { width:16px; height:16px; }
+  #scanDocViewer { display:none; position:fixed; inset:0; z-index:10200; background:#1c1c1c; flex-direction:column; }
+  #scanDocViewer .sdv-head { display:flex; align-items:center; gap:10px; padding:10px 12px; padding-top:max(10px, env(safe-area-inset-top, 10px)); background:#2a2a2a; color:#fff; }
+  #scanDocViewer .sdv-title { flex:1; min-width:0; font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #scanDocViewer .sdv-btn { border:none; background:#444; color:#fff; border-radius:8px; padding:7px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  #scanDocViewer .sdv-body { flex:1; overflow:auto; padding:8px; -webkit-overflow-scrolling:touch; }
+  #scanDocViewer canvas, #scanDocViewer img { display:block; width:100%; height:auto; background:#fff; margin:0 auto 8px; border-radius:4px; }
+  #scanDocViewer pre { color:#eee; white-space:pre-wrap; word-break:break-word; font-size:13px; margin:0; }
+  #scanDocViewer .sdv-msg { color:#ddd; text-align:center; padding:30px 10px; font-size:14px; }
   .scan-method { display:inline-block; font-weight:800; font-size:12.5px; padding:2px 10px; border-radius:12px; background:#1a7a3e; color:#fff; margin-bottom:4px; }
   .scan-card { border: 1.5px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fff; }
   .scan-card.st-ok { border-color: #bfe3c7; }
@@ -1825,6 +1835,16 @@
     <button type="button" class="stock-dots-btn" onclick="openStockSortSheet()" aria-label="Sort by"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
   </div>
   <div id="stockListContainer"></div>
+</div>
+
+<!-- Uploaded document viewer (scan review ke liye) -->
+<div id="scanDocViewer">
+  <div class="sdv-head">
+    <div class="sdv-title" id="scanDocViewerTitle">Document</div>
+    <button type="button" class="sdv-btn" id="scanDocViewerShare" style="display:none;" onclick="scanDocShare()">Open with…</button>
+    <button type="button" class="sdv-btn" onclick="closeScanDocViewer()">✕ Band</button>
+  </div>
+  <div class="sdv-body" id="scanDocViewerBody"></div>
 </div>
 
 <!-- Scanned items review overlay -->
@@ -6026,6 +6046,7 @@ function deleteStockItem(id){
 let stockScanParsedItems = [];
 let stockScanPreviewSrc = '';
 let stockScanRawText = '';
+let stockScanFile = null;      // review mein "view" icon ke liye upload ki hui asli file
 let stockScanZoomRot = 0;
 
 const SCAN_UNIT_MAP = {
@@ -7542,7 +7563,7 @@ async function handleStockScanFile(event){
   const file = event.target.files && event.target.files[0];
   event.target.value = '';
   if(!file) return;
-  stockScanRawText = ''; stockScanPreviewSrc = '';
+  stockScanRawText = ''; stockScanPreviewSrc = ''; stockScanFile = file;
   const meta = { source: '', note: '' };
 
   try {
@@ -7676,7 +7697,9 @@ function openStockScanReview(items, meta){
     saveBtn.textContent = stockScanReviewMode==='aiPriceUpdate' ? 'Update Sale Price' : (stockScanReviewMode==='billUnknown' ? 'Add Selected to Stock' : 'Add Selected to Stock');
   }
   const banner = document.getElementById('stockScanBanner');
-  banner.innerHTML = (meta.method ? `<div><span class="scan-method">${scanEsc(meta.method)}</span></div>` : '') + (meta.source ? `<div>${scanEsc(meta.source)}</div>` : '') + (meta.note ? `<div style="color:#b3261e;margin-top:4px;">${scanEsc(meta.note)}</div>` : '');
+  const viewBtn = (stockScanReviewMode === 'scan' && stockScanFile)
+    ? `<button type="button" class="scan-view-btn" onclick="openScanDocViewer()" aria-label="Upload ki hui file dekhein"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>File dekhein</button>` : '';
+  banner.innerHTML = (meta.method || viewBtn ? `<div>${meta.method ? `<span class="scan-method">${scanEsc(meta.method)}</span>` : ''}${viewBtn}</div>` : '') + (meta.source ? `<div>${scanEsc(meta.source)}</div>` : '') + (meta.note ? `<div style="color:#b3261e;margin-top:4px;">${scanEsc(meta.note)}</div>` : '');
   banner.style.display = (meta.source || meta.note) ? 'block' : 'none';
 
   const supplierField = document.getElementById('stockScanSupplier')?.closest('.field');
@@ -7697,6 +7720,58 @@ function openStockScanReview(items, meta){
 
   renderStockScanRows();
   document.getElementById('stockScanReviewOverlay').style.display = 'flex';
+}
+let scanDocViewerUrl = '';
+async function openScanDocViewer(){
+  const f = stockScanFile; if(!f) return;
+  const body = document.getElementById('scanDocViewerBody');
+  document.getElementById('scanDocViewerTitle').textContent = f.name || 'Document';
+  document.getElementById('scanDocViewerShare').style.display = (window.capIsNative && window.capIsNative()) ? '' : 'none';
+  body.innerHTML = '<div class="sdv-msg">⏳ File khul rahi hai...</div>';
+  document.getElementById('scanDocViewer').style.display = 'flex';
+  const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  const isImg = (f.type || '').indexOf('image/') === 0 || /\.(png|jpe?g|webp)$/i.test(f.name);
+  try {
+    if(isImg){
+      scanDocViewerUrl = URL.createObjectURL(f);
+      body.innerHTML = '';
+      const im = document.createElement('img'); im.src = scanDocViewerUrl; im.alt = f.name || '';
+      body.appendChild(im);
+    } else if(isPdf){
+      if(!window.pdfjsLib) throw new Error('PDF viewer load nahi hua. Internet on karke dobara try karein.');
+      const pdf = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+      body.innerHTML = '';
+      const n = Math.min(pdf.numPages, 60);
+      const w = Math.max(320, Math.min(body.clientWidth || 400, 900)) * Math.min(window.devicePixelRatio || 1, 2);
+      for(let pg = 1; pg <= n; pg++){
+        if(document.getElementById('scanDocViewer').style.display === 'none') return;   // beech mein band kar diya
+        const page = await pdf.getPage(pg);
+        const base = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: w / base.width });
+        const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+        const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+        body.appendChild(c);
+        await page.render({ canvasContext: cx, viewport: vp }).promise;
+      }
+      if(pdf.numPages > n){ const m = document.createElement('div'); m.className = 'sdv-msg'; m.textContent = 'Sirf pehle ' + n + ' pages dikhaye gaye (total ' + pdf.numPages + ').'; body.appendChild(m); }
+    } else {
+      let txt = stockScanRawText || '';
+      if(!txt){ try { txt = await f.text(); } catch(e){} }
+      body.innerHTML = '';
+      const pre = document.createElement('pre'); pre.textContent = txt || 'Is file ka preview nahi ban sakta.';
+      body.appendChild(pre);
+    }
+  } catch(e){
+    body.innerHTML = '<div class="sdv-msg">❌ File nahi khul paayi: ' + scanEsc(e && e.message || 'error') + '</div>';
+  }
+}
+function closeScanDocViewer(){
+  document.getElementById('scanDocViewer').style.display = 'none';
+  document.getElementById('scanDocViewerBody').innerHTML = '';
+  if(scanDocViewerUrl){ try { URL.revokeObjectURL(scanDocViewerUrl); } catch(e){} scanDocViewerUrl = ''; }
+}
+function scanDocShare(){
+  if(stockScanFile && window.capShareBlob) window.capShareBlob(stockScanFile, stockScanFile.name || 'document').catch(e => alert('File open nahi ho payi: ' + (e && e.message || e)));
 }
 function closeStockScanReview(){
   document.getElementById('stockScanReviewOverlay').style.display = 'none';
