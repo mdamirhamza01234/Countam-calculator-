@@ -1079,6 +1079,8 @@
   .sort-switch-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-4px 0 10px; padding:8px 10px; background:#fff7ee; border:1px solid #f0d9bd; border-radius:10px; }
   .sort-switch-row .sw-txt { font-size:12.5px; color:#6b4a2a; line-height:1.35; }
   .sort-switch-row .sw-txt b { color:#a04e00; }
+  .hindi-fill-btn { width:100%; margin:-2px 0 10px; padding:9px 10px; border:1.5px dashed #a04e00; background:#fff; color:#a04e00; border-radius:10px; font-weight:800; font-size:12.5px; cursor:pointer; }
+  .hindi-fill-btn:disabled { opacity:.6; }
   .sw { position:relative; width:46px; height:26px; flex:none; }
   .sw input { opacity:0; width:100%; height:100%; margin:0; position:absolute; inset:0; cursor:pointer; z-index:2; }
   .sw .sw-track { position:absolute; inset:0; border-radius:26px; background:#c9c2b8; transition:background .2s; }
@@ -1925,6 +1927,10 @@
       <input type="text" id="stockItemName" placeholder="e.g. LED Bulb 9W">
     </div>
     <div class="field">
+      <label>Hindi Naam (optional, jaise आलू)</label>
+      <input type="text" id="stockItemHindi" placeholder="आलू">
+    </div>
+    <div class="field">
       <label id="stockQtyLabel">Quantity</label>
       <input type="number" id="stockItemQty" placeholder="0">
     </div>
@@ -1993,6 +1999,7 @@
       <div class="sw-txt" id="itemSortText"></div>
       <label class="sw" aria-label="Item suggestion sort"><input type="checkbox" id="itemSortSwitch" onchange="setItemSortMode(this.checked)"><span class="sw-track"></span></label>
     </div>
+    <button type="button" id="hindiFillBtn" class="hindi-fill-btn" style="display:none;" onclick="aiFillHindiNames()"></button>
     <table id="itemsTable">
       <thead>
         <tr>
@@ -5221,8 +5228,10 @@ function refreshBillStockNames(){
   list.forEach(st => {
     const o = document.createElement('option');
     o.value = st.itemName;
+    if(st.hindiName) o.label = st.hindiName;     // naam ke bagal mein Hindi (jaise aalu — आलू)
     dl.appendChild(o);
   });
+  updateHindiFillBtn();
 }
 // ---- Item suggestion sort: ON = sabse zyada use hone wale pehle, OFF = alphabet (A-Z) ----
 function getItemSortMode(){
@@ -5238,6 +5247,55 @@ function syncItemSortSwitch(){
   const sw = document.getElementById('itemSortSwitch'); if(sw) sw.checked = on;
   const t = document.getElementById('itemSortText');
   if(t) t.innerHTML = on ? '<b>Suggestion: Zyada use wale pehle</b><br>Jo saman bill mein sabse zyada likha gaya wo upar' : '<b>Suggestion: A–Z (alphabet order)</b><br>Saman ke naam alphabet ke hisaab se';
+}
+function updateHindiFillBtn(){
+  const b = document.getElementById('hindiFillBtn'); if(!b || b.dataset.busy) return;
+  const missing = getStockList().filter(s => !s.hindiName && s.itemName).length;
+  b.style.display = missing ? 'block' : 'none';
+  b.textContent = '🔤 ' + missing + ' item ka Hindi naam AI se bharein (naam ke bagal mein dikhega)';
+}
+async function aiFillHindiNames(){
+  const b = document.getElementById('hindiFillBtn');
+  let list = getStockList();
+  const todo = list.filter(s => !s.hindiName && s.itemName);
+  if(!todo.length){ updateHindiFillBtn(); return; }
+  b.dataset.busy = '1'; b.disabled = true;
+  const BATCH = 60; let done = 0, failed = '';
+  try {
+    for(let i = 0; i < todo.length; i += BATCH){
+      const part = todo.slice(i, i + BATCH);
+      b.textContent = '⏳ Hindi naam ban rahe hain... ' + Math.min(i + BATCH, todo.length) + '/' + todo.length;
+      const prompt = 'Neeche kirana / wholesale dukaan ke saman ke naam hain (Hinglish/English). Har ek ka aam bol-chaal wala Hindi naam Devanagari mein do (jaise "aalu" -> "आलू", "Basmati Rice Premium Per Bag" -> "बासमती चावल"). Packing words jaise Per, Pkt, Pkts, Bag, Pack, kg ko chhod do. SIRF JSON array return karo, koi aur text nahi: [{"name":"<diya hua naam bilkul waisa hi>","hindi":"<Devanagari naam>"}]. Naam: ' + JSON.stringify(part.map(s => s.itemName));
+      const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 4096, responseMimeType: 'application/json' } });
+      let arr = null, lastErr = '';
+      for(const model of GEMINI_MODELS){
+        let resp;
+        try { resp = await geminiFetch(model, body); } catch(e){ lastErr = 'Internet / network problem'; continue; }
+        if(resp.ok){
+          const j = await resp.json();
+          const txt = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(x => x.text || '').join('');
+          const a = txt.indexOf('['), z = txt.lastIndexOf(']');
+          try { arr = JSON.parse(txt.slice(a, z + 1)); break; } catch(e){ lastErr = 'AI ka jawab samajh nahi aaya'; continue; }
+        }
+        lastErr = 'AI error ' + resp.status;
+        if(resp.status === 401 || resp.status === 403) break;
+      }
+      if(!arr){ failed = lastErr || 'AI se jawab nahi mila'; break; }
+      list = getStockList();
+      const map = new Map();
+      arr.forEach(o => { if(o && o.name && o.hindi) map.set(stockNormName(o.name), String(o.hindi).trim()); });
+      const changed = [];
+      list.forEach(s => { const hn = map.get(stockNormName(s.itemName)); if(hn && !s.hindiName && /[\u0900-\u097F]/.test(hn)){ s.hindiName = hn; changed.push(s); done++; } });
+      saveStockList(list);
+      changed.forEach(s => { if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(s).catch(e => console.warn('Firebase stock save failed:', e)); });
+      refreshBillStockNames();
+    }
+  } finally {
+    delete b.dataset.busy; b.disabled = false;
+    const pnl = document.getElementById('stockRecordPanel'); if(pnl && pnl.style.display !== 'none') renderStockList();
+    updateHindiFillBtn();
+  }
+  alert(failed ? ('Hindi naam adhoore rahe (' + done + ' bhare). ' + failed) : ('✅ ' + done + ' item ka Hindi naam bhar gaya.'));
 }
 function billItemUsageCounts(){
   const m = new Map();
@@ -5879,6 +5937,7 @@ function mergeStockInto(existing, inc){
   const inSale = getSalePrices(inc).some(p => p.price > 0);
   if(!exSale && inSale){ existing.salePrices = getSalePrices(inc); existing.salePrice = existing.salePrices[0].price; }
   if(!Number(existing.lowAlert) && Number(inc.lowAlert)) existing.lowAlert = Number(inc.lowAlert);
+  if(!existing.hindiName && inc.hindiName) existing.hindiName = inc.hindiName;
   return existing;
 }
 // Scan/add ke waqt: record mein us naam ka Sale Price ho to wahi uthao (pehle naam+unit, phir sirf naam)
@@ -5995,13 +6054,14 @@ function openStockItemModal(id){
   const item = id ? getStockList().find(it => it.id === id) : null;
   if(item){
     document.getElementById('stockItemName').value = item.itemName || '';
+    document.getElementById('stockItemHindi').value = item.hindiName || '';
     document.getElementById('stockItemQty').value = item.quantity || 0;
     document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
     document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
     setUnitBtn(pBtn, item.unit || '');
     getSalePrices(item).forEach(p => addSalePriceRow(p.price, p.unit));
   } else {
-    ['stockItemName','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
+    ['stockItemName','stockItemHindi','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
       document.getElementById(id2).value = '';
     });
     setUnitBtn(pBtn, '');
@@ -6037,6 +6097,7 @@ function saveStockItemModal(){
   const item = {
     id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
     itemName: name,
+    hindiName: document.getElementById('stockItemHindi').value.trim(),
     quantity: Number(document.getElementById('stockItemQty').value) || 0,
     unit: qtyUnit,
     purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
