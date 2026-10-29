@@ -5233,6 +5233,11 @@ function refreshBillStockNames(){
     list.forEach(s => { if(s.hindiName) s.hindiName = hindiClean(s.hindiName); });
     saveStockList(list);
   }
+  const offlineHi = applyOfflineHindi(list);
+  if(offlineHi.length){
+    saveStockList(list);
+    offlineHi.forEach(s => { if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(s).catch(() => {}); });
+  }
   list = list.slice();
   const byAlpha = (a, b) => String(a.itemName || '').localeCompare(String(b.itemName || ''), undefined, { sensitivity: 'base', numeric: true });
   if(getItemSortMode()){
@@ -5272,11 +5277,217 @@ function hindiClean(s){
   try { t = t.normalize('NFC'); } catch(e){}
   return t.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g, ' ').replace(/\s+/g, ' ').trim();
 }
+// ---- Offline Hindi naam (bina AI): English/Hinglish saman ke naam -> Hindi, jaise chawal -> चावल ----
+const HINDI_DICT = (() => {
+  const m = new Map();
+  `chawal,chaval,rice: चावल
+basmati: बासमती
+arwa,arva: अरवा
+usna,usna: उसना
+sella,sela: सेला
+katarni,katarni: कतरनी
+gehu,gehun,wheat: गेहूं
+atta,aata,flour: आटा
+maida: मैदा
+suji,sooji,semolina,rava,rawa: सूजी
+besan: बेसन
+daliya,dalia: दलिया
+poha,pauwa: पोहा
+murmura,muri: मुरमुरा
+chana,chane: चना
+jau,barley: जौ
+makka,makai,corn: मकई
+bajra: बाजरा
+jowar: ज्वार
+ragi: रागी
+sabudana,sago: साबूदाना
+sewai,seviyan,vermicelli: सेवई
+rajma: राजमा
+chhole,chole: छोले
+lobia: लोबिया
+soyabean,soybean: सोयाबीन
+dal,daal,dall: दाल
+arhar,tur,toor: अरहर
+moong,mung: मूंग
+masoor,masur: मसूर
+urad: उड़द
+matar,peas: मटर
+namak,salt: नमक
+mirch,mirchi,chilli,chili: मिर्च
+haldi,turmeric: हल्दी
+dhaniya,dhania,coriander: धनिया
+jeera,zeera,cumin: जीरा
+rai: राई
+sarson,sarso,mustard: सरसों
+methi: मेथी
+ajwain,ajwan,ajwaen: अजवाइन
+saunf,fennel: सौंफ
+elaichi,cardamom: इलायची
+laung,clove: लौंग
+dalchini,cinnamon: दालचीनी
+tejpatta,tejpata: तेजपत्ता
+hing: हींग
+masala,masale: मसाला
+garam: गरम
+kasuri: कसूरी
+jaiphal: जायफल
+javitri: जावित्री
+pudina,mint: पुदीना
+amchur,amchoor: अमचूर
+adrak,ginger: अदरक
+lahsun,lasun,garlic: लहसुन
+pyaz,pyaaz,pyaj,onion: प्याज
+tamatar,tomato: टमाटर
+hari,green: हरी
+lal,red: लाल
+safed,white: सफेद
+kala,black: काला
+kali: काली
+peela,pila,yellow: पीला
+aalu,alu,allu,aloo,potato: आलू
+gobhi,gobi,cauliflower: गोभी
+cabbage,pattagobhi: पत्तागोभी
+baingan,brinjal: बैंगन
+bhindi: भिंडी
+lauki: लौकी
+karela: करेला
+tori: तोरी
+kaddu: कद्दू
+palak: पालक
+gajar,carrot: गाजर
+mooli,radish: मूली
+shalgam: शलजम
+chukandar,beetroot: चुकंदर
+kheera,kheere,cucumber: खीरा
+shimla,capsicum: शिमला मिर्च
+arbi: अरबी
+shakarkandi: शकरकंद
+tel,tail: तेल
+oil: ऑयल
+ghee: घी
+sunflower: सनफ्लावर
+refined: रिफाइंड
+nariyal,coconut: नारियल
+til,sesame: तिल
+moongfali,mungfali,groundnut,peanut,peanuts: मूंगफली
+cheeni,chini,sugar: चीनी
+gud,gur,jaggery: गुड़
+mishri: मिश्री
+shahad,honey: शहद
+doodh,dudh,milk: दूध
+dahi,curd: दही
+paneer: पनीर
+makhan,butter: मक्खन
+chai,tea: चाय
+patti,patta,pati: पत्ती
+coffee,kofi: कॉफी
+aamla,amla,aonla: आंवला
+akhrot,walnut,walnuts: अखरोट
+badam,almond,almonds: बादाम
+kaju,cashew: काजू
+kishmish,raisin,raisins: किशमिश
+pista,pistachio: पिस्ता
+khajoor,khajur,dates: खजूर
+anjeer,fig: अंजीर
+chhuhara,chuhara: छुहारा
+makhana,makhane: मखाना
+kela,banana: केला
+seb,apple: सेब
+santra,orange: संतरा
+nimbu,lemon: नींबू
+aam,mango: आम
+angoor,grapes: अंगूर
+biscuit,biscuits,biskut: बिस्कुट
+namkeen,namkin: नमकीन
+bhujia: भुजिया
+chips: चिप्स
+maggi: मैगी
+noodles: नूडल्स
+candy: कैंडी
+toffee: टॉफी
+chocolate: चॉकलेट
+pickle,achar,aachar: अचार
+papad: पापड़
+jam: जैम
+sauce: सॉस
+ketchup: केचप
+sabun,soap: साबुन
+shampoo: शैंपू
+hair: हेयर
+toothpaste: टूथपेस्ट
+paste: पेस्ट
+brush: ब्रश
+powder: पाउडर
+detergent: डिटर्जेंट
+surf: सर्फ
+washing: वॉशिंग
+agarbatti,agarbati,incense: अगरबत्ती
+dhoop: धूप
+machis,matchbox: माचिस
+mombatti,candle: मोमबत्ती
+air: एयर
+freshener: फ्रेशनर
+phenyl,phenyle: फिनायल
+jhadu,broom: झाड़ू
+tissue: टिश्यू
+napkin: नैपकिन
+cream: क्रीम
+face: फेस
+wash: वॉश
+premium: प्रीमियम
+mix,mixed: मिक्स
+special: स्पेशल
+fresh: फ्रेश
+big: बड़ा
+small: छोटा
+new: नया
+super: सुपर
+gold: गोल्ड
+classic: क्लासिक
+regular: रेगुलर
+pure: शुद्ध
+desi: देसी
+sada,plain: सादा
+ka: का
+ki: की
+ke: के`.split('\n').forEach(line => {
+    const i = line.lastIndexOf(':'); if(i < 0) return;
+    const hi = line.slice(i + 1).trim();
+    line.slice(0, i).split(',').forEach(k => { k = k.trim().toLowerCase(); if(k && !m.has(k)) m.set(k, hi); });
+  });
+  return m;
+})();
+// Ye shabd packing/unit ke hain, naam ka hissa nahi
+const HINDI_DROP = new Set(['per','pkt','pkts','packet','packets','pack','packs','bag','bags','box','boxes','kg','kgs','gm','gms','g','ltr','litre','liter','pcs','pc','piece','pieces','bottle','bottles','ek','of','and','the','dozen','qtl','ml','l']);
+// Saare shabd dictionary mein mile to Hindi naam deta hai, warna '' (tab AI button se bharein)
+function hindiFromDict(name){
+  const toks = String(name || '').toLowerCase().split(/[^a-z0-9\u0900-\u097f]+/).filter(Boolean);
+  const out = [];
+  for(const t of toks){
+    if(HINDI_DROP.has(t)) continue;
+    let hi;
+    if(/[\u0900-\u097f]/.test(t)) hi = t;
+    else if(/^\d/.test(t)) continue;      // 1, 5kg, 500g jaisi matra Hindi naam mein nahi
+    else hi = HINDI_DICT.get(t) || (t.length > 3 && t.endsWith('s') ? HINDI_DICT.get(t.slice(0, -1)) : '');
+    if(!hi) return '';
+    if(out[out.length - 1] !== hi) out.push(hi);
+  }
+  return out.length ? hindiClean(out.join(' ')) : '';
+}
+function applyOfflineHindi(list){
+  const changed = [];
+  list.forEach(s => {
+    if(s.hindiName || !s.itemName) return;
+    const hn = hindiFromDict(s.itemName);
+    if(hn){ s.hindiName = hn; changed.push(s); }
+  });
+  return changed;
+}
 function updateHindiFillBtn(){
   const b = document.getElementById('hindiFillBtn'); if(!b || b.dataset.busy) return;
   const missing = getStockList().filter(s => !s.hindiName && s.itemName).length;
   b.style.display = missing ? 'block' : 'none';
-  b.textContent = '🔤 ' + missing + ' item ka Hindi naam AI se bharein (naam ke bagal mein dikhega)';
+  b.textContent = '🤖 ' + missing + ' item ka Hindi naam dictionary mein nahi mila — AI se bharein';
 }
 async function aiFillHindiNames(){
   const b = document.getElementById('hindiFillBtn');
@@ -6121,7 +6332,7 @@ function saveStockItemModal(){
   const item = {
     id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
     itemName: name,
-    hindiName: hindiClean(document.getElementById('stockItemHindi').value),
+    hindiName: hindiClean(document.getElementById('stockItemHindi').value) || hindiFromDict(name),
     quantity: Number(document.getElementById('stockItemQty').value) || 0,
     unit: qtyUnit,
     purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
