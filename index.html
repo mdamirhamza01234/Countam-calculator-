@@ -1072,7 +1072,11 @@
   .scan-preview { text-align: center; margin-bottom: 10px; }
   .scan-preview img { max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #ddd; }
   .scan-preview button { display: block; margin: 6px auto 0; background: none; border: none; color: #1a3e8c; font-size: 12.5px; font-weight: 700; cursor: pointer; }
-  .scan-legend { font-size: 11.5px; color: #666; margin: 0 0 8px; }
+  .scan-legend { font-size: 12.5px; color: #555; margin: 0 0 8px; line-height: 1.7; }
+  .scan-legend .leg-no { display:inline-block; min-width:26px; text-align:center; padding:1px 7px; margin:0 3px 3px 0; border-radius:12px; font-weight:800; font-size:12px; cursor:pointer; }
+  .scan-legend .leg-check { background:#fff3cd; color:#8a5a00; border:1px solid #f0c36d; }
+  .scan-legend .leg-miss { background:#fde8e8; color:#b3261e; border:1px solid #f1a9a4; }
+  .scan-method { display:inline-block; font-weight:800; font-size:12.5px; padding:2px 10px; border-radius:12px; background:#1a7a3e; color:#fff; margin-bottom:4px; }
   .scan-card { border: 1.5px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fff; }
   .scan-card.st-ok { border-color: #bfe3c7; }
   .scan-card.st-check { border-color: #f0d58a; background: #fffdf3; }
@@ -1832,7 +1836,7 @@
       <img id="stockScanPreviewImg" alt="Bill" onclick="openStockScanZoom()">
       <button type="button" onclick="openStockScanZoom()">🔍 Bill bada karke dekhein / ghumayein</button>
     </div>
-    <p class="scan-legend"><b>✅ OK</b> &nbsp; <b>⚠️ Check karein</b> (andaza hai) &nbsp; <b style="color:#b3261e">❌ Adhura</b> (laal box khud bharein)</p>
+    <div class="scan-legend" id="stockScanLegend"><div><b>✅ OK</b> <span id="scanLegOk">–</span></div><div><b>⚠️ Check karein</b> (andaza hai): <span id="scanLegCheck">–</span></div><div><b style="color:#b3261e">❌ Adhura</b> (laal box khud bharein): <span id="scanLegMiss">–</span></div></div>
     <div class="field" style="margin-bottom:10px;">
       <label>Supplier / Dukandar Name (jahan se kharida)</label>
       <input type="text" id="stockScanSupplier" placeholder="e.g. Ramesh Traders">
@@ -7560,6 +7564,7 @@ async function handleStockScanFile(event){
       stockScanRawText = txt;
       items = parseScannedTextToItems(txt);
       meta.source = items.length ? 'File ka text padha gaya — sab kuch ek baar check kar lein.' : '';
+      if(items.length) meta.method = '📄 File Text (AI/OCR nahi)';
       hideStockScanLoading();
       if(!items.length) meta.note = 'File mein se items auto-read nahi ho paye. Neeche items manually bharein.';
       openStockScanReview(items, meta);
@@ -7572,10 +7577,11 @@ async function handleStockScanFile(event){
       if(pr.embedded){
         items = pr.embedded;
         meta.source = '✅ Is app ka bill — data seedha padha gaya, sab sahi hona chahiye.';
+        meta.method = '✅ App Bill (seedha data)';
       } else if(pr.textLines.length){
         stockScanRawText = pr.textLines.join('\n');
         items = parseScannedTextToItems(stockScanRawText);
-        if(items.length) meta.source = 'PDF ka text padha gaya.';
+        if(items.length){ meta.source = 'PDF ka text padha gaya.'; meta.method = '📄 PDF Text (AI/OCR nahi)'; }
       }
       if(!items.length) sources = await scanRenderPdfPages(pdfDoc, 3, 5);
     } else {
@@ -7596,7 +7602,8 @@ async function handleStockScanFile(event){
         stockScanRawText = ai.raw;
         items = ai.items;
         if(!items.length) throw new Error('AI ko bill mein koi item nahi mila');
-        meta.source = '🤖 AI (Gemini) se padha gaya — Qty aur Rate ek baar zaroor check karein.' +
+        meta.method = '🤖 AI Scan (Gemini)';
+        meta.source = 'Qty aur Rate ek baar zaroor check karein.' +
           (ai.mappedCount ? ' ' + ai.mappedCount + ' item ka naam aapke stock ke naam se match kiya gaya.' : '');
       } catch(e){
         console.warn('AI scan failed:', e);
@@ -7637,7 +7644,7 @@ async function handleStockScanFile(event){
         }
       }
       if(text) stockScanRawText = text;
-      if(items.length) meta.source = 'OCR se padha gaya — sab kuch ek baar check kar lein (⚠️ wale rows khaas).';
+      if(items.length){ meta.method = '🔍 OCR Scan'; meta.source = 'Sab kuch ek baar check kar lein (⚠️ wale rows khaas).'; }
     }
 
     hideStockScanLoading();
@@ -7669,7 +7676,7 @@ function openStockScanReview(items, meta){
     saveBtn.textContent = stockScanReviewMode==='aiPriceUpdate' ? 'Update Sale Price' : (stockScanReviewMode==='billUnknown' ? 'Add Selected to Stock' : 'Add Selected to Stock');
   }
   const banner = document.getElementById('stockScanBanner');
-  banner.innerHTML = (meta.source ? `<div>${scanEsc(meta.source)}</div>` : '') + (meta.note ? `<div style="color:#b3261e;margin-top:4px;">${scanEsc(meta.note)}</div>` : '');
+  banner.innerHTML = (meta.method ? `<div><span class="scan-method">${scanEsc(meta.method)}</span></div>` : '') + (meta.source ? `<div>${scanEsc(meta.source)}</div>` : '') + (meta.note ? `<div style="color:#b3261e;margin-top:4px;">${scanEsc(meta.note)}</div>` : '');
   banner.style.display = (meta.source || meta.note) ? 'block' : 'none';
 
   const supplierField = document.getElementById('stockScanSupplier')?.closest('.field');
@@ -7758,6 +7765,7 @@ function renderStockScanRows(){
   const list = document.getElementById('stockScanReviewList');
   if(!stockScanParsedItems.length){
     list.innerHTML = '<div class="stock-scan-empty">Koi item auto-detect nahi hua. Neeche "+ Item add karein" dabakar bharein.</div>';
+    updateScanLegend();
     return;
   }
   stockScanParsedItems.forEach(it => {
@@ -7815,6 +7823,24 @@ function scanFieldEdited(idx, clearsCheck){
   refreshStockScanRow(idx);
 }
 
+function updateScanLegend(){
+  const ok = [], chk = [], miss = [];
+  stockScanParsedItems.forEach((_, i) => {
+    const c = document.getElementById('scanCard' + i); if(!c) return;
+    if(c.classList.contains('st-miss')) miss.push(i + 1);
+    else if(c.classList.contains('st-check')) chk.push(i + 1);
+    else if(c.classList.contains('st-ok')) ok.push(i + 1);
+  });
+  const chip = (n, cls) => `<span class="leg-no ${cls}" onclick="scanGoToItem(${n - 1})">${n}</span>`;
+  const set = (id, html) => { const e = document.getElementById(id); if(e) e.innerHTML = html; };
+  set('scanLegOk', `(Total ${ok.length} item)`);
+  set('scanLegCheck', chk.length ? `(${chk.length}) ` + chk.map(n => chip(n, 'leg-check')).join('') : '0');
+  set('scanLegMiss', miss.length ? `(${miss.length}) ` + miss.map(n => chip(n, 'leg-miss')).join('') : '0');
+}
+function scanGoToItem(i){
+  const c = document.getElementById('scanCard' + i);
+  if(c) c.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
 function refreshStockScanRow(idx){
   const it = stockScanParsedItems[idx];
   if(!it) return;
@@ -7844,6 +7870,7 @@ function refreshStockScanRow(idx){
   totEl.innerHTML = t;
   const ub = document.getElementById('scanUnitBtn' + idx), ql = document.getElementById('scanQtyLbl' + idx);
   if(ql) ql.textContent = 'Qty' + (ub && ub.dataset.unit ? ' (' + ub.dataset.unit + ')' : '') + ' *';
+  updateScanLegend();
 }
 
 function syncStockScanFromDOM(){
