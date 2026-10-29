@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Mittu Wholesaler & Retailer - Bill Generator & Stock Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -642,9 +644,11 @@
   };
 </script>
 <style>
+  /* Hindi (Unicode Devanagari) ke liye saaf, standard font — Gboard / chat jaisa */
+  .itemName, #stockItemHindi, #stockSearchInput, #stockItemName { font-family: 'Segoe UI', Arial, 'Noto Sans Devanagari', 'Nirmala UI', sans-serif; }
   * { box-sizing: border-box; }
   body {
-    font-family: 'Segoe UI', Arial, sans-serif;
+    font-family: 'Segoe UI', Arial, 'Noto Sans Devanagari', 'Nirmala UI', sans-serif;
     background: #eef1f5;
     margin: 0;
     padding: 20px;
@@ -5094,6 +5098,13 @@ function smartFindStock(name, list){
   let hit = list.find(s => stockNormName(s.itemName) === exactKey);
   if(hit) return hit;
 
+  // 1b) Hindi (Devanagari) mein likha ho to Hindi naam se match karo (jaise आलू -> aalu)
+  if(/[\u0900-\u097F]/.test(String(name))){
+    const hk = hindiClean(name);
+    hit = list.find(s => s.hindiName && hindiClean(s.hindiName) === hk);
+    if(hit) return hit;
+  }
+
   // 2) Jaani-pehchani spelling / language variants (potato <-> aalu, etc.)
   const group = stockSynonymGroup(name);
   if(group != null){
@@ -5216,7 +5227,13 @@ function refreshBillStockNames(){
     document.body.appendChild(dl);
   }
   dl.innerHTML = '';
-  const list = getStockList().slice();
+  let list = getStockList();
+  // purane / paste kiye Hindi naam ko bhi standard Unicode mein badal do
+  if(list.some(s => s.hindiName && hindiClean(s.hindiName) !== s.hindiName)){
+    list.forEach(s => { if(s.hindiName) s.hindiName = hindiClean(s.hindiName); });
+    saveStockList(list);
+  }
+  list = list.slice();
   const byAlpha = (a, b) => String(a.itemName || '').localeCompare(String(b.itemName || ''), undefined, { sensitivity: 'base', numeric: true });
   if(getItemSortMode()){
     // ON: jo item Bill mein sabse zyada baar likha gaya wo sabse upar (barabar hone par A-Z)
@@ -5247,6 +5264,13 @@ function syncItemSortSwitch(){
   const sw = document.getElementById('itemSortSwitch'); if(sw) sw.checked = on;
   const t = document.getElementById('itemSortText');
   if(t) t.innerHTML = on ? '<b>Suggestion: Zyada use wale pehle</b><br>Jo saman bill mein sabse zyada likha gaya wo upar' : '<b>Suggestion: A–Z (alphabet order)</b><br>Saman ke naam alphabet ke hisaab se';
+}
+// Hindi naam hamesha standard Unicode Devanagari mein (NFC), bina chhupe hue zero-width / nbsp characters ke —
+// taaki Gboard se type kiya, kahin se paste kiya aur AI ka diya Hindi bilkul ek jaisa ho.
+function hindiClean(s){
+  let t = String(s == null ? '' : s);
+  try { t = t.normalize('NFC'); } catch(e){}
+  return t.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u3000]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 function updateHindiFillBtn(){
   const b = document.getElementById('hindiFillBtn'); if(!b || b.dataset.busy) return;
@@ -5283,7 +5307,7 @@ async function aiFillHindiNames(){
       if(!arr){ failed = lastErr || 'AI se jawab nahi mila'; break; }
       list = getStockList();
       const map = new Map();
-      arr.forEach(o => { if(o && o.name && o.hindi) map.set(stockNormName(o.name), String(o.hindi).trim()); });
+      arr.forEach(o => { if(o && o.name && o.hindi) map.set(stockNormName(o.name), hindiClean(o.hindi)); });
       const changed = [];
       list.forEach(s => { const hn = map.get(stockNormName(s.itemName)); if(hn && !s.hindiName && /[\u0900-\u097F]/.test(hn)){ s.hindiName = hn; changed.push(s); done++; } });
       saveStockList(list);
@@ -6097,7 +6121,7 @@ function saveStockItemModal(){
   const item = {
     id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
     itemName: name,
-    hindiName: document.getElementById('stockItemHindi').value.trim(),
+    hindiName: hindiClean(document.getElementById('stockItemHindi').value),
     quantity: Number(document.getElementById('stockItemQty').value) || 0,
     unit: qtyUnit,
     purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
