@@ -269,6 +269,7 @@
 
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
+    try { window.dispatchEvent(new CustomEvent('mittuFirebaseUserReady')); } catch(e){}
     const loginScreen = document.getElementById('loginScreen');
     if(user) {
       if(loginScreen) loginScreen.style.display = 'none';
@@ -1983,7 +1984,7 @@
     <div class="grid2">
       <div class="field">
         <label>S. No. (Bill No.)</label>
-        <input type="text" id="sno" value="1001" readonly style="background:#fff3e6; font-weight:700; color:#a04e00;">
+        <input type="text" id="sno" value="0001" readonly style="background:#fff3e6; font-weight:700; color:#a04e00;">
       </div>
       <div class="field">
         <label>Date &amp; Time (Auto — Live)</label>
@@ -2817,7 +2818,9 @@ function generateBill(openFile = true){
 
   // Save this bill into local history (works once opened in a real browser/APK;
   // Claude's own preview sandbox blocks storage, so history won't persist there)
-  saveBillToHistory({
+  const _serialNo = (window._snoAuto !== false && /^\d+$/.test(String(currentSno))) ? parseInt(currentSno, 10) : null;
+  if(_serialNo){ try { localStorage.setItem(billSerialKey(), String(Math.max(_serialNo, lastBillSerial()))); } catch(e){} }
+  const _billRecord = {
     billNo: currentSno,
     dateTime: `${nowParts.date}, ${nowParts.time}`,
     custName: document.getElementById('custName').value,
@@ -2825,7 +2828,9 @@ function generateBill(openFile = true){
     address: document.getElementById('custAddr').value,
     items: itemList,
     total: total
-  });
+  };
+  if(_serialNo) _billRecord.serial = _serialNo;      // Firebase undefined value nahi leta
+  saveBillToHistory(_billRecord);
 
   // Stock record se connect: bill ke items ka stock automatically kam karo
   try { deductStockForBill(itemList); } catch(e){ console.warn('Stock deduct failed:', e); }
@@ -4211,6 +4216,7 @@ function restoreBillToForm(idx){
 
   // Restore the exact bill-entry fields so the user can continue/edit it.
   document.getElementById('sno').value = rec.billNo || '';
+  window._snoAuto = false;      // purana bill khula hai: iska number badalna nahi
   document.getElementById('custName').value = rec.custName || '';
   document.getElementById('custMobile').value = rec.custMobile || '';
   document.getElementById('custAddr').value = rec.address || '';
@@ -4432,11 +4438,31 @@ function updateLiveClock(){
   document.getElementById('billDateTime').value = formatNow();
 }
 
-function generateRandomBillNo(){
-  // Random 4-digit bill number so user never has to type it
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  document.getElementById('sno').value = rand;
+// Bill No. ab serial wise: 0001, 0002, 0003 ... (har account ka apna silsila).
+// Agla number = (ab tak ka sabse bada serial) + 1. Serial phone mein aur bill history (cloud) mein
+// dono jagah yaad rehta hai, isliye doosre phone par bhi wahi silsila chalta hai.
+function billSerialKey(){
+  const u = window.currentFirebaseUser;
+  return 'mittu_bill_serial_' + (u && u.uid ? u.uid : 'local');
 }
+function lastBillSerial(){
+  let m = 0;
+  try { m = parseInt(localStorage.getItem(billSerialKey()) || '0', 10) || 0; } catch(e){}
+  try { (getBillHistory() || []).forEach(r => { const s = Number(r && r.serial); if(s > m) m = s; }); } catch(e){}
+  return m;
+}
+function formatBillSerial(n){ return String(n).padStart(4, '0'); }
+function generateRandomBillNo(){      // naam purana hai, ab serial number deta hai
+  document.getElementById('sno').value = formatBillSerial(lastBillSerial() + 1);
+  window._snoAuto = true;
+}
+// login / cloud history aane ke baad number dobara sahi karo (jab tak user ne purana bill restore nahi kiya)
+function refreshAutoBillNo(){
+  if(window._snoAuto === false) return;
+  const el = document.getElementById('sno'); if(el) generateRandomBillNo();
+}
+window.addEventListener('mittuFirebaseBillHistoryReady', refreshAutoBillNo);
+window.addEventListener('mittuFirebaseUserReady', refreshAutoBillNo);
 
 function toRoman(num){
   const romanMap = [
