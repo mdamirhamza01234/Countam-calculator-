@@ -423,33 +423,55 @@
     const u = window.currentFirebaseUser;
     if(!u || u.isAnonymous) return;
     setTimeout(() => {
-      try { if(typeof getStockList === 'function') window.publishShopStock(getStockList()); } catch(e){}
+      try { if(typeof getStockList === 'function') window.publishShopStockNow(getStockList()); } catch(e){}
     }, 4000);
   });
   attachShopOrders();
 
   // ---- Mittu Online Shop: public copy of stock (sirf naam, sale price, unit, in-stock). Purchase price kabhi nahi jata. ----
   let _shopPubT = null;
+  window.__shopPubStatus = '';
+  function shopPubReport(msg){
+    window.__shopPubStatus = msg;
+    try { if(typeof window.renderShopPubStatus === 'function') window.renderShopPubStatus(); } catch(e){}
+  }
+  // Turant publish karta hai aur result {ok, count, msg} deta hai
+  window.publishShopStockNow = async function(list){
+    try {
+      const user = window.currentFirebaseUser || fbAuth.currentUser;
+      if(!user){ shopPubReport('❌ Login nahi hai — pehle login karein.'); return { ok: false }; }
+      if(user.isAnonymous){ shopPubReport('❌ Anonymous login hai — apne Google/email se login karein.'); return { ok: false }; }
+      if(!Array.isArray(list)){ shopPubReport('❌ Stock list nahi mili.'); return { ok: false }; }
+      const out = {};
+      let skipped = 0;
+      list.forEach(it => {
+        if(!it || !it.id || !it.itemName) return;
+        const v = (Array.isArray(it.salePrices) && it.salePrices.length ? it.salePrices : [{ price: it.salePrice, unit: it.unit }])
+          .map(x => ({ p: Number(x.price) || 0, u: String(x.unit || it.unit || 'pcs') })).filter(x => x.p > 0);
+        if(!v.length){ skipped++; return; }
+        const o = { n: String(it.itemName), v: v, s: (Number(it.quantity) || 0) > 0 ? 1 : 0 };
+        if(it.hindiName) o.h = String(it.hindiName);
+        if(it.imageUrl && /^https:\/\//.test(it.imageUrl)) o.i = it.imageUrl;
+        // Firebase key mein . # $ [ ] / allowed nahi — saaf karo
+        out[String(it.id).replace(/[.#$\[\]\/]/g, '_')] = o;
+      });
+      const count = Object.keys(out).length;
+      await set(ref(fbDb, 'publicShop/stock'), out);
+      const msg = '✅ ' + count + ' items shop par bhej diye' + (skipped ? ' (' + skipped + ' items ka sale price 0 hai, wo nahi gaye)' : '') + '.';
+      shopPubReport(msg);
+      return { ok: true, count: count };
+    } catch(e){
+      console.warn('Shop stock publish failed:', e);
+      const code = (e && (e.code || e.message)) || 'error';
+      let who = '';
+      try { const u = window.currentFirebaseUser || fbAuth.currentUser; who = u ? ' [' + (u.email || 'no-email') + ', verified=' + u.emailVerified + ']' : ''; } catch(_){}
+      shopPubReport('❌ Bheja nahi ja saka: ' + code + who + (/permission/i.test(String(code)) ? ' — Firebase rules Publish hue? Email rules wale email se match hona chahiye.' : ''));
+      return { ok: false };
+    }
+  };
   window.publishShopStock = function(list){
     clearTimeout(_shopPubT);
-    _shopPubT = setTimeout(async () => {
-      try {
-        const user = window.currentFirebaseUser || fbAuth.currentUser;
-        if(!user || !Array.isArray(list)) return;
-        const out = {};
-        list.forEach(it => {
-          if(!it || !it.id || !it.itemName) return;
-          const v = (Array.isArray(it.salePrices) && it.salePrices.length ? it.salePrices : [{ price: it.salePrice, unit: it.unit }])
-            .map(x => ({ p: Number(x.price) || 0, u: String(x.unit || it.unit || 'pcs') })).filter(x => x.p > 0);
-          if(!v.length) return;
-          const o = { n: String(it.itemName), v: v, s: (Number(it.quantity) || 0) > 0 ? 1 : 0 };
-          if(it.hindiName) o.h = String(it.hindiName);
-          if(it.imageUrl && /^https:\/\//.test(it.imageUrl)) o.i = it.imageUrl;
-          out[it.id] = o;
-        });
-        await set(ref(fbDb, 'publicShop/stock'), out);
-      } catch(e){ console.warn('Shop stock publish failed:', e); }
-    }, 1500);
+    _shopPubT = setTimeout(() => { window.publishShopStockNow(list); }, 1500);
   };
 
   window.saveStockItemToFirebase = async function(item){
@@ -860,6 +882,7 @@
   .oo-title { font-size: 19px; font-weight: 800; color: #a04e00; }
   .oo-sub { font-size: 12.5px; color: #6b5a4a; margin-top: 2px; }
   .oo-mark { border: 1.5px solid #a04e00; background: #fff; color: #a04e00; border-radius: 10px; font-weight: 800; font-size: 13px; padding: 8px 12px; cursor: pointer; }
+  .oo-pub { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; line-height: 1.4; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
   .oo-card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.08); border-left: 5px solid #bbb; }
   .oo-card.new { border-left-color: #d62828; }
   .oo-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
@@ -1898,6 +1921,7 @@
 </div>
 <div id="onlineOrdersPanel" style="display:none;">
   <div class="oo-head"><div><div class="oo-title">🛒 Online Orders</div><div class="oo-sub" id="ooSub">Mittu Online Shop se aaye orders</div></div><button type="button" class="oo-mark" onclick="markShopOrdersSeen()">Sab dekha</button></div>
+  <div class="oo-pub"><div id="ooPubStatus">Shop ke daam: abhi bheje nahi gaye.</div><button type="button" class="oo-mark" onclick="publishShopStockManual()">🔄 Shop par daam bhejein</button></div>
   <div id="ooList"></div>
 </div>
 
@@ -5179,6 +5203,16 @@ function markShopOrdersSeen(){
   const l = shopOrdersList();
   try { localStorage.setItem('mittu_shop_orders_seen', String(l.length ? l[0].ts : Date.now())); } catch(e){}
   renderShopOrders();
+}
+function renderShopPubStatus(){
+  const el = document.getElementById('ooPubStatus');
+  if(el && window.__shopPubStatus) el.textContent = window.__shopPubStatus;
+}
+async function publishShopStockManual(){
+  const el = document.getElementById('ooPubStatus');
+  if(el) el.textContent = 'Bhej rahe hain…';
+  if(typeof window.publishShopStockNow === 'function') await window.publishShopStockNow(getStockList());
+  else if(el) el.textContent = '❌ Firebase abhi load nahi hua. Thodi der baad koshish karein.';
 }
 function shopEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function shopMoney(n){ n = Math.round((Number(n) || 0) * 100) / 100; return '₹' + (Number.isInteger(n) ? n : n.toFixed(2)); }
