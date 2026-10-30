@@ -396,6 +396,30 @@
     return ref(fbDb, 'users/' + uid + '/stock');
   }
 
+  // ---- Mittu Online Shop: aaye hue orders sunna (sirf login ke baad, rules ke mutabik) ----
+  let _shopOrdersUnsub = null;
+  function attachShopOrders(){
+    if(_shopOrdersUnsub){ try { _shopOrdersUnsub(); } catch(e){} _shopOrdersUnsub = null; }
+    const user = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!user){
+      window.__shopOrders = null;
+      window.__shopOrdersError = 'Online orders dekhne ke liye pehle app mein login karein.';
+      if(typeof window.renderShopOrders === 'function') window.renderShopOrders();
+      return;
+    }
+    window.__shopOrdersError = '';
+    _shopOrdersUnsub = onValue(ref(fbDb, 'shopOrders'), (snap) => {
+      window.__shopOrders = snap.val() || {};
+      window.__shopOrdersError = '';
+      if(typeof window.renderShopOrders === 'function') window.renderShopOrders();
+    }, (err) => {
+      window.__shopOrdersError = 'Firebase ne permission nahi di. Database rules mein shopOrders ka read allow karein. (' + (err && err.code || 'error') + ')';
+      if(typeof window.renderShopOrders === 'function') window.renderShopOrders();
+    });
+  }
+  window.addEventListener('mittuFirebaseUserReady', attachShopOrders);
+  attachShopOrders();
+
   // ---- Mittu Online Shop: public copy of stock (sirf naam, sale price, unit, in-stock). Purchase price kabhi nahi jata. ----
   let _shopPubT = null;
   window.publishShopStock = function(list){
@@ -823,6 +847,27 @@
   }
   .mode-toggle-btn.active { background: #a04e00; color: #fff; }
   .mode-toggle-btn .pro-icon { width: 18px; height: 18px; }
+  .mode-toggle-row .mode-toggle-btn { font-size: 12.5px; padding: 0 4px; gap: 5px; position: relative; line-height: 1.15; }
+  .mode-toggle-row .mode-toggle-btn .pro-icon { width: 16px; height: 16px; flex: none; }
+  .orders-badge { position: absolute; top: -8px; right: -4px; min-width: 22px; height: 22px; border-radius: 11px; background: #d62828; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 6px; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  #onlineOrdersPanel { max-width: 950px; margin: 14px auto 30px; padding: 0 16px; }
+  .oo-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .oo-title { font-size: 19px; font-weight: 800; color: #a04e00; }
+  .oo-sub { font-size: 12.5px; color: #6b5a4a; margin-top: 2px; }
+  .oo-mark { border: 1.5px solid #a04e00; background: #fff; color: #a04e00; border-radius: 10px; font-weight: 800; font-size: 13px; padding: 8px 12px; cursor: pointer; }
+  .oo-card { background: #fff; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.08); border-left: 5px solid #bbb; }
+  .oo-card.new { border-left-color: #d62828; }
+  .oo-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .oo-id { font-weight: 800; color: #3b1f00; letter-spacing: .5px; }
+  .oo-new { background: #d62828; color: #fff; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; margin-left: 6px; }
+  .oo-time { font-size: 12px; color: #6b5a4a; }
+  .oo-cust { margin-top: 8px; font-size: 14px; line-height: 1.45; }
+  .oo-cust a { color: #0a5db0; font-weight: 700; text-decoration: none; }
+  .oo-items { margin-top: 10px; border-top: 1px dashed #ddd; padding-top: 8px; font-size: 13.5px; }
+  .oo-items div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+  .oo-items span:first-child { min-width: 0; }
+  .oo-tot { margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px; display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; }
+  .oo-empty { background: #fff; border-radius: 14px; padding: 36px 20px; text-align: center; color: #6b5a4a; line-height: 1.5; }
 
   /* ---------------- STOCK RECORD ---------------- */
   #stockRecordPanel { max-width: 950px; margin: 14px auto 30px; padding: 0 16px; }
@@ -1844,6 +1889,11 @@
 <div class="mode-toggle-row">
   <button type="button" class="mode-toggle-btn active" id="modeBillBtn" onclick="switchToBillView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> Bill Generate</button>
   <button type="button" class="mode-toggle-btn" id="modeStockBtn" onclick="switchToStockView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 12h6"/></svg> Stock Record</button>
+  <button type="button" class="mode-toggle-btn" id="modeOrdersBtn" onclick="switchToOrdersView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21 8H6"/></svg> Online Orders<span id="ordersBadge" class="orders-badge" style="display:none;">0</span></button>
+</div>
+<div id="onlineOrdersPanel" style="display:none;">
+  <div class="oo-head"><div><div class="oo-title">🛒 Online Orders</div><div class="oo-sub" id="ooSub">Mittu Online Shop se aaye orders</div></div><button type="button" class="oo-mark" onclick="markShopOrdersSeen()">Sab dekha</button></div>
+  <div id="ooList"></div>
 </div>
 
 <div id="stockRecordPanel" style="display:none;">
@@ -5089,15 +5139,67 @@ function closeDrawer(){
 function switchToBillView(){
   document.getElementById('appWrap').style.display = '';
   document.getElementById('stockRecordPanel').style.display = 'none';
+  document.getElementById('onlineOrdersPanel').style.display = 'none';
   document.getElementById('modeBillBtn').classList.add('active');
   document.getElementById('modeStockBtn').classList.remove('active');
+  document.getElementById('modeOrdersBtn').classList.remove('active');
 }
 function switchToStockView(){
   document.getElementById('appWrap').style.display = 'none';
   document.getElementById('stockRecordPanel').style.display = 'block';
+  document.getElementById('onlineOrdersPanel').style.display = 'none';
   document.getElementById('modeBillBtn').classList.remove('active');
   document.getElementById('modeStockBtn').classList.add('active');
+  document.getElementById('modeOrdersBtn').classList.remove('active');
   renderStockList();
+}
+function switchToOrdersView(){
+  document.getElementById('appWrap').style.display = 'none';
+  document.getElementById('stockRecordPanel').style.display = 'none';
+  document.getElementById('onlineOrdersPanel').style.display = 'block';
+  document.getElementById('modeBillBtn').classList.remove('active');
+  document.getElementById('modeStockBtn').classList.remove('active');
+  document.getElementById('modeOrdersBtn').classList.add('active');
+  renderShopOrders();
+}
+// ---------------- ONLINE ORDERS (Mittu Online Shop -> Firebase shopOrders) ----------------
+window.__shopOrders = null;      // null = abhi load nahi hua
+window.__shopOrdersError = '';
+function shopSeenTs(){ try { return Number(localStorage.getItem('mittu_shop_orders_seen')) || 0; } catch(e){ return 0; } }
+function shopOrdersList(){
+  const o = window.__shopOrders || {};
+  return Object.keys(o).map(k => Object.assign({ _k: k }, o[k])).filter(x => x && x.id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+function markShopOrdersSeen(){
+  const l = shopOrdersList();
+  try { localStorage.setItem('mittu_shop_orders_seen', String(l.length ? l[0].ts : Date.now())); } catch(e){}
+  renderShopOrders();
+}
+function shopEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function shopMoney(n){ n = Math.round((Number(n) || 0) * 100) / 100; return '₹' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+function renderShopOrders(){
+  const badge = document.getElementById('ordersBadge');
+  const list = shopOrdersList(), seen = shopSeenTs();
+  const fresh = list.filter(o => (o.ts || 0) > seen).length;
+  if(badge){ badge.textContent = fresh > 99 ? '99+' : fresh; badge.style.display = fresh ? 'flex' : 'none'; }
+  const box = document.getElementById('ooList'), sub = document.getElementById('ooSub');
+  if(!box) return;
+  if(sub) sub.textContent = 'Kul ' + list.length + ' order' + (fresh ? ' · ' + fresh + ' naye' : '');
+  if(window.__shopOrdersError){
+    box.innerHTML = '<div class="oo-empty"><b>Orders load nahi ho paye</b><br>' + shopEsc(window.__shopOrdersError) + '</div>';
+    return;
+  }
+  if(window.__shopOrders === null){ box.innerHTML = '<div class="oo-empty">Orders load ho rahe hain…</div>'; return; }
+  if(!list.length){ box.innerHTML = '<div class="oo-empty"><b>Abhi koi online order nahi aaya</b><br>Jab customer shop website se order dega, wo yahin dikhega.</div>'; return; }
+  box.innerHTML = list.map(o => {
+    const isNew = (o.ts || 0) > seen;
+    const ph = String(o.phone || '').replace(/\D/g, '');
+    const items = (Array.isArray(o.items) ? o.items : Object.values(o.items || {})).map(i =>
+      '<div><span>' + shopEsc(i.name) + ' <small>(' + shopEsc(i.unit) + ' × ' + shopEsc(i.qty) + ')</small></span><span>' + shopMoney(i.total) + '</span></div>').join('');
+    return '<div class="oo-card' + (isNew ? ' new' : '') + '"><div class="oo-top"><div><span class="oo-id">' + shopEsc(o.id) + '</span>' + (isNew ? '<span class="oo-new">NAYA</span>' : '') + '</div><div class="oo-time">' + shopEsc(new Date(o.ts || 0).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>'
+      + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 ' + shopEsc(o.address) + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + '</div>'
+      + '<div class="oo-items">' + items + '</div><div class="oo-tot"><span>Total · ' + shopEsc(o.pay || 'COD') + '</span><span>' + shopMoney(o.total) + '</span></div></div>';
+  }).join('');
 }
 
 // ---------------- BILL <-> STOCK CONNECTION ----------------
