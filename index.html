@@ -418,6 +418,14 @@
     });
   }
   window.addEventListener('mittuFirebaseUserReady', attachShopOrders);
+  // Login hote hi (aur stock restore ke baad) poora stock ek baar shop ke liye publish karo
+  window.addEventListener('mittuFirebaseUserReady', () => {
+    const u = window.currentFirebaseUser;
+    if(!u || u.isAnonymous) return;
+    setTimeout(() => {
+      try { if(typeof getStockList === 'function') window.publishShopStock(getStockList()); } catch(e){}
+    }, 4000);
+  });
   attachShopOrders();
 
   // ---- Mittu Online Shop: public copy of stock (sirf naam, sale price, unit, in-stock). Purchase price kabhi nahi jata. ----
