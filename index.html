@@ -1083,10 +1083,13 @@
   .sort-switch-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-4px 0 10px; padding:8px 10px; background:#fff7ee; border:1px solid #f0d9bd; border-radius:10px; }
   .sort-switch-row .sw-txt { font-size:12.5px; color:#6b4a2a; line-height:1.35; }
   .sort-switch-row .sw-txt b { color:#a04e00; }
-  .conv-box { margin:6px 0 8px; padding:8px 10px; background:#eef6ff; border:1px solid #bcd7f5; border-radius:10px; }
+  .conv-box { margin:4px 0 8px; padding:5px 9px; background:#eef6ff; border:1px solid #bcd7f5; border-radius:10px; }
+  .sale-row-wrap { margin-bottom:6px; }
+  .sale-row-wrap .mg-row { margin:2px 0 0; }
   .conv-box .conv-title { font-size:11.5px; font-weight:800; color:#16457a; margin-bottom:5px; }
   .conv-row { display:flex; align-items:center; gap:7px; margin:4px 0; font-size:13px; font-weight:700; color:#16325c; }
-  .conv-row input { flex:1; min-width:0; padding:8px 10px; border:1px solid #9ec3ea; border-radius:8px; font-size:14px; background:#fff; }
+  .conv-row span { white-space:nowrap; flex:none; }
+  .conv-row input { flex:0 1 110px; width:110px; min-width:60px; padding:5px 8px; border:1px solid #9ec3ea; border-radius:8px; font-size:13.5px; background:#fff; }
   .conv-hint { font-size:11px; font-weight:600; color:#4a6b8f; margin:-2px 0 4px; }
   .hindi-fill-btn { width:100%; margin:-2px 0 10px; padding:9px 10px; border:1.5px dashed #a04e00; background:#fff; color:#a04e00; border-radius:10px; font-weight:800; font-size:12.5px; cursor:pointer; }
   .hindi-fill-btn:disabled { opacity:.6; }
@@ -1887,7 +1890,7 @@
       <summary style="font-size:12px; color:#666; cursor:pointer;">Scan ka raw text dekhein</summary>
       <pre id="stockScanRawText" style="white-space:pre-wrap; font-size:11px; background:#f6f6f6; padding:8px; border-radius:8px; max-height:160px; overflow:auto;"></pre>
     </details>
-    <datalist id="scanUnitList"><option value="kg"><option value="pcs"><option value="bag"><option value="ltr"><option value="box"><option value="dozen"><option value="qtl"><option value="pkt"><option value="g"></datalist>
+    <datalist id="scanUnitList"><option value="kg"><option value="pcs"><option value="bag"><option value="ltr"><option value="box"><option value="dozen"><option value="qtl"><option value="pkt"><option value="g"><option value="ml"></datalist>
     <div class="stock-modal-actions">
       <button type="button" class="stock-modal-cancel" onclick="closeStockScanReview()">Cancel</button>
       <button type="button" class="stock-modal-save" onclick="confirmStockReviewCurrentMode()" id="stockScanReviewSaveBtn">Add Selected to Stock</button>
@@ -1946,14 +1949,13 @@
     <div class="field">
       <label>Purchase Price (₹)</label>
       <div class="price-unit-row">
-        <input type="number" id="stockItemPurchasePrice" placeholder="0" oninput="mgPurchaseChanged('stock')" onkeydown="handlePriceUnitEnter(event)">
+        <input type="number" id="stockItemPurchasePrice" placeholder="0" oninput="smRecalcAll()" onkeydown="handlePriceUnitEnter(event)">
         <button type="button" class="unit-pick-btn" id="stockPurchaseUnitBtn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>
       </div>
     </div>
     <div class="field">
       <label>Sale Price (₹)</label>
       <div id="stockSalePriceRows"></div>
-      <div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" id="stockMgSlider" min="0" max="100" step="0.01" value="5" oninput="mgSliderChanged('stock')"><span class="mg-val" id="stockMgVal">5.00%</span></div>
       <div id="stockConvBox" class="conv-box" style="display:none;"></div>
       <button type="button" class="add-sale-btn" onclick="addSalePriceRow('', '')">+ Add another sale price (per kg / bag ...)</button>
     </div>
@@ -5712,7 +5714,7 @@ function attachStockAutofill(tr){
 window.addEventListener('mittuFirebaseStockReady', refreshBillStockNames);
 
 // ---------------- UNIT PICKER + MULTI SALE PRICE (Stock modal) ----------------
-const UNIT_CHOICES = ['kg','pcs','bag','ltr','box','dozen','qtl','pkt','g'];
+const UNIT_CHOICES = ['kg','pcs','bag','ltr','box','dozen','qtl','pkt','g','ml'];
 function _unitEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function setUnitBtn(btn, unit){
   unit = String(unit || '').trim();
@@ -5770,10 +5772,18 @@ function openUnitMenu(btn){
       }
       setUnitBtn(btn, val);
       closeUnitMenu();
-      if(btn.id === 'stockPurchaseUnitBtn'){ updateStockQtyLabel(); mgUnitChanged('stock', null, oldUnit); renderConvBox(); }
+      if(btn.id === 'stockPurchaseUnitBtn'){
+        updateStockQtyLabel();
+        if(oldUnit.toLowerCase() !== String(btn.dataset.unit || '').toLowerCase()){
+          // purani conversion naye purchase unit par lagu nahi hoti; jin sale rows ki unit purani purchase unit thi wo naye ke saath chalein
+          smRows().forEach(w => { const ub = w.querySelector('.unit-pick-btn'); if(oldUnit && (ub.dataset.unit || '').toLowerCase() === oldUnit.toLowerCase()) setUnitBtn(ub, btn.dataset.unit); });
+          resetConv();
+        }
+        renderConvBox(); smRecalcAll();
+      }
       if(btn.dataset.scanIdx !== undefined){ scanRecordRefresh(+btn.dataset.scanIdx); mgUnitChanged('scan', +btn.dataset.scanIdx, oldUnit); }
       if(btn.dataset.scanSale !== undefined){ scanSaleTouched(+btn.dataset.scanSale); mgUnitsCheck(mgCtx('scan', +btn.dataset.scanSale)); }
-      if(btn.closest && btn.closest('#stockSalePriceRows')){ mgUnitsCheck(mgCtx('stock')); mgAfterRender('stock'); renderConvBox(); }
+      if(btn.closest && btn.closest('#stockSalePriceRows')){ renderConvBox(); smRecalcAll(); }
     };
     m.appendChild(d);
   });
@@ -5789,6 +5799,8 @@ function openUnitMenu(btn){
 }
 // ---- Unit conversion: 1 bag = 50 kg  (alag sale unit bechne par stock sahi kate) ----
 let stockConvState = {};      // unit(lowercase) -> kitni sale-unit = 1 stock unit
+const UNIT_DEFAULT_CONV = { 'kg>g':1000, 'ltr>ml':1000, 'qtl>kg':100, 'qtl>g':100000, 'dozen>pcs':12, 'g>kg':0.001, 'ml>ltr':0.001, 'kg>qtl':0.01 };
+function resetConv(){ stockConvState = {}; const b = document.getElementById('stockConvBox'); if(b) b.innerHTML = ''; }
 function renderConvBox(){
   const box = document.getElementById('stockConvBox'); if(!box) return;
   // pehle jo likha hai use bacha lo
@@ -5798,15 +5810,24 @@ function renderConvBox(){
   const units = [];
   document.querySelectorAll('#stockSalePriceRows .unit-pick-btn').forEach(b => {
     const u = (b.dataset.unit || '').trim();
+    // sirf alag unit ki conversion — same unit ki nahi
     if(u && pu && u.toLowerCase() !== pu.toLowerCase() && !units.some(x => x.toLowerCase() === u.toLowerCase())) units.push(u);
   });
   if(!units.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  units.forEach(u => {
+    const k = u.toLowerCase(), dk = pu.toLowerCase() + '>' + k;
+    if(!(stockConvState[k] > 0) && UNIT_DEFAULT_CONV[dk]) stockConvState[k] = UNIT_DEFAULT_CONV[dk];
+  });
   box.style.display = 'block';
-  box.innerHTML = '<div class="conv-title">🔁 Conversion (stock sahi kaatne ke liye)</div>' + units.map(u => {
+  box.innerHTML = units.map(u => {
     const v = stockConvState[u.toLowerCase()];
-    return `<div class="conv-row"><span>1 ${_unitEsc(pu)} =</span><input type="number" step="any" inputmode="decimal" min="0" placeholder="0" data-unit="${_unitEsc(u.toLowerCase())}" value="${v > 0 ? v : ''}"><span>${_unitEsc(u)}</span></div>` +
-      `<div class="conv-hint">Jaise ${_unitEsc(u)} mein bechne par stock ${_unitEsc(pu)} mein hisaab se kam hoga</div>`;
+    return `<div class="conv-row"><span>🔁 1 ${_unitEsc(pu)} =</span><input type="number" step="any" inputmode="decimal" min="0" placeholder="0" data-unit="${_unitEsc(u.toLowerCase())}" value="${v > 0 ? v : ''}" oninput="smConvInput(this)"><span>${_unitEsc(u)}</span></div>`;
   }).join('');
+}
+function smConvInput(inp){
+  const v = parseFloat(inp.value);
+  if(v > 0) stockConvState[inp.dataset.unit] = v; else delete stockConvState[inp.dataset.unit];
+  smRecalcAll();
 }
 function collectConv(){
   renderConvBox();
@@ -5814,21 +5835,78 @@ function collectConv(){
   Object.keys(stockConvState).forEach(k => { const v = Number(stockConvState[k]); if(v > 0) out[k] = v; });
   return out;
 }
+// ---- Har Sale Price ka apna Profit % slider (Purchase price se, conversion ke hisaab se) ----
+function smRound(v){ return v < 1 ? Math.round(v * 10000) / 10000 : Math.round(v * 100) / 100; }
+function smRows(){ return Array.from(document.querySelectorAll('#stockSalePriceRows .sale-row-wrap')); }
+// us sale-unit ki 1 unit ki kharid keemat: same unit => purchase price, alag unit => purchase / conversion
+function smBase(wrap, idx){
+  const p = parseFloat(document.getElementById('stockItemPurchasePrice').value) || 0;
+  const pu = (document.getElementById('stockPurchaseUnitBtn').dataset.unit || '').trim().toLowerCase();
+  const su = (wrap.querySelector('.unit-pick-btn').dataset.unit || '').trim().toLowerCase();
+  if(idx > 0 && !su) return { ok: false, msg: 'unit chunein' };
+  if(!su || !pu || su === pu) return { ok: true, base: p };
+  const c = Number(stockConvState[su]);
+  if(c > 0) return { ok: true, base: p / c };
+  return { ok: false, msg: 'conversion daalein' };
+}
+function smSetLabel(wrap, t){ const l = wrap.querySelector('.sm-val'); if(l) l.textContent = t; }
+function smSetPct(wrap, pct){
+  wrap.dataset.pct = pct;
+  const sl = wrap.querySelector('.sm-slider'); sl.value = Math.min(100, Math.max(0, pct));
+  smSetLabel(wrap, (Math.round(pct * 100) / 100).toFixed(2) + '%');
+}
+function smSyncRow(wrap, idx){
+  const sl = wrap.querySelector('.sm-slider'), inp = wrap.querySelector('.price-unit-row input');
+  const b = smBase(wrap, idx);
+  if(!b.ok){ sl.disabled = true; smSetLabel(wrap, b.msg); return; }
+  sl.disabled = false;
+  const s = parseFloat(inp.value) || 0;
+  const pct = isFinite(parseFloat(wrap.dataset.pct)) ? parseFloat(wrap.dataset.pct) : 5;
+  if(wrap.dataset.src === 'sale' && s > 0){
+    if(b.base > 0) smSetPct(wrap, (s / b.base - 1) * 100); else smSetLabel(wrap, '–');
+  } else {
+    wrap.dataset.src = 'pct';
+    inp.value = b.base > 0 ? smRound(b.base * (1 + pct / 100)) : '';
+    smSetPct(wrap, pct);
+  }
+}
+function smRecalcAll(){
+  const rows = smRows(); if(!rows.length) return;
+  const pu = (document.getElementById('stockPurchaseUnitBtn').dataset.unit || '').trim();
+  const ub = rows[0].querySelector('.unit-pick-btn');
+  if(!ub.dataset.unit && pu) setUnitBtn(ub, pu);        // pehle Sale Price ki unit = Purchase unit
+  rows.forEach((w, i) => smSyncRow(w, i));
+}
+function smSlider(sl){
+  const wrap = sl.closest('.sale-row-wrap'), idx = smRows().indexOf(wrap), b = smBase(wrap, idx);
+  if(!b.ok) return;
+  const pct = parseFloat(sl.value) || 0;
+  wrap.dataset.src = 'pct'; smSetPct(wrap, pct);
+  if(b.base > 0) wrap.querySelector('.price-unit-row input').value = smRound(b.base * (1 + pct / 100));
+}
+function smSale(inp){
+  const wrap = inp.closest('.sale-row-wrap'), idx = smRows().indexOf(wrap), b = smBase(wrap, idx), s = parseFloat(inp.value) || 0;
+  if(s > 0){ wrap.dataset.src = 'sale'; if(b.ok && b.base > 0) smSetPct(wrap, (s / b.base - 1) * 100); }
+  else wrap.dataset.src = 'pct';
+}
 function refreshSaleRemoveBtns(){
   const rows = document.querySelectorAll('#stockSalePriceRows .price-unit-row');
   rows.forEach(r => { r.querySelector('.sale-remove-btn').style.display = rows.length > 1 ? 'block' : 'none'; });
   renderConvBox();
+  smRecalcAll();
 }
 function addSalePriceRow(price, unit){
   const box = document.getElementById('stockSalePriceRows');
-  const row = document.createElement('div');
-  row.className = 'price-unit-row';
-  row.innerHTML = '<input type="number" class="stockSalePriceInput" placeholder="0" oninput="mgSaleChanged(\'stock\', null, this)" onkeydown="handlePriceUnitEnter(event)">' +
+  const wrap = document.createElement('div');
+  wrap.className = 'sale-row-wrap';
+  wrap.innerHTML = '<div class="price-unit-row"><input type="number" class="stockSalePriceInput" placeholder="0" oninput="smSale(this)" onkeydown="handlePriceUnitEnter(event)">' +
     '<button type="button" class="unit-pick-btn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>' +
-    '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.price-unit-row\').remove(); refreshSaleRemoveBtns();">×</button>';
-  box.appendChild(row);
-  row.querySelector('input').value = price === 0 ? '' : (price || '');
-  setUnitBtn(row.querySelector('.unit-pick-btn'), unit || '');
+    '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.sale-row-wrap\').remove(); refreshSaleRemoveBtns();">×</button></div>' +
+    '<div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" class="sm-slider" min="0" max="100" step="0.01" value="5" oninput="smSlider(this)"><span class="mg-val sm-val">5.00%</span></div>';
+  box.appendChild(wrap);
+  wrap.querySelector('input').value = price === 0 ? '' : (price || '');
+  setUnitBtn(wrap.querySelector('.unit-pick-btn'), unit || '');
+  wrap.dataset.src = Number(price) > 0 ? 'sale' : 'pct';
   refreshSaleRemoveBtns();
 }
 // Purana item (sirf ek salePrice) bhi sahi chale, naya item (salePrices list) bhi
@@ -6365,7 +6443,7 @@ function openStockItemModal(id){
   rowsBox.innerHTML = '';
   const pBtn = document.getElementById('stockPurchaseUnitBtn');
   stockMgState = {};
-  stockConvState = {};
+  resetConv();
   const item = id ? getStockList().find(it => it.id === id) : null;
   if(item && item.unitConv) Object.keys(item.unitConv).forEach(k => { stockConvState[String(k).toLowerCase()] = Number(item.unitConv[k]); });
   if(item){
@@ -6383,8 +6461,8 @@ function openStockItemModal(id){
     setUnitBtn(pBtn, '');
     addSalePriceRow('', '');
   }
-  mgAfterRender('stock');
   renderConvBox();
+  smRecalcAll();
   // Supplier name sirf is purchase-entry ke liye hai, item ke saath permanently save nahi hoti
   document.getElementById('stockItemSupplier').value = '';
   const supplierField = document.getElementById('stockItemSupplierField');
