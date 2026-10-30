@@ -1083,6 +1083,11 @@
   .sort-switch-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:-4px 0 10px; padding:8px 10px; background:#fff7ee; border:1px solid #f0d9bd; border-radius:10px; }
   .sort-switch-row .sw-txt { font-size:12.5px; color:#6b4a2a; line-height:1.35; }
   .sort-switch-row .sw-txt b { color:#a04e00; }
+  .conv-box { margin:6px 0 8px; padding:8px 10px; background:#eef6ff; border:1px solid #bcd7f5; border-radius:10px; }
+  .conv-box .conv-title { font-size:11.5px; font-weight:800; color:#16457a; margin-bottom:5px; }
+  .conv-row { display:flex; align-items:center; gap:7px; margin:4px 0; font-size:13px; font-weight:700; color:#16325c; }
+  .conv-row input { flex:1; min-width:0; padding:8px 10px; border:1px solid #9ec3ea; border-radius:8px; font-size:14px; background:#fff; }
+  .conv-hint { font-size:11px; font-weight:600; color:#4a6b8f; margin:-2px 0 4px; }
   .hindi-fill-btn { width:100%; margin:-2px 0 10px; padding:9px 10px; border:1.5px dashed #a04e00; background:#fff; color:#a04e00; border-radius:10px; font-weight:800; font-size:12.5px; cursor:pointer; }
   .hindi-fill-btn:disabled { opacity:.6; }
   .sw { position:relative; width:46px; height:26px; flex:none; }
@@ -1949,6 +1954,7 @@
       <label>Sale Price (₹)</label>
       <div id="stockSalePriceRows"></div>
       <div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" id="stockMgSlider" min="0" max="100" step="0.01" value="5" oninput="mgSliderChanged('stock')"><span class="mg-val" id="stockMgVal">5.00%</span></div>
+      <div id="stockConvBox" class="conv-box" style="display:none;"></div>
       <button type="button" class="add-sale-btn" onclick="addSalePriceRow('', '')">+ Add another sale price (per kg / bag ...)</button>
     </div>
     <div class="field">
@@ -5195,10 +5201,16 @@ function deductStockForBill(items){
     if(!stock) return;
     const bu = String(it.unit || '').trim().toLowerCase();
     const su = String(stock.unit || '').trim().toLowerCase();
-    if(bu && su && bu !== su){ mismatch.push(`${stock.itemName} (bill: ${it.unit}, stock: ${stock.unit})`); return; }
+    let useQty = qty;
+    if(bu && su && bu !== su){
+      // Alag unit mein bika (jaise stock bag mein, bill kg mein): conversion ho to stock unit mein badal ke kaato
+      const per = stock.unitConv ? Number(stock.unitConv[bu]) : 0;
+      if(!(per > 0)){ mismatch.push(`${stock.itemName} (bill: ${it.unit}, stock: ${stock.unit} — Edit mein conversion daalein)`); return; }
+      useQty = qty / per;
+    }
     const have = Number(stock.quantity) || 0;
-    if(qty > have) short.push(`${stock.itemName} (stock ${have} ${stock.unit||'pcs'})`);
-    stock.quantity = Math.max(0, Math.round((have - qty) * 1000) / 1000);
+    if(useQty > have + 1e-9) short.push(`${stock.itemName} (stock ${have} ${stock.unit||'pcs'})`);
+    stock.quantity = Math.max(0, Math.round((have - useQty) * 1000) / 1000);
     if(!changed.includes(stock)) changed.push(stock);
   });
   if(!changed.length){
@@ -5758,10 +5770,10 @@ function openUnitMenu(btn){
       }
       setUnitBtn(btn, val);
       closeUnitMenu();
-      if(btn.id === 'stockPurchaseUnitBtn'){ updateStockQtyLabel(); mgUnitChanged('stock', null, oldUnit); }
+      if(btn.id === 'stockPurchaseUnitBtn'){ updateStockQtyLabel(); mgUnitChanged('stock', null, oldUnit); renderConvBox(); }
       if(btn.dataset.scanIdx !== undefined){ scanRecordRefresh(+btn.dataset.scanIdx); mgUnitChanged('scan', +btn.dataset.scanIdx, oldUnit); }
       if(btn.dataset.scanSale !== undefined){ scanSaleTouched(+btn.dataset.scanSale); mgUnitsCheck(mgCtx('scan', +btn.dataset.scanSale)); }
-      if(btn.closest && btn.closest('#stockSalePriceRows')){ mgUnitsCheck(mgCtx('stock')); mgAfterRender('stock'); }
+      if(btn.closest && btn.closest('#stockSalePriceRows')){ mgUnitsCheck(mgCtx('stock')); mgAfterRender('stock'); renderConvBox(); }
     };
     m.appendChild(d);
   });
@@ -5775,9 +5787,37 @@ function openUnitMenu(btn){
   m.style.top = (openDown ? r.bottom + 4 : Math.max(8, r.top - mh - 4)) + 'px';
   m.style.left = Math.max(8, Math.min(r.right - mw, vw - mw - 8)) + 'px';
 }
+// ---- Unit conversion: 1 bag = 50 kg  (alag sale unit bechne par stock sahi kate) ----
+let stockConvState = {};      // unit(lowercase) -> kitni sale-unit = 1 stock unit
+function renderConvBox(){
+  const box = document.getElementById('stockConvBox'); if(!box) return;
+  // pehle jo likha hai use bacha lo
+  box.querySelectorAll('input[data-unit]').forEach(i => { const v = parseFloat(i.value); if(v > 0) stockConvState[i.dataset.unit] = v; else delete stockConvState[i.dataset.unit]; });
+  const pBtn = document.getElementById('stockPurchaseUnitBtn');
+  const pu = (pBtn && pBtn.dataset.unit || '').trim();
+  const units = [];
+  document.querySelectorAll('#stockSalePriceRows .unit-pick-btn').forEach(b => {
+    const u = (b.dataset.unit || '').trim();
+    if(u && pu && u.toLowerCase() !== pu.toLowerCase() && !units.some(x => x.toLowerCase() === u.toLowerCase())) units.push(u);
+  });
+  if(!units.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = '<div class="conv-title">🔁 Conversion (stock sahi kaatne ke liye)</div>' + units.map(u => {
+    const v = stockConvState[u.toLowerCase()];
+    return `<div class="conv-row"><span>1 ${_unitEsc(pu)} =</span><input type="number" step="any" inputmode="decimal" min="0" placeholder="0" data-unit="${_unitEsc(u.toLowerCase())}" value="${v > 0 ? v : ''}"><span>${_unitEsc(u)}</span></div>` +
+      `<div class="conv-hint">Jaise ${_unitEsc(u)} mein bechne par stock ${_unitEsc(pu)} mein hisaab se kam hoga</div>`;
+  }).join('');
+}
+function collectConv(){
+  renderConvBox();
+  const out = {};
+  Object.keys(stockConvState).forEach(k => { const v = Number(stockConvState[k]); if(v > 0) out[k] = v; });
+  return out;
+}
 function refreshSaleRemoveBtns(){
   const rows = document.querySelectorAll('#stockSalePriceRows .price-unit-row');
   rows.forEach(r => { r.querySelector('.sale-remove-btn').style.display = rows.length > 1 ? 'block' : 'none'; });
+  renderConvBox();
 }
 function addSalePriceRow(price, unit){
   const box = document.getElementById('stockSalePriceRows');
@@ -6211,6 +6251,7 @@ function mergeStockInto(existing, inc){
   if(!exSale && inSale){ existing.salePrices = getSalePrices(inc); existing.salePrice = existing.salePrices[0].price; }
   if(!Number(existing.lowAlert) && Number(inc.lowAlert)) existing.lowAlert = Number(inc.lowAlert);
   if(!existing.hindiName && inc.hindiName) existing.hindiName = inc.hindiName;
+  if(inc.unitConv && Object.keys(inc.unitConv).length) existing.unitConv = Object.assign({}, inc.unitConv, existing.unitConv || {});
   return existing;
 }
 // Scan/add ke waqt: record mein us naam ka Sale Price ho to wahi uthao (pehle naam+unit, phir sirf naam)
@@ -6298,7 +6339,7 @@ function renderStockList(){
       </div>
       <div class="stock-item-bottom">
         <div class="stock-qty-controls">
-          <div class="stock-qty-value" style="text-align:left;">${item.quantity} ${item.unit || 'pcs'}</div>
+          <div class="stock-qty-value" style="text-align:left;">${item.quantity} ${item.unit || 'pcs'}${item.unitConv ? Object.keys(item.unitConv).filter(k => Number(item.unitConv[k]) > 0).map(k => `<div style="font-size:11.5px;font-weight:600;color:#4a6b8f;">≈ ${Math.round(Number(item.quantity) * Number(item.unitConv[k]) * 100) / 100} ${k} (1 ${item.unit || 'pcs'} = ${item.unitConv[k]} ${k})</div>`).join('') : ''}</div>
         </div>
         <div class="stock-item-value">₹${value.toFixed(2)}</div>
       </div>`;
@@ -6324,7 +6365,9 @@ function openStockItemModal(id){
   rowsBox.innerHTML = '';
   const pBtn = document.getElementById('stockPurchaseUnitBtn');
   stockMgState = {};
+  stockConvState = {};
   const item = id ? getStockList().find(it => it.id === id) : null;
+  if(item && item.unitConv) Object.keys(item.unitConv).forEach(k => { stockConvState[String(k).toLowerCase()] = Number(item.unitConv[k]); });
   if(item){
     document.getElementById('stockItemName').value = item.itemName || '';
     document.getElementById('stockItemHindi').value = item.hindiName || '';
@@ -6341,6 +6384,7 @@ function openStockItemModal(id){
     addSalePriceRow('', '');
   }
   mgAfterRender('stock');
+  renderConvBox();
   // Supplier name sirf is purchase-entry ke liye hai, item ke saath permanently save nahi hoti
   document.getElementById('stockItemSupplier').value = '';
   const supplierField = document.getElementById('stockItemSupplierField');
@@ -6376,6 +6420,7 @@ function saveStockItemModal(){
     purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
     salePrice: salePrices[0].price,
     salePrices: salePrices,
+    unitConv: collectConv(),
     lowAlert: Number(document.getElementById('stockItemLowAlert').value) || 0,
     createdAt: (id && (list.find(it => it.id === id) || {}).createdAt) || (id ? stockItemDate({ id: id }) || Date.now() : Date.now())
   };
