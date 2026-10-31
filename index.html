@@ -6928,8 +6928,35 @@ function scanParseLine(line, ctx){
   return { itemName: name, quantity: sol.qty, unit: sol.unit || '', rate: sol.rate, amount: sol.amount, check: !!sol.check, src: line };
 }
 
+// ---- Catalogue-style PDF (jaise "Item | per kg | Rate | 100 Unit Price" ki lambi list, kai category ke saath) ----
+// Generic bill parser ko ye list nahi aati: intro paragraph, category heading, repeat header, page footer sab ko
+// "item" bana deta tha aur laal (Adhura) rows ka dher lag jata tha. Yahan sirf asli item rows li jaati hain.
+const SCAN_CAT_ROW = /^(?:(\d{1,4})\s+)?(.+?)\s+(per\s+[A-Za-z0-9 .\/&()-]+?)\s+(\d[\d,]*(?:\.\d+)?)\s+(\d[\d,]*(?:\.\d+)?)$/i;
+function scanCatalogueUnit(basis){
+  const ph = String(basis || '').replace(/^per\s+/i, '').trim().toLowerCase();
+  if(!ph) return '';
+  if(scanNormUnit(ph)) return scanNormUnit(ph);
+  const MAP = { 'piece':'pcs', 'pair':'pair', 'litre':'ltr', 'quintal':'qtl', 'gram':'g', 'metre':'metre', 'pack':'pack', 'bottle':'bottle', 'jar':'jar', 'set':'set', 'sachet':'sachet', 'tin':'tin', 'cup':'cup', 'bundle':'bundle', 'sheet':'sheet', 'ream':'ream', 'trolley':'trolley', 'feet':'feet', 'tub':'tub' };
+  return MAP[ph] || ph;
+}
+function scanParseCatalogueRows(lines){
+  const out = [];
+  lines.forEach(line => {
+    const m = line.match(SCAN_CAT_ROW);
+    if(!m) return;
+    const name = m[2].replace(/\s+/g, ' ').replace(/^[\s.,:;\-]+|[\s,:;\-]+$/g, '').trim();
+    const rate = parseFloat(m[4].replace(/,/g, '')), amount = parseFloat(m[5].replace(/,/g, ''));
+    if(!name || !(rate > 0) || !(amount > 0) || /^\d+$/.test(name)) return;
+    let qty = Math.round(amount / rate), odd = false;
+    if(!(qty >= 1) || Math.abs(qty * rate - amount) > Math.max(1, amount * 0.02)){ qty = 100; odd = true; }
+    out.push({ itemName: name, quantity: qty, unit: scanCatalogueUnit(m[3]), rate: rate, amount: amount, check: odd, src: line });
+  });
+  return out;
+}
 function parseScannedTextToItems(rawText){
   const lines = String(rawText || '').split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const catRows = scanParseCatalogueRows(lines);
+  if(catRows.length >= 15) return catRows;
   const hdrRe = /\b(item|items|description|particulars?|qty|quantity|rate|price|amount|amt|mrp|unit)\b/gi;
   const hdrIdx = lines.findIndex(l => (l.match(hdrRe) || []).length >= 2);
   const headerLine = hdrIdx >= 0 ? lines[hdrIdx] : '';
