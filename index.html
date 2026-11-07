@@ -1097,41 +1097,69 @@
 
   /* ---------------- AI ADVISOR CHATBOT ---------------- */
   #aiAdvisorOverlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 10300;
-    align-items: flex-end; justify-content: center;
+    display: none; position: fixed; inset: 0; background: #f4f2fa; z-index: 10300;
+    flex-direction: column;
   }
   .ai-advisor-modal {
-    width: 100%; max-width: 520px; background: #fff; border-radius: 18px 18px 0 0;
-    height: 82vh; max-height: 720px; display: flex; flex-direction: column; overflow: hidden;
-    animation: stockSheetUp .22s ease-out;
+    width: 100%; height: 100%; background: #f4f2fa; display: flex; flex-direction: column; overflow: hidden;
+    animation: aiAdvFade .18s ease-out;
   }
+  @keyframes aiAdvFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .ai-advisor-header {
-    display: flex; align-items: center; justify-content: space-between; padding: 14px 16px;
-    background: linear-gradient(135deg, #6a3de8, #a04ee0); color: #fff; flex: 0 0 auto;
+    display: flex; align-items: center; gap: 6px; padding: 8px 14px 10px 6px;
+    padding-top: max(8px, env(safe-area-inset-top, 8px));
+    background: linear-gradient(135deg, #5b32d6, #9a4de0); color: #fff; flex: 0 0 auto;
+    box-shadow: 0 2px 10px rgba(60,30,140,.25);
   }
-  .ai-advisor-title { font-size: 15px; font-weight: 800; }
-  .ai-advisor-close {
-    width: 30px; height: 30px; border: none; border-radius: 50%; background: rgba(255,255,255,0.2);
-    color: #fff; font-size: 15px; cursor: pointer; flex: 0 0 auto;
+  .ai-advisor-back {
+    width: 42px; height: 42px; border: none; border-radius: 50%; background: transparent; color: #fff;
+    cursor: pointer; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
   }
+  .ai-advisor-back:active { background: rgba(255,255,255,.18); }
+  .ai-advisor-back svg { width: 24px; height: 24px; }
+  .ai-advisor-avatar {
+    width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.2); flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; margin-right: 6px;
+  }
+  .ai-advisor-title { font-size: 16px; font-weight: 800; line-height: 1.2; }
+  .ai-advisor-sub { font-size: 11.5px; font-weight: 500; opacity: .85; margin-top: 1px; }
   .ai-advisor-messages {
-    flex: 1 1 auto; overflow-y: auto; padding: 14px 12px; background: #f6f4fb;
-    display: flex; flex-direction: column; gap: 10px;
+    flex: 1 1 auto; overflow-y: auto; padding: 16px 12px 10px; background: #f4f2fa;
+    display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch;
+    width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box;
   }
-  .ai-advisor-msg { max-width: 84%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
-  .ai-advisor-msg.user { align-self: flex-end; background: #6a3de8; color: #fff; border-bottom-right-radius: 3px; }
-  .ai-advisor-msg.ai { align-self: flex-start; background: #fff; color: #222; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border-bottom-left-radius: 3px; }
+  .ai-advisor-msg { max-width: 92%; padding: 10px 14px; border-radius: 16px; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  .ai-advisor-msg.user { align-self: flex-end; background: linear-gradient(135deg, #5b32d6, #7d44de); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 2px 6px rgba(91,50,214,.25); }
+  .ai-advisor-msg.ai { align-self: flex-start; background: #fff; color: #22202b; box-shadow: 0 1px 5px rgba(40,20,90,0.10); border-bottom-left-radius: 4px; white-space: normal; border: 1px solid #ebe6f7; }
   .ai-advisor-msg.error { align-self: flex-start; background: #fdeaea; color: #b3261e; }
-  .ai-advisor-suggestions { display: flex; gap: 8px; padding: 8px 12px 0; flex-wrap: wrap; flex: 0 0 auto; background: #f6f4fb; }
-  .ai-advisor-suggestions button {
-    border: 1px solid #a04ee0; background: #fff; color: #6a3de8; border-radius: 20px;
-    padding: 6px 11px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  .ai-advisor-msg.ai p { margin: 0 0 8px; }
+  .ai-advisor-msg.ai p:last-child { margin-bottom: 0; }
+  .ai-advisor-msg.ai h4 { margin: 10px 0 5px; font-size: 14.5px; color: #4a24b8; font-weight: 800; }
+  .ai-advisor-msg.ai h4:first-child { margin-top: 0; }
+  .ai-advisor-msg.ai .md-li { display: flex; gap: 8px; margin: 5px 0; }
+  .ai-advisor-msg.ai .md-li.sub { margin-left: 18px; }
+  .ai-advisor-msg.ai .md-li > .mk { flex: 0 0 auto; color: #6a3de8; font-weight: 800; min-width: 12px; }
+  .ai-advisor-msg.ai .md-li > .tx { flex: 1; min-width: 0; }
+  .ai-advisor-msg.ai b { color: #3b1a9a; }
+  .ai-advisor-msg.ai code { background: #f1ecfc; border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+  .ai-advisor-suggestions {
+    display: flex; gap: 8px; padding: 8px 12px 4px; flex: 0 0 auto; background: #f4f2fa;
+    overflow-x: auto; white-space: nowrap; width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box;
+    scrollbar-width: none;
   }
-  .ai-advisor-typing { font-size: 12px; color: #888; padding: 4px 16px; background: #f6f4fb; flex: 0 0 auto; }
+  .ai-advisor-suggestions::-webkit-scrollbar { display: none; }
+  .ai-advisor-suggestions button {
+    border: 1px solid #c9a8ee; background: #fff; color: #5b32d6; border-radius: 20px; flex: 0 0 auto;
+    padding: 8px 13px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  }
+  .ai-advisor-typing { font-size: 12.5px; color: #7a6ca0; padding: 4px 16px; background: #f4f2fa; flex: 0 0 auto; width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box; }
   .ai-advisor-input-row {
-    display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #eee;
+    display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #e6e0f3;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
     background: #fff; flex: 0 0 auto;
   }
+  .ai-advisor-input-wrap { width: 100%; background: #fff; flex: 0 0 auto; }
+  .ai-advisor-input-row { max-width: 820px; margin: 0 auto; box-sizing: border-box; }
   .ai-advisor-input-row textarea {
     flex: 1; resize: none; max-height: 90px; padding: 10px 12px; border: 1px solid #cbd3e1;
     border-radius: 14px; font-size: 13.5px; font-family: inherit;
@@ -2012,11 +2040,15 @@
 </div>
 
 <!-- AI Advisor Chatbot (Stock & Marketing) -->
-<div id="aiAdvisorOverlay" onclick="if(event.target===this) closeAiAdvisorModal()">
-  <div class="ai-advisor-modal" onclick="event.stopPropagation()">
+<div id="aiAdvisorOverlay">
+  <div class="ai-advisor-modal">
     <div class="ai-advisor-header">
-      <div class="ai-advisor-title">🤖 AI Advisor — Stock &amp; Marketing</div>
-      <button type="button" class="ai-advisor-close" onclick="closeAiAdvisorModal()">✕</button>
+      <button type="button" class="ai-advisor-back" aria-label="Wapas" onclick="closeAiAdvisorModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <div class="ai-advisor-avatar">🤖</div>
+      <div>
+        <div class="ai-advisor-title">AI Advisor</div>
+        <div class="ai-advisor-sub">Stock &amp; Marketing sahayak</div>
+      </div>
     </div>
     <div id="aiAdvisorMessages" class="ai-advisor-messages"></div>
     <div id="aiAdvisorSuggestions" class="ai-advisor-suggestions">
@@ -2025,12 +2057,12 @@
       <button type="button" onclick="aiAdvisorAskSuggestion('Ek customer ke paas mera purana udhar/baki paisa fasa hai, use vinamrata se jaldi paisa dene ke liye kaise kahun?')">💰 Udhar/baki kaise mangu?</button>
     </div>
     <div id="aiAdvisorTyping" class="ai-advisor-typing" style="display:none;">AI soch raha hai...</div>
-    <div class="ai-advisor-input-row">
+    <div class="ai-advisor-input-wrap"><div class="ai-advisor-input-row">
       <button type="button" class="ai-advisor-attach-btn" title="Bill / Photo attach karein" onclick="document.getElementById('aiAdvisorFileInput').click()">+</button>
       <input type="file" id="aiAdvisorFileInput" accept="image/*,application/pdf" style="display:none" onchange="aiAdvisorFileSelected(event)">
       <textarea id="aiAdvisorInput" rows="1" placeholder="Apna sawal likhein... (stock, marketing, customer se paisa lena, kuch bhi)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); aiAdvisorSend(); }"></textarea>
       <button type="button" class="ai-advisor-send-btn" id="aiAdvisorSendBtn" onclick="aiAdvisorSend()">➤</button>
-    </div>
+    </div></div>
   </div>
 </div>
 
@@ -7828,12 +7860,30 @@ function aiAdvisorScrollToBottom(){
   if(el) el.scrollTop = el.scrollHeight;
 }
 
+function aiMd(t){
+  const e = x => String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inl = x => e(x).replace(/\*\*([^*]+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*(?!\s)([^*\n]+?)\*(?!\*)/g,'$1<i>$2</i>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  const out = []; let para = [];
+  const flush = () => { if(para.length){ out.push('<p>' + para.join('<br>') + '</p>'); para = []; } };
+  String(t).split('\n').forEach(raw => {
+    const line = raw.replace(/\s+$/,'');
+    let m;
+    if(!line.trim()){ flush(); return; }
+    if((m = line.match(/^\s*#{1,4}\s+(.*)$/))){ flush(); out.push('<h4>' + inl(m[1]) + '</h4>'); return; }
+    if((m = line.match(/^(\s*)[*\-•]\s+(.*)$/))){ flush(); out.push('<div class="md-li' + (m[1].length >= 2 ? ' sub' : '') + '"><span class="mk">•</span><span class="tx">' + inl(m[2]) + '</span></div>'); return; }
+    if((m = line.match(/^(\s*)(\d+)[.)]\s+(.*)$/))){ flush(); out.push('<div class="md-li' + (m[1].length >= 2 ? ' sub' : '') + '"><span class="mk">' + m[2] + '.</span><span class="tx">' + inl(m[3]) + '</span></div>'); return; }
+    para.push(inl(line.trim()));
+  });
+  flush();
+  return out.join('');
+}
+
 function aiAdvisorRenderMessage(role, text){
   const box = document.getElementById('aiAdvisorMessages');
   if(!box) return;
   const div = document.createElement('div');
   div.className = 'ai-advisor-msg ' + (role === 'user' ? 'user' : role === 'error' ? 'error' : 'ai');
-  div.textContent = text;
+  if(role === 'user' || role === 'error') div.textContent = text; else div.innerHTML = aiMd(text);
   box.appendChild(div);
   aiAdvisorScrollToBottom();
 }
@@ -8209,7 +8259,7 @@ async function aiAdvisorSend(){
       const take = queue.slice(0, 3);
       queue = queue.slice(3);
       displayed += take;
-      bubble.textContent = displayed;
+      bubble.innerHTML = aiMd(displayed);
       aiAdvisorScrollToBottom();
     }
     if(queue.length || !streamDone){
