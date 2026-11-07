@@ -1831,6 +1831,14 @@
 #itemsTable th:nth-child(5){width:18%!important}
 #itemsTable td input.itemName,#itemsTable td input.itemQty{width:100%!important;min-width:0!important;box-sizing:border-box}
 .pu-box{min-width:0!important}
+#itemSuggest{position:fixed;z-index:12000;background:#fff;border:1px solid #e4d6c6;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.28);padding:5px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#itemSuggest button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:none;background:transparent;padding:10px 10px;border-radius:9px;cursor:pointer;color:#3b1f00}
+#itemSuggest button+button{border-top:1px solid #f3ebe2}
+#itemSuggest button:active{background:#fff0dc}
+#itemSuggest .isg-t{display:flex;flex-direction:column;min-width:0}
+#itemSuggest .isg-t b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#itemSuggest .isg-t small{font-size:12px;color:#8a7a6a;font-weight:500}
+#itemSuggest .isg-p{flex:0 0 auto;font-size:12.5px;font-weight:800;color:#a04e00;background:#fff4e6;border-radius:8px;padding:3px 7px}
 </style>
 </head>
 <body>
@@ -2215,7 +2223,7 @@
       <thead>
         <tr>
           <th style="width:6%">S.No</th>
-          <th>Item Description</th>
+          <th>Item</th>
           <th style="width:16%">Qty</th>
           <th style="width:22%">Rate / Unit</th>
           <th style="width:18%">Amount</th>
@@ -5901,7 +5909,7 @@ function attachStockAutofill(tr){
   const unitInput = tr.querySelector('.itemUnit');
   if(!nameInput || nameInput.dataset.stockBound) return;
   nameInput.dataset.stockBound = '1';
-  nameInput.setAttribute('list', 'billStockNames');
+  nameInput.removeAttribute('list');   // phone ki dark list ki jagah app ki apni suggestion list (neeche)
   nameInput.addEventListener('focus', () => { if(getItemSortMode()) refreshBillStockNames(); });   // naye bill ke baad count update
   // Dropdown se word select karte hi keypad band kiye bina agle box mein chale jao
   const listPicked = (e, inp) => {
@@ -6070,6 +6078,65 @@ function enhanceRatePicker(tr){
   box.querySelector('.puArrow').addEventListener('click', ev => { ev.stopPropagation(); openPUMenu(tr, ev.currentTarget); });
   syncPU(tr);
 }
+
+// ---------------- ITEM NAAM: app ki apni suggestion list (phone ki system list nahi) ----------------
+let _isgInp = null;
+function closeItemSuggest(){ const m = document.getElementById('itemSuggest'); if(m) m.remove(); _isgInp = null; }
+function _isgData(){
+  const dl = document.getElementById('billStockNames');
+  const map = new Map();
+  try { getStockList().forEach(st => map.set(stockNormName(st.itemName), st)); } catch(e){}
+  return Array.from(dl ? dl.options : []).map(o => ({ name: o.value, hi: o.label && o.label !== o.value ? o.label : '', st: map.get(stockNormName(o.value)) }));
+}
+function _isgPlace(inp, m){
+  const vv = window.visualViewport, vh = vv ? vv.height : window.innerHeight, off = vv ? vv.offsetTop : 0;
+  const r = inp.getBoundingClientRect();
+  const below = vh - (r.bottom - 0) - 8, above = r.top - off - 8;
+  const w = Math.min(window.innerWidth - 16, 360);
+  m.style.width = w + 'px';
+  m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+  if(below >= 190 || below >= above){
+    m.style.maxHeight = Math.max(120, Math.min(340, below)) + 'px'; m.style.top = (r.bottom + 4) + 'px'; m.style.bottom = 'auto';
+  } else {
+    m.style.maxHeight = Math.max(120, Math.min(340, above)) + 'px'; m.style.bottom = (window.innerHeight - r.top + 4) + 'px'; m.style.top = 'auto';
+  }
+}
+function openItemSuggest(inp){
+  _isgInp = inp;
+  const q = inp.value.trim().toLowerCase();
+  let rows = _isgData();
+  if(q){
+    const sc = x => { const n = x.name.toLowerCase(), h = (x.hi || '').toLowerCase();
+      return n.startsWith(q) ? 0 : n.split(/\s+/).some(w => w.startsWith(q)) ? 1 : n.includes(q) ? 2 : h.includes(q) ? 3 : 9; };
+    rows = rows.map(x => [sc(x), x]).filter(a => a[0] < 9).sort((a, b) => a[0] - b[0]).map(a => a[1]);
+  }
+  rows = rows.slice(0, 40);
+  let m = document.getElementById('itemSuggest');
+  if(!rows.length){ if(m) m.remove(); return; }
+  if(!m){
+    m = document.createElement('div'); m.id = 'itemSuggest';
+    m.addEventListener('mousedown', e => e.preventDefault());      // input ka focus / keypad na jaye
+    m.addEventListener('click', e => {
+      const b = e.target.closest('button[data-n]'); if(!b || !_isgInp) return;
+      const el = _isgInp, tr = el.closest('tr');
+      el.value = b.dataset.n; closeItemSuggest();
+      el.dispatchEvent(new Event('change'));                       // rate / unit apne aap aa jayein
+      const qEl = tr && tr.querySelector('.itemQty'); if(qEl){ qEl.focus(); qEl.select(); }
+    });
+    document.body.appendChild(m);
+  }
+  m.innerHTML = rows.map(x => {
+    let pr = ''; if(x.st){ const p = getSalePrices(x.st).find(p => p.price > 0); if(p) pr = fmtPU(p.price, p.unit); }
+    return '<button type="button" data-n="' + _unitEsc(x.name) + '"><span class="isg-t"><b>' + _unitEsc(x.name) + '</b>' + (x.hi ? '<small>' + _unitEsc(x.hi) + '</small>' : '') + '</span>' + (pr ? '<span class="isg-p">' + _unitEsc(pr) + '</span>' : '') + '</button>';
+  }).join('');
+  _isgPlace(inp, m);
+}
+document.addEventListener('focusin', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) openItemSuggest(e.target); else if(!e.target.closest || !e.target.closest('#itemSuggest')) closeItemSuggest(); });
+document.addEventListener('input', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) openItemSuggest(e.target); });
+document.addEventListener('focusout', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) setTimeout(() => { if(document.activeElement !== e.target) closeItemSuggest(); }, 150); });
+document.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === 'Escape') closeItemSuggest(); }, true);
+window.addEventListener('scroll', () => { if(_isgInp){ const m = document.getElementById('itemSuggest'); if(m) _isgPlace(_isgInp, m); } }, true);
+if(window.visualViewport){ window.visualViewport.addEventListener('resize', () => { if(_isgInp){ const m = document.getElementById('itemSuggest'); if(m) _isgPlace(_isgInp, m); } }); }
 window.addEventListener('mittuFirebaseStockReady', refreshBillStockNames);
 
 // ---------------- UNIT PICKER + MULTI SALE PRICE (Stock modal) ----------------
