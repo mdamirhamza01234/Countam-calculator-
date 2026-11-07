@@ -1153,27 +1153,32 @@
     padding: 8px 13px; font-size: 12.5px; font-weight: 700; cursor: pointer;
   }
   .ai-advisor-typing { font-size: 12.5px; color: #7a6ca0; padding: 4px 16px; background: #f4f2fa; flex: 0 0 auto; width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box; }
+  .ai-advisor-input-wrap { width: 100%; background: #f4f2fa; flex: 0 0 auto; }
   .ai-advisor-input-row {
-    display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #e6e0f3;
-    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
-    background: #fff; flex: 0 0 auto;
+    display: flex; gap: 6px; align-items: flex-end; max-width: 820px; margin: 4px auto 0; box-sizing: border-box;
+    background: #fff; border: 1.5px solid #d9cdf3; border-radius: 28px; padding: 5px 5px 5px 6px;
+    width: calc(100% - 20px); box-shadow: 0 4px 16px rgba(80,40,170,.12); transition: border-color .15s, box-shadow .15s;
   }
-  .ai-advisor-input-wrap { width: 100%; background: #fff; flex: 0 0 auto; }
-  .ai-advisor-input-row { max-width: 820px; margin: 0 auto; box-sizing: border-box; }
+  .ai-advisor-input-row:focus-within { border-color: #7d44de; box-shadow: 0 4px 18px rgba(106,61,232,.25); }
   .ai-advisor-input-row textarea {
-    flex: 1; resize: none; max-height: 90px; padding: 10px 12px; border: 1px solid #cbd3e1;
-    border-radius: 14px; font-size: 13.5px; font-family: inherit;
+    flex: 1; min-width: 0; resize: none; max-height: 120px; padding: 10px 6px; border: none; outline: none; background: transparent;
+    font-size: 15px; line-height: 1.35; font-family: inherit; color: #22202b; box-sizing: border-box; height: 42px;
   }
+  .ai-advisor-input-row textarea::placeholder { color: #9a90b5; }
   .ai-advisor-send-btn {
-    width: 42px; height: 42px; border-radius: 50%; border: none; background: #6a3de8; color: #fff;
-    font-size: 17px; cursor: pointer; flex: 0 0 auto;
+    width: 42px; height: 42px; border-radius: 50%; border: none; color: #fff; flex: 0 0 auto; cursor: pointer;
+    background: linear-gradient(135deg, #5b32d6, #9a4de0); box-shadow: 0 3px 8px rgba(91,50,214,.35);
+    display: flex; align-items: center; justify-content: center; padding: 0;
   }
-  .ai-advisor-send-btn:disabled { opacity: .6; }
+  .ai-advisor-send-btn svg { width: 20px; height: 20px; }
+  .ai-advisor-send-btn:active { transform: scale(.94); }
+  .ai-advisor-send-btn:disabled { opacity: .55; }
   .ai-advisor-attach-btn {
-    width: 42px; height: 42px; border-radius: 50%; border: 1.5px solid #a04ee0; background: #fff;
-    color: #6a3de8; font-size: 22px; font-weight: 800; cursor: pointer; flex: 0 0 auto; line-height: 1;
-    display: flex; align-items: center; justify-content: center; padding-bottom: 2px;
+    width: 40px; height: 40px; border-radius: 50%; border: none; background: #f1ecfc; color: #5b32d6;
+    cursor: pointer; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 0;
   }
+  .ai-advisor-attach-btn svg { width: 20px; height: 20px; }
+  .ai-advisor-hint { text-align: center; font-size: 10.5px; color: #9a90b5; padding: 6px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px)); }
   .ai-advisor-msg.typing-cursor::after { content: '▍'; display: inline-block; animation: aiCursorBlink .9s steps(1) infinite; color: #6a3de8; }
   @keyframes aiCursorBlink { 50% { opacity: 0; } }
 
@@ -2057,12 +2062,15 @@
       <button type="button" onclick="aiAdvisorAskSuggestion('Ek customer ke paas mera purana udhar/baki paisa fasa hai, use vinamrata se jaldi paisa dene ke liye kaise kahun?')">💰 Udhar/baki kaise mangu?</button>
     </div>
     <div id="aiAdvisorTyping" class="ai-advisor-typing" style="display:none;">AI soch raha hai...</div>
-    <div class="ai-advisor-input-wrap"><div class="ai-advisor-input-row">
-      <button type="button" class="ai-advisor-attach-btn" title="Bill / Photo attach karein" onclick="document.getElementById('aiAdvisorFileInput').click()">+</button>
-      <input type="file" id="aiAdvisorFileInput" accept="image/*,application/pdf" style="display:none" onchange="aiAdvisorFileSelected(event)">
-      <textarea id="aiAdvisorInput" rows="1" placeholder="Apna sawal likhein... (stock, marketing, customer se paisa lena, kuch bhi)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); aiAdvisorSend(); }"></textarea>
-      <button type="button" class="ai-advisor-send-btn" id="aiAdvisorSendBtn" onclick="aiAdvisorSend()">➤</button>
-    </div></div>
+    <div class="ai-advisor-input-wrap">
+      <div class="ai-advisor-input-row">
+        <button type="button" class="ai-advisor-attach-btn" title="Bill / Photo attach karein" aria-label="Attach" onclick="document.getElementById('aiAdvisorFileInput').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <input type="file" id="aiAdvisorFileInput" accept="image/*,application/pdf" style="display:none" onchange="aiAdvisorFileSelected(event)">
+        <textarea id="aiAdvisorInput" rows="1" placeholder="Apna sawal likhein…" oninput="aiAdvisorAutoGrow(this)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); aiAdvisorSend(); }"></textarea>
+        <button type="button" class="ai-advisor-send-btn" id="aiAdvisorSendBtn" aria-label="Bhejein" onclick="aiAdvisorSend()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6 3.3 10l12.6 2-12.6 2z"/></svg></button>
+      </div>
+      <div class="ai-advisor-hint">AI se galti ho sakti hai — zaroori baat khud check karein</div>
+    </div>
   </div>
 </div>
 
@@ -7855,6 +7863,7 @@ function buildAiAdvisorSystemPrompt(){
   );
 }
 
+function aiAdvisorAutoGrow(el){ if(!el) return; el.style.height = '42px'; el.style.height = Math.min(120, Math.max(42, el.scrollHeight)) + 'px'; }
 function aiAdvisorScrollToBottom(){
   const el = document.getElementById('aiAdvisorMessages');
   if(el) el.scrollTop = el.scrollHeight;
@@ -8164,7 +8173,9 @@ function aiAdvisorFileSelected(event){
 
 // Streams the reply chunk-by-chunk (SSE) so it appears to "type" live, like a normal chat.
 // Falls back to a plain call + local typewriter reveal if streaming isn't available.
+let aiAdvisorFinish = '';
 async function aiAdvisorFetchStream(body, onChunk){
+  aiAdvisorFinish = '';
   let lastErr = '';
   for(const model of geminiModelOrder()){
     let resp;
@@ -8198,6 +8209,7 @@ async function aiAdvisorFetchStream(body, onChunk){
             const obj = JSON.parse(js);
             const cand = obj.candidates && obj.candidates[0];
             const chunkTxt = (cand && cand.content && cand.content.parts) ? cand.content.parts.map(p => p.text || '').join('') : '';
+            if(cand && cand.finishReason) aiAdvisorFinish = cand.finishReason;
             if(chunkTxt){ got = true; onChunk(chunkTxt); }
           } catch(e){}
         }
@@ -8214,6 +8226,7 @@ async function aiAdvisorSend(){
   const inp = document.getElementById('aiAdvisorInput');
   const text = (inp && inp.value || '').trim();
   if(!text) return;
+  setTimeout(() => aiAdvisorAutoGrow(inp), 0);
 
   // Sale-price commands are reviewed in the same popup used by Scan Bill.
   const stockPriceUpdate = aiAdvisorTryUpdateSalePrice(text);
@@ -8280,12 +8293,21 @@ async function aiAdvisorSend(){
     const body = JSON.stringify({
       systemInstruction: { parts: [{ text: buildAiAdvisorSystemPrompt() }] },
       contents,
-      generationConfig: { temperature: 0.5, maxOutputTokens: 1024 }
+      generationConfig: { temperature: 0.5, maxOutputTokens: 8192 }
     });
 
     let fullText = '';
     try {
       await aiAdvisorFetchStream(body, (chunk) => { fullText += chunk; onChunk(chunk); });
+      // Jawab beech mein kat gaya (MAX_TOKENS) to wahin se aage likhwao (2 baar tak)
+      for(let k = 0; k < 2 && aiAdvisorFinish && aiAdvisorFinish !== 'STOP' && fullText.trim(); k++){
+        const more = JSON.stringify({
+          systemInstruction: { parts: [{ text: buildAiAdvisorSystemPrompt() }] },
+          contents: contents.concat([{ role: 'model', parts: [{ text: fullText }] }, { role: 'user', parts: [{ text: 'Tumhara jawab beech mein ruk gaya. Bilkul wahin se aage likhkar jawab poora karo. Pehle ka kuch dohrana mat.' }] }]),
+          generationConfig: { temperature: 0.5, maxOutputTokens: 8192 }
+        });
+        try { await aiAdvisorFetchStream(more, (chunk) => { fullText += chunk; onChunk(chunk); }); } catch(e){ break; }
+      }
     } catch(streamErr){
       // Streaming na ho paaye (purana browser / proxy) to normal tareeke se pura jawab le kar
       // usko bhi typewriter se hi dikha dete hain, taaki dikhne mein farak na aaye.
