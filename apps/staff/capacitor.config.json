@@ -1,0 +1,18 @@
+{
+  "appId": "com.mittu.staffdisplay",
+  "appName": "Mittu Staff Display",
+  "webDir": "www",
+  "server": {
+    "url": "https://kiranabillgenerator.vercel.app/staff-display/",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "kiranabillgenerator.vercel.app",
+      "*.firebaseapp.com",
+      "*.googleapis.com",
+      "*.firebaseio.com",
+      "*.gstatic.com",
+      "cdnjs.cloudflare.com"
+    ]
+  },
+  "backgroundColor": "#000000"
+}

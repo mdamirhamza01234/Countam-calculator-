@@ -37,7 +37,9 @@ fs.writeFileSync(manifestPath, manifest);
 
 // 3) Firebase google-services.json (repo root mein rakhein)
 const gs = path.join(root, 'google-services.json');
-if (fs.existsSync(gs)) {
+if (process.env.SKIP_GOOGLE_SERVICES) {
+  console.log('google-services.json skip (display app)');
+} else if (fs.existsSync(gs)) {
   fs.copyFileSync(gs, path.join(appDir, 'google-services.json'));
   console.log('google-services.json copy ho gayi');
 } else {

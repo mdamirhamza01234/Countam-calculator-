@@ -1,0 +1,82 @@
+name: Build Display APKs (Staff + DQR)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'scripts/**'
+      - '.github/workflows/build-display-apks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: staff
+            apk: Mittu-Staff-Display.apk
+            tag: staff-display-apk-latest
+            title: Mittu Staff Display APK (latest)
+          - key: dqr
+            apk: Mittu-DQR-Display.apk
+            tag: dqr-display-apk-latest
+            title: Mittu DQR Display APK (latest)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Use this app's config + icons
+        run: |
+          cp apps/${{ matrix.key }}/capacitor.config.json capacitor.config.json
+          rm -rf resources && cp -r apps/${{ matrix.key }}/resources resources
+          rm -f google-services.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Patch (signing, permissions)
+        env:
+          SKIP_GOOGLE_SERVICES: '1'
+        run: node scripts/patch-android.js
+
+      - name: App icon
+        run: |
+          npm install --no-save @capacitor/assets
+          npx capacitor-assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff'
+
+      - name: Sync
+        run: npx cap sync android
+
+      - name: Build signed release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk ${{ matrix.apk }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.key }}-apk
+          path: ${{ matrix.apk }}
+
+      - name: Publish as GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ${{ matrix.tag }} -y --cleanup-tag || true
+          gh release create ${{ matrix.tag }} ${{ matrix.apk }} --title "${{ matrix.title }}" --notes "Auto-built APK. Phone par download karke install karein."
