@@ -1824,10 +1824,10 @@
 @media (max-width:420px){#itemsBody td{padding-left:3px!important;padding-right:3px!important}.pu-box .puInput{font-size:13px;padding-left:5px}}
 @media (max-width:420px){#itemsBody td:first-child{width:18px;padding-left:0!important;padding-right:2px!important;font-size:13px}#itemsBody .itemName{min-width:0}#itemsBody .itemQty{padding-left:4px;padding-right:2px}.pu-box{min-width:60px}}
 #itemsTable{table-layout:fixed;width:100%}
-#itemsTable th:nth-child(1){width:6%!important}
-#itemsTable th:nth-child(2){width:27%!important}
+#itemsTable th:nth-child(1){width:9%!important;white-space:nowrap;overflow:hidden;padding-left:2px!important;padding-right:2px!important;font-size:12px;text-align:center}
+#itemsTable th:nth-child(2){width:26%!important}
 #itemsTable th:nth-child(3){width:14%!important}
-#itemsTable th:nth-child(4){width:35%!important}
+#itemsTable th:nth-child(4){width:33%!important}
 #itemsTable th:nth-child(5){width:18%!important}
 #itemsTable td input.itemName,#itemsTable td input.itemQty{width:100%!important;min-width:0!important;box-sizing:border-box}
 .pu-box{min-width:0!important}
@@ -1838,6 +1838,12 @@
 #itemSuggest .isg-t{display:flex;flex-direction:column;min-width:0}
 #itemSuggest .isg-t b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #itemSuggest .isg-t small{font-size:12px;color:#8a7a6a;font-weight:500}
+#itemSuggest .isg-head{position:sticky;top:-5px;z-index:2;display:flex;align-items:center;justify-content:space-between;background:#fff;margin:-5px -5px 2px;padding:6px 8px 6px 14px;border-bottom:1px solid #f0e4d6;border-radius:14px 14px 0 0;font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#8a6a4a}
+#itemSuggest .isg-dots{width:34px;height:34px;border:none;background:#fff4e6;color:#a04e00;border-radius:50%;font-size:20px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+#itemSuggest .isg-head button.isg-dots+button{border:none}
+#itemSuggest .isg-menu{position:absolute;right:8px;top:42px;width:210px;background:#fff;border:1px solid #e4d6c6;border-radius:12px;box-shadow:0 8px 22px rgba(0,0,0,.25);padding:5px;text-transform:none;letter-spacing:0}
+#itemSuggest .isg-menu button{display:block;width:100%;border:none;border-top:none!important;padding:11px 10px;font-size:14px;font-weight:700;color:#3b1f00;border-radius:8px}
+#itemSuggest .isg-menu button.on{background:#fff0dc;color:#a04e00}
 #itemSuggest .isg-p{flex:0 0 auto;font-size:12.5px;font-weight:800;color:#a04e00;background:#fff4e6;border-radius:8px;padding:3px 7px}
 </style>
 </head>
@@ -2214,15 +2220,11 @@
 
   <div class="panel">
     <h2>Items / Particulars (Item name and price)</h2>
-    <div class="sort-switch-row">
-      <div class="sw-txt" id="itemSortText"></div>
-      <label class="sw" aria-label="Item suggestion sort"><input type="checkbox" id="itemSortSwitch" onchange="setItemSortMode(this.checked)"><span class="sw-track"></span></label>
-    </div>
     <button type="button" id="hindiFillBtn" class="hindi-fill-btn" style="display:none;" onclick="aiFillHindiNames()"></button>
     <table id="itemsTable">
       <thead>
         <tr>
-          <th style="width:6%">S.No</th>
+          <th style="width:9%">S.N</th>
           <th>Item</th>
           <th style="width:16%">Qty</th>
           <th style="width:22%">Rate / Unit</th>
@@ -5589,12 +5591,13 @@ function refreshBillStockNames(){
   }
   list = list.slice();
   const byAlpha = (a, b) => String(a.itemName || '').localeCompare(String(b.itemName || ''), undefined, { sensitivity: 'base', numeric: true });
-  if(getItemSortMode()){
-    // ON: jo item Bill mein sabse zyada baar likha gaya wo sabse upar (barabar hone par A-Z)
-    const cnt = billItemUsageCounts();
-    list.sort((a, b) => ((cnt.get(stockNormName(b.itemName)) || 0) - (cnt.get(stockNormName(a.itemName)) || 0)) || byAlpha(a, b));
+  const kind = getItemSortKind();
+  if(kind === 'az'){
+    list.sort(byAlpha);
   } else {
-    list.sort(byAlpha);     // OFF: A-Z
+    // most: bill mein sabse zyada likhe gaye pehle | least: sabse kam likhe gaye pehle (barabar hone par A-Z)
+    const cnt = billItemUsageCounts(), dir = kind === 'least' ? -1 : 1;
+    list.sort((a, b) => (dir * ((cnt.get(stockNormName(b.itemName)) || 0) - (cnt.get(stockNormName(a.itemName)) || 0))) || byAlpha(a, b));
   }
   list.forEach(st => {
     const o = document.createElement('option');
@@ -5605,14 +5608,19 @@ function refreshBillStockNames(){
   updateHindiFillBtn();
 }
 // ---- Item suggestion sort: ON = sabse zyada use hone wale pehle, OFF = alphabet (A-Z) ----
-function getItemSortMode(){
-  try { return localStorage.getItem('mittu_item_sort_usage') !== '0'; } catch(e){ return true; }
+function getItemSortKind(){
+  try {
+    const k = localStorage.getItem('mittu_item_sort_kind');
+    if(k === 'az' || k === 'most' || k === 'least') return k;
+    return localStorage.getItem('mittu_item_sort_usage') === '0' ? 'az' : 'most';
+  } catch(e){ return 'most'; }
 }
-function setItemSortMode(on){
-  try { localStorage.setItem('mittu_item_sort_usage', on ? '1' : '0'); } catch(e){}
-  syncItemSortSwitch();
+function setItemSortKind(k){
+  try { localStorage.setItem('mittu_item_sort_kind', k); localStorage.setItem('mittu_item_sort_usage', k === 'az' ? '0' : '1'); } catch(e){}
   refreshBillStockNames();
 }
+function getItemSortMode(){ return getItemSortKind() !== 'az'; }
+function setItemSortMode(on){ setItemSortKind(on ? 'most' : 'az'); syncItemSortSwitch(); }
 function syncItemSortSwitch(){
   const on = getItemSortMode();
   const sw = document.getElementById('itemSortSwitch'); if(sw) sw.checked = on;
@@ -6080,8 +6088,8 @@ function enhanceRatePicker(tr){
 }
 
 // ---------------- ITEM NAAM: app ki apni suggestion list (phone ki system list nahi) ----------------
-let _isgInp = null;
-function closeItemSuggest(){ const m = document.getElementById('itemSuggest'); if(m) m.remove(); _isgInp = null; }
+let _isgInp = null, _isgMenu = false;
+function closeItemSuggest(){ _isgMenu = false; const m = document.getElementById('itemSuggest'); if(m) m.remove(); _isgInp = null; }
 function _isgData(){
   const dl = document.getElementById('billStockNames');
   const map = new Map();
@@ -6103,6 +6111,7 @@ function _isgPlace(inp, m){
 }
 function openItemSuggest(inp){
   _isgInp = inp;
+  if(!document.getElementById('itemSuggest') && getItemSortKind() !== 'az') refreshBillStockNames();   // taaza count ke saath
   const q = inp.value.trim().toLowerCase();
   let rows = _isgData();
   if(q){
@@ -6117,6 +6126,9 @@ function openItemSuggest(inp){
     m = document.createElement('div'); m.id = 'itemSuggest';
     m.addEventListener('mousedown', e => e.preventDefault());      // input ka focus / keypad na jaye
     m.addEventListener('click', e => {
+      if(e.target.closest('.isg-dots')){ _isgMenu = !_isgMenu; if(_isgInp) openItemSuggest(_isgInp); return; }
+      const so = e.target.closest('button[data-k]');
+      if(so){ _isgMenu = false; setItemSortKind(so.dataset.k); if(_isgInp) openItemSuggest(_isgInp); return; }
       const b = e.target.closest('button[data-n]'); if(!b || !_isgInp) return;
       const el = _isgInp, tr = el.closest('tr');
       el.value = b.dataset.n; closeItemSuggest();
@@ -6125,10 +6137,15 @@ function openItemSuggest(inp){
     });
     document.body.appendChild(m);
   }
-  m.innerHTML = rows.map(x => {
+  const kind = getItemSortKind();
+  const KL = { az: 'A–Z (alphabet)', most: 'Sabse zyada bikne wale', least: 'Kam bikne wale' };
+  const head = '<div class="isg-head"><span>' + KL[kind] + '</span><button type="button" class="isg-dots" aria-label="Sort">⋮</button>' +
+    (_isgMenu ? '<div class="isg-menu">' + ['az','most','least'].map(k => '<button type="button" data-k="' + k + '"' + (k === kind ? ' class="on"' : '') + '>' + (k === kind ? '✓ ' : '') + KL[k] + '</button>').join('') + '</div>' : '') + '</div>';
+  m.innerHTML = head + rows.map(x => {
     let pr = ''; if(x.st){ const p = getSalePrices(x.st).find(p => p.price > 0); if(p) pr = fmtPU(p.price, p.unit); }
     return '<button type="button" data-n="' + _unitEsc(x.name) + '"><span class="isg-t"><b>' + _unitEsc(x.name) + '</b>' + (x.hi ? '<small>' + _unitEsc(x.hi) + '</small>' : '') + '</span>' + (pr ? '<span class="isg-p">' + _unitEsc(pr) + '</span>' : '') + '</button>';
   }).join('');
+  m.style.minHeight = _isgMenu ? '200px' : '';
   _isgPlace(inp, m);
 }
 document.addEventListener('focusin', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) openItemSuggest(e.target); else if(!e.target.closest || !e.target.closest('#itemSuggest')) closeItemSuggest(); });
