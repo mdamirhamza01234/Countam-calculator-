@@ -5746,7 +5746,7 @@ async function aiFillHindiNames(){
       const prompt = 'Neeche kirana / wholesale dukaan ke saman ke naam hain (Hinglish/English). Har ek ka aam bol-chaal wala Hindi naam Devanagari mein do (jaise "aalu" -> "आलू", "Basmati Rice Premium Per Bag" -> "बासमती चावल"). Packing words jaise Per, Pkt, Pkts, Bag, Pack, kg ko chhod do. SIRF JSON array return karo, koi aur text nahi: [{"name":"<diya hua naam bilkul waisa hi>","hindi":"<Devanagari naam>"}]. Naam: ' + JSON.stringify(part.map(s => s.itemName));
       const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 4096, responseMimeType: 'application/json' } });
       let arr = null, lastErr = '';
-      for(const model of GEMINI_MODELS){
+      for(const model of geminiModelOrder()){
         let resp;
         try { resp = await geminiFetch(model, body); } catch(e){ lastErr = 'Internet / network problem'; continue; }
         if(resp.ok){
@@ -7108,7 +7108,16 @@ function geminiKeyReady(){ return true; } // key ab server (/api/gemini) ya user
 // User ki apni Gemini API key (My Account se). Browser ke localStorage mein sirf is device par rehti hai.
 function getUserGeminiKey(){ try { return (localStorage.getItem('user_gemini_api_key') || '').trim(); } catch(e){ return ''; } }
 // Key ho to seedha Google ko call; na ho to server proxy (/api/gemini).
+// Jis model ne pichli baar jawab diya tha wo yaad rakho aur agli baar sabse pehle wahi try karo.
+function geminiModelOrder(){
+  let m = ''; try { m = localStorage.getItem('gemini_last_model') || ''; } catch(e){}
+  return m && GEMINI_MODELS.indexOf(m) > 0 ? [m].concat(GEMINI_MODELS.filter(x => x !== m)) : GEMINI_MODELS.slice();
+}
+function geminiRemember(model){ try { localStorage.setItem('gemini_last_model', model); } catch(e){} }
 function geminiFetch(model, body, stream){
+  return geminiFetchRaw(model, body, stream).then(r => { if(r && r.ok) geminiRemember(model); return r; });
+}
+function geminiFetchRaw(model, body, stream){
   const key = getUserGeminiKey();
   if(key){
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) +
@@ -7196,7 +7205,7 @@ async function scanRunAi(sources){
   });
 
   let j = null, lastErr = '';
-  for(const model of GEMINI_MODELS){
+  for(const model of geminiModelOrder()){
     let resp;
     try {
       resp = await geminiFetch(model, body);
@@ -7337,7 +7346,7 @@ async function aiBillCall(contents){
     generationConfig:{temperature:0,maxOutputTokens:4096,responseMimeType:'application/json'}
   });
   let lastErr='';
-  for(const model of GEMINI_MODELS){
+  for(const model of geminiModelOrder()){
     let resp;
     try{
       resp=await geminiFetch(model, body);
@@ -8107,7 +8116,7 @@ function aiAdvisorFileSelected(event){
 // Falls back to a plain call + local typewriter reveal if streaming isn't available.
 async function aiAdvisorFetchStream(body, onChunk){
   let lastErr = '';
-  for(const model of GEMINI_MODELS){
+  for(const model of geminiModelOrder()){
     let resp;
     try {
       resp = await geminiFetch(model, body, true);
@@ -8231,7 +8240,7 @@ async function aiAdvisorSend(){
       // Streaming na ho paaye (purana browser / proxy) to normal tareeke se pura jawab le kar
       // usko bhi typewriter se hi dikha dete hain, taaki dikhne mein farak na aaye.
       let j = null, lastErr = '';
-      for(const model of GEMINI_MODELS){
+      for(const model of geminiModelOrder()){
         let resp;
         try {
           resp = await geminiFetch(model, body);
