@@ -34,6 +34,7 @@
   .pay.cod{background:#fff4d6;color:#7a4b00;border:1.5px solid #ffc94d}
   .pay.paid{background:#e6f4ea;color:#137333;border:1.5px solid #9fd8b2}
   .ready{padding:0 14px 6px;font-size:13px;color:#4a5190;font-weight:700}
+  .rdy-ok{margin:0 14px 6px;padding:10px 12px;border-radius:12px;background:#e6f4ea;color:#137333;font-weight:800;font-size:15px;border:1.5px solid #9fd8b2}
   .bar{height:7px;border-radius:5px;background:#e3e6f6;margin:5px 0 2px;overflow:hidden}.bar i{display:block;height:100%;background:#2e9d57}
   .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 14px}
   .acts a,.acts button{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:12px;border:0;font-weight:800;font-size:14px;text-decoration:none;color:#fff}
@@ -55,7 +56,8 @@
 <body>
 <div id="login"><div class="lbox">
   <h2>🛵 Mittu Delivery</h2>
-  <p>Apna mobile number likhein — sirf aapko diye gaye orders yahan dikhenge.</p>
+  <p>Apna naam aur mobile number likhein — sirf aapko diye gaye orders yahan dikhenge.</p>
+  <input id="lnm" placeholder="Aapka naam" maxlength="40" style="margin-bottom:10px;letter-spacing:0">
   <input id="lph" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile">
   <div id="lerr"></div>
   <button id="lgo">Shuru karein</button>
@@ -85,17 +87,22 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const get = k => { try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } };
   const set = (k,v) => { try { localStorage.setItem(k,v); } catch(e){} };
-  let me = get('mittu_dp_phone'), tab = 'p', data = {}, known = null, started = false;
+  let myName = get('mittu_dp_name'), me = get('mittu_dp_phone'), tab = 'p', data = {}, known = null, started = false;
 
-  function showLogin(){ $('login').style.display = 'flex'; $('lph').value = me; }
+  function showLogin(){ $('login').style.display = 'flex'; $('lph').value = me; $('lnm').value = myName; }
   $('lgo').onclick = () => {
-    const v = $('lph').value.replace(/\D/g,'').slice(-10);
+    const v = $('lph').value.replace(/\D/g,'').slice(-10), nm = $('lnm').value.trim();
+    if(nm.length < 2){ $('lerr').textContent = 'Apna naam likhein.'; return; }
     if(!/^[6-9]\d{9}$/.test(v)){ $('lerr').textContent = 'Sahi 10 digit mobile number likhein.'; return; }
-    me = v; set('mittu_dp_phone', v); $('login').style.display = 'none'; known = null; init(); render();
+    me = v; myName = nm; set('mittu_dp_phone', v); set('mittu_dp_name', nm); register(); $('login').style.display = 'none'; known = null; init(); render();
   };
   $('chg').onclick = showLogin;
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => { tab = b.dataset.t; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b)); render(); });
 
+  function register(){
+    if(!me || !myName || !auth.currentUser) return;
+    update(ref(db, 'staffOrders/_partners/' + me), { name: myName, phone: me, ts: Date.now() }).catch(e => console.warn('register failed', e));
+  }
   const mine = o => o && o.type === 'online' && o.deliveryPartner && String(o.deliveryPartner.phone || '').replace(/\D/g,'').slice(-10) === me;
   const dstat = o => o.deliveryStatus || 'new';
 
@@ -110,6 +117,7 @@
   function card(o){
     const items = Array.isArray(o.items) ? o.items : [];
     const chk = o.checked || {}, n = items.filter((_, i) => chk[i]).length, pct = items.length ? Math.round(n * 100 / items.length) : 0;
+    const allReady = items.length > 0 && n === items.length;
     const st = dstat(o), ph = String(o.custMobile || '').replace(/\D/g,'');
     const total = Number(o.totalAmount || 0).toFixed(2);
     const pay = o.pay === 'ONLINE' ? `<div class="pay paid">💳 Online paid — paisa lena nahi hai</div>` : `<div class="pay cod">💵 Customer se ₹${total} lena hai${o.pay === 'UPI' ? ' (UPI se bhi de sakta hai)' : ' (Cash)'}</div>`;
@@ -123,14 +131,14 @@
       <div class="c-top"><div><div class="c-name">${esc(o.custName || 'Customer')}</div><div class="c-id">${esc(o.orderId || '')} · ${items.length} item · ₹${total}</div></div>${badge}</div>
       <div class="c-addr">📍 ${esc(o.address || 'Pata nahi diya')}</div>
       ${pay}
-      <div class="ready">Saman taiyaar: ${n}/${items.length}<div class="bar"><i style="width:${pct}%"></i></div></div>
+      ${allReady ? '<div class="rdy-ok">✅ SAMAN READY — le ja sakte hain</div>' : `<div class="ready">⏳ Saman taiyaar ho raha hai: ${n}/${items.length}<div class="bar"><i style="width:${pct}%"></i></div></div>`}
       <div class="acts">${btns}</div>
       <details><summary>Saman ki list</summary><table>${items.map((it,i) => `<tr class="${chk[i] ? 'chk' : ''}"><td>${chk[i] ? '✔' : '•'} ${esc(it.name)}</td><td class="r">${esc(it.qty)} ${esc(it.unit || '')}</td></tr>`).join('')}</table></details>
     </div>`;
   }
 
   function render(){
-    $('me').textContent = me ? '📱 ' + me : '';
+    $('me').textContent = me ? '👤 ' + (myName ? myName + ' · ' : '') + me : '';
     const all = Object.keys(data).map(id => Object.assign({ id }, data[id])).filter(mine).sort((a,b) => (b.ts||0) - (a.ts||0));
     const pend = all.filter(o => dstat(o) !== 'delivered'), done = all.filter(o => dstat(o) === 'delivered');
     $('cp').textContent = pend.length;
@@ -138,8 +146,15 @@
     $('wrap').innerHTML = list.length ? list.map(card).join('') : `<div class="empty">${tab === 'p' ? 'Abhi koi delivery baaki nahi hai 🎉' : 'Abhi koi delivery complete nahi hui.'}</div>`;
   }
 
-  function notify(o){
-    const a = $('alert'); a.innerHTML = '🆕 Nayi delivery: <b>' + esc(o.custName || 'Customer') + '</b> — ₹' + esc(Number(o.totalAmount||0).toFixed(2)); a.style.display = 'block';
+  let readySet = null;
+  function checkReady(){
+    const ids = Object.keys(data).filter(id => mine(data[id]) && dstat(data[id]) === 'new' && Array.isArray(data[id].items) && data[id].items.length && data[id].items.every((_, i) => (data[id].checked || {})[i]));
+    if(readySet === null){ readySet = new Set(ids); return; }
+    const fresh = ids.filter(id => !readySet.has(id)); ids.forEach(id => readySet.add(id));
+    if(fresh.length) notify(data[fresh[0]], true);
+  }
+  function notify(o, ready){
+    const a = $('alert'); a.innerHTML = ready ? ('✅ Saman READY: <b>' + esc(o.custName || 'Customer') + '</b> — le jaane ke liye taiyaar') : ('🆕 Nayi delivery: <b>' + esc(o.custName || 'Customer') + '</b> — ₹' + esc(Number(o.totalAmount||0).toFixed(2))); a.style.display = 'block';
     try { if(navigator.vibrate) navigator.vibrate([250,120,250,120,500]); } catch(e){}
     try { const AC = window.AudioContext || window.webkitAudioContext; if(AC){ const c = new AC(), os = c.createOscillator(), g = c.createGain(); os.frequency.value = 880; g.gain.value = .05; os.connect(g); g.connect(c.destination); os.start(); setTimeout(() => { try{ os.stop(); c.close(); }catch(e){} }, 450); } } catch(e){}
     setTimeout(() => a.style.display = 'none', 7000);
@@ -151,10 +166,11 @@
       const ids = Object.keys(data).filter(id => mine(data[id]));
       if(known === null){ known = new Set(ids); }
       else { const fresh = ids.filter(id => !known.has(id)); ids.forEach(id => known.add(id)); if(fresh.length) notify(data[fresh[0]]); }
+      checkReady();
       render();
     }, err => { $('wrap').innerHTML = '<div class="empty">Connection error: ' + esc(err && err.message || err) + '</div>'; });
   }
-  function init(){ if(started) return; started = true; onAuthStateChanged(auth, u => { if(u) listen(); }); signInAnonymously(auth).catch(e => { $('wrap').innerHTML = '<div class="empty">Login error: ' + esc(e && e.message || e) + '</div>'; }); }
+  function init(){ if(started) return; started = true; onAuthStateChanged(auth, u => { if(u){ register(); listen(); } }); signInAnonymously(auth).catch(e => { $('wrap').innerHTML = '<div class="empty">Login error: ' + esc(e && e.message || e) + '</div>'; }); }
 
   if(me){ $('login').style.display = 'none'; init(); } else showLogin();
   (async () => { try { if('wakeLock' in navigator){ let l = await navigator.wakeLock.request('screen'); document.addEventListener('visibilitychange', async () => { if(document.visibilityState === 'visible'){ try{ l = await navigator.wakeLock.request('screen'); }catch(e){} } }); } } catch(e){} })();

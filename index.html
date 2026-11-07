@@ -716,6 +716,14 @@
   // order ko apna unique key milta hai — staff-display.html isi node ko
   // sunta rehta hai aur naye order upar, purane niche dikhata hai.
   const staffOrdersRef = ref(fbDb, 'staffOrders');
+  // Delivery partners jo apne app mein register karte hain (staffOrders/_partners/<mobile>)
+  window.__dpPartners = {};
+  try {
+    onValue(ref(fbDb, 'staffOrders/_partners'), snap => {
+      window.__dpPartners = snap.val() || {};
+      if (typeof window.dpRefreshUI === 'function') window.dpRefreshUI(false);
+    }, () => {});
+  } catch(e){}
   window.pushOrderToStaff = function(payload){
     const newRef = push(staffOrdersRef);
     return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))
@@ -1882,7 +1890,10 @@ body.order-bill .pu-box .puArrow{background:#e6f6ec}
 .only-order{display:none}
 body.order-bill .only-order{display:block}
 body.order-bill #orderStaffPrintBtn{display:flex}
-body.order-bill .two-col-btn-row{display:none !important}
+body.order-bill .two-col-btn-row,body.order-bill .upi-btn,body.order-bill .udhar-btn-row,body.order-bill .generate-btn{display:none !important}
+.dp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.dp-chip{border:1.5px solid #cfd8e3;background:#f4f6fa;color:#1b1f3b;border-radius:18px;padding:7px 12px;font-size:13.5px;font-weight:700}
+.dp-chip.on{background:#0d6e4e;border-color:#0d6e4e;color:#fff}
 .dp-box{margin:14px 0 0;background:#fff;border:1.5px solid #cfe3d6;border-radius:14px;padding:12px;box-shadow:0 2px 10px rgba(13,110,78,.10)}
 .dp-title{font-weight:800;color:#0d6e4e;margin-bottom:8px;font-size:15px}
 .dp-row{display:flex;gap:8px}
@@ -2287,12 +2298,13 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
   <!-- ONLINE ORDER: Delivery partner + staff/print (sirf online order se bane bill mein dikhta hai) -->
   <div id="deliveryBox" class="only-order dp-box">
     <div class="dp-title">🛵 Delivery Partner</div>
+    <div class="dp-chips" id="dpChips"></div>
     <div class="dp-row">
       <input id="dpName" list="dpList" placeholder="Delivery partner ka naam" autocomplete="off">
       <input id="dpPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Mobile number">
     </div>
     <datalist id="dpList"></datalist>
-    <div class="dp-hint">Ek baar likhne ke baad agli baar naam/number khud bhar jayega.</div>
+    <div class="dp-hint">Delivery partner jab apne app mein naam/number daalta hai, wo yahan khud aa jata hai. Naam par tap karke badal sakte hain.</div>
   </div>
   <button type="button" id="orderStaffPrintBtn" class="only-order ai-bill-generate-btn" style="background:#a04e00; margin:12px 0 0; width:100%; font-size:15px; padding:14px 8px;" onclick="sendOnlineOrderToStaff(true)">
     <span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein + Bill Print
@@ -8113,23 +8125,47 @@ function sendFixAmountToDqr(){
 }
 
 // ---------------- DELIVERY PARTNER + ONLINE ORDER -> STAFF ----------------
-function dpLoad(){ try { return JSON.parse(localStorage.getItem('mittu_dp_list') || '[]') || []; } catch(e){ return []; } }
+function dpLoad(){
+  let local = []; try { local = JSON.parse(localStorage.getItem('mittu_dp_list') || '[]') || []; } catch(e){}
+  const fb = Object.values(window.__dpPartners || {}).filter(p => p && p.phone).map(p => ({ name: p.name || '', phone: String(p.phone).replace(/\D/g, '').slice(-10) }));
+  const seen = new Set(), out = [];
+  fb.concat(local).forEach(p => { if(p.phone && !seen.has(p.phone)){ seen.add(p.phone); out.push(p); } });
+  return out;
+}
+function dpSelect(name, phone){
+  const n = document.getElementById('dpName'), p = document.getElementById('dpPhone');
+  if(n) n.value = name || ''; if(p) p.value = phone || '';
+  try { localStorage.setItem('mittu_dp_last', phone || ''); } catch(e){}
+  dpRefreshUI(false);
+}
 function dpRefreshUI(fillLast){
   const list = dpLoad();
   const dl = document.getElementById('dpList');
   if(dl) dl.innerHTML = list.map(p => '<option value="' + esc(p.name) + '">' + esc(p.phone) + '</option>').join('');
-  if(fillLast && list.length){
-    const n = document.getElementById('dpName'), p = document.getElementById('dpPhone');
-    if(n && !n.value) n.value = list[0].name;
-    if(p && !p.value) p.value = list[0].phone;
+  const n = document.getElementById('dpName'), p = document.getElementById('dpPhone');
+  if(fillLast && list.length && n && p && !n.value && !p.value){
+    let last = ''; try { last = localStorage.getItem('mittu_dp_last') || ''; } catch(e){}
+    const m = list.find(x => x.phone === last) || list[0];
+    n.value = m.name; p.value = m.phone;
+  }
+  const chips = document.getElementById('dpChips');
+  if(chips){
+    const cur = p ? p.value : '';
+    chips.innerHTML = list.map(x => '<button type="button" class="dp-chip' + (x.phone === cur ? ' on' : '') + '" data-n="' + esc(x.name) + '" data-p="' + esc(x.phone) + '">🛵 ' + esc(x.name || x.phone) + '</button>').join('');
+    chips.style.display = list.length ? 'flex' : 'none';
   }
 }
+window.dpRefreshUI = dpRefreshUI;
+document.addEventListener('click', e => {
+  const c = e.target.closest && e.target.closest('.dp-chip');
+  if(c) dpSelect(c.dataset.n, c.dataset.p);
+});
 function dpSave(name, phone){
   name = String(name || '').trim(); phone = String(phone || '').replace(/\D/g, '').slice(-10);
   if(!name && !phone) return;
-  let list = dpLoad().filter(p => !(p.phone && p.phone === phone) && p.name.toLowerCase() !== name.toLowerCase());
+  let list = []; try { list = (JSON.parse(localStorage.getItem('mittu_dp_list') || '[]') || []).filter(p => !(p.phone && p.phone === phone)); } catch(e){}
   list.unshift({ name, phone });
-  try { localStorage.setItem('mittu_dp_list', JSON.stringify(list.slice(0, 15))); } catch(e){}
+  try { localStorage.setItem('mittu_dp_list', JSON.stringify(list.slice(0, 15))); localStorage.setItem('mittu_dp_last', phone); } catch(e){}
 }
 document.addEventListener('input', e => {
   if(e.target && e.target.id === 'dpName'){

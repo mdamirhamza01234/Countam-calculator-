@@ -307,9 +307,7 @@
     return `<div class="dp-line ${st === 'delivered' ? 'done' : ''}">${who}${stTxt}</div>`;
   }
   function onlineInfo(o){
-    const addr = escHtml(o.address || '');
-    const map = o.mapUrl ? ` · <a href="${escHtml(o.mapUrl)}" target="_blank" rel="noopener">📍 Map</a>` : '';
-    return `<div class="order-info">${o.orderId ? 'Order: <b>' + escHtml(o.orderId) + '</b><br>' : ''}${addr ? '📍 ' + addr + map + '<br>' : ''}${o.pay === 'ONLINE' ? '💳 Online paid' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery'}</div>`;
+    return `<div class="order-info">${o.orderId ? 'Order: <b>' + escHtml(o.orderId) + '</b> · ' : ''}${o.pay === 'ONLINE' ? '💳 Online paid' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery'}</div>`;
   }
 
   function toggleCard(orderId){
@@ -366,6 +364,7 @@
   // lagta hai.
   function syncCompletionTimestamps(ordersObj){
     Object.keys(ordersObj || {}).forEach(id => {
+      if(id.charAt(0) === '_') return;
       const order = ordersObj[id];
       const items = Array.isArray(order.items) ? order.items : [];
       if(!items.length) return;
@@ -390,7 +389,7 @@
   }, 1000);
 
   function renderOrders(ordersObj){
-    const ids = Object.keys(ordersObj || {});
+    const ids = Object.keys(ordersObj || {}).filter(id => id.charAt(0) !== '_');
     if(!ids.length){
       ordersWrap.innerHTML = '';
       ordersWrap.appendChild(emptyMsg);
@@ -426,7 +425,7 @@
             <td class="sl-col">${i + 1}.</td>
             <td class="name-col">${escHtml(it.name)}</td>
             <td class="num-col">${escHtml(it.qty)}${it.unit ? ' ' + escHtml(it.unit) : ''}</td>
-            <td class="num-col">${escHtml(it.rate != null ? Number(it.rate).toFixed(2) : '0.00')}₹/${escHtml(it.unit || 'pcs')}</td>
+            ${order.type === 'online' ? '' : `<td class="num-col">${escHtml(it.rate != null ? Number(it.rate).toFixed(2) : '0.00')}₹/${escHtml(it.unit || 'pcs')}</td>`}
             <td class="num-col">₹${escHtml(Number(it.amt || 0).toFixed(2))}</td>
             <td class="chk-col">
               <input type="checkbox" ${isChecked ? 'checked' : ''}
@@ -461,7 +460,7 @@
                 <th class="sl-col">Sl.No</th>
                 <th>Saman</th>
                 <th class="num-col">Qty</th>
-                <th class="num-col">Price/Unit</th>
+                ${order.type === 'online' ? '' : '<th class="num-col">Price/Unit</th>'}
                 <th class="num-col">Amount</th>
                 <th class="chk-col">${iconCheck('icon-th')}</th>
               </tr>
@@ -511,7 +510,7 @@
     onValue(staffOrdersRef, (snapshot) => {
       const data = snapshot.val() || {};
       latestOrders = data;
-      const ids = Object.keys(data);
+      const ids = Object.keys(data).filter(id => id.charAt(0) !== '_');
 
       if(knownIds === null){
         // Pehli baar page khula — purane orders ke liye alert mat bajao,
