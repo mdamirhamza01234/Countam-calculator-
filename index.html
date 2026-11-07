@@ -1810,6 +1810,28 @@
 .topbar .topbar-action-btn svg{stroke:#fff!important;stroke-width:1.9!important;width:25px!important;height:25px!important}
 @media (max-width:360px){.topbar .topbar-title{font-size:19px}.topbar .topbar-title .tb-sub{letter-spacing:1.6px}}
 </style>
+<style id="pu-style">
+.pu-hidden{display:none!important}
+.pu-box{display:flex;align-items:stretch;width:100%;min-width:66px;border:1px solid #d6dbe3;border-radius:10px;background:#fff;overflow:hidden}
+.pu-box:focus-within{border-color:#a04e00;box-shadow:0 0 0 2px rgba(160,78,0,.15)}
+.pu-box .puInput{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:9px 4px 9px 7px;font-size:14px;font-weight:700;color:#a04e00;box-shadow:none!important;width:0!important;margin:0!important;border-radius:0!important}
+.pu-box .puArrow{flex:0 0 22px;border:none;border-left:1px solid #eadfd3;background:#fff4e6;color:#a04e00;font-size:13px;font-weight:800;cursor:pointer;padding:0}
+.pu-box .puArrow:active{background:#ffe2c0}
+#puMenu{position:fixed;z-index:12000;background:#fff;border:1px solid #e4d6c6;border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.25);padding:6px;max-height:60vh;overflow-y:auto}
+#puMenu .pu-menu-h{font-size:11px;font-weight:800;color:#8a6a4a;letter-spacing:.6px;text-transform:uppercase;padding:4px 8px 6px}
+#puMenu button{display:block;width:100%;text-align:left;border:none;background:transparent;padding:11px 10px;border-radius:8px;font-size:15px;font-weight:700;color:#3b1f00;cursor:pointer}
+#puMenu button:active,#puMenu button.on{background:#fff0dc;color:#a04e00}
+@media (max-width:420px){#itemsBody td{padding-left:3px!important;padding-right:3px!important}.pu-box .puInput{font-size:13px;padding-left:5px}}
+@media (max-width:420px){#itemsBody td:first-child{width:18px;padding-left:0!important;padding-right:2px!important;font-size:13px}#itemsBody .itemName{min-width:0}#itemsBody .itemQty{padding-left:4px;padding-right:2px}.pu-box{min-width:60px}}
+#itemsTable{table-layout:fixed;width:100%}
+#itemsTable th:nth-child(1){width:6%!important}
+#itemsTable th:nth-child(2){width:27%!important}
+#itemsTable th:nth-child(3){width:14%!important}
+#itemsTable th:nth-child(4){width:35%!important}
+#itemsTable th:nth-child(5){width:18%!important}
+#itemsTable td input.itemName,#itemsTable td input.itemQty{width:100%!important;min-width:0!important;box-sizing:border-box}
+.pu-box{min-width:0!important}
+</style>
 </head>
 <body>
 <script>
@@ -2195,7 +2217,7 @@
           <th style="width:6%">S.No</th>
           <th>Item Description</th>
           <th style="width:16%">Qty</th>
-          <th style="width:20%">List Price</th>
+          <th style="width:22%">Rate / Unit</th>
           <th style="width:18%">Amount</th>
         </tr>
       </thead>
@@ -2685,6 +2707,7 @@ function addRow(){
   unitInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'unit'));
 
   attachStockAutofill(tr);
+  enhanceRatePicker(tr);
   refreshBillStockNames();
   calcTotal();
 }
@@ -2695,7 +2718,7 @@ function billFieldIsEmpty(el){
 }
 function focusNextBillEmptyField(current){
   const fields = Array.from(document.querySelectorAll(
-    '#custName, #custMobile, #custAddr, #itemsBody input.itemName, #itemsBody input.itemQty, #itemsBody input.itemRate, #itemsBody input.itemUnit'
+    '#custName, #custMobile, #custAddr, #itemsBody input.itemName, #itemsBody input.itemQty, #itemsBody input.puInput'
   )).filter(el => !el.disabled && !el.readOnly && el.offsetParent !== null);
   const start = fields.indexOf(current);
   const ordered = start >= 0 ? fields.slice(start + 1).concat(fields.slice(0, start + 1)) : fields;
@@ -2740,6 +2763,7 @@ function calcTotal(){
     const rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
     const amt = qty * rate;
     tr.querySelector('.itemAmt').innerHTML = fmtAmountCell(amt.toFixed(2));
+    if(typeof syncPU === 'function') syncPU(tr);
     total += amt;
   });
   document.getElementById('totalPreview').textContent = total.toFixed(2);
@@ -4427,6 +4451,7 @@ function restoreBillToForm(idx){
     qtyInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'qty'));
     rateInput.addEventListener('keydown', (e)=> handleFieldEnter(e, 'rate'));
     attachStockAutofill(tr);
+    enhanceRatePicker(tr);
   });
 
   // Always keep at least one editable row, just like a new bill.
@@ -5974,6 +5999,76 @@ function attachStockAutofill(tr){
       if(p && p.price){ rateInput.value = p.price; calcTotal(); }
     });
   }
+}
+
+// ---------------- RATE / UNIT: ek hi box (₹12/kg ↔ ₹550/bag) ----------------
+function fmtPU(rate, unit){
+  rate = parseFloat(rate) || 0;
+  return rate ? '₹' + (+rate.toFixed(2)) + '/' + (String(unit || '').trim() || 'pcs') : '';
+}
+function syncPU(tr){
+  const pu = tr.querySelector('.puInput');
+  if(!pu || document.activeElement === pu) return;
+  pu.value = fmtPU(tr.querySelector('.itemRate').value, tr.querySelector('.itemUnit').value);
+}
+function puCommit(tr, rate, unit){
+  const r = tr.querySelector('.itemRate'), u = tr.querySelector('.itemUnit');
+  if(unit != null && unit !== ''){ u.value = unit; u.dispatchEvent(new Event('change')); }   // is unit ka stock-rate aa sakta hai
+  if(rate != null){ r.value = rate; r.dispatchEvent(new Event('change')); }                    // par jo rate chuna/likha wahi rahe
+  calcTotal();
+}
+function closePUMenu(){ const m = document.getElementById('puMenu'); if(m) m.remove(); }
+function openPUMenu(tr, btn){
+  closePUMenu();
+  const name = tr.querySelector('.itemName').value;
+  const stock = name.trim() ? smartFindStock(name) : null;
+  const curRate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+  const curUnit = String(tr.querySelector('.itemUnit').value || '').trim();
+  let opts = [];
+  if(stock){ opts = getSalePrices(stock).map(p => ({ rate: p.price, unit: p.unit })); }
+  const seen = new Set(opts.map(o => String(o.unit).toLowerCase()));
+  if(!opts.length) UNIT_CHOICES.forEach(u => opts.push({ rate: curRate, unit: u, plain: true }));
+  const m = document.createElement('div'); m.id = 'puMenu';
+  m.innerHTML = '<div class="pu-menu-h">' + (stock ? 'Rate / Unit chunein' : 'Unit chunein') + '</div>' +
+    opts.map((o, i) => '<button type="button" data-i="' + i + '" class="' + (String(o.unit).toLowerCase() === curUnit.toLowerCase() ? 'on' : '') + '">' +
+      (o.plain && !o.rate ? _unitEsc(o.unit) : _unitEsc(fmtPU(o.rate, o.unit) || o.unit)) + '</button>').join('');
+  document.body.appendChild(m);
+  const b = btn.getBoundingClientRect(), w = Math.min(220, window.innerWidth - 16);
+  m.style.width = w + 'px';
+  m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, b.right - w)) + 'px';
+  const h = m.offsetHeight;
+  m.style.top = (b.bottom + h + 8 > window.innerHeight ? Math.max(8, b.top - h - 4) : b.bottom + 4) + 'px';
+  m.addEventListener('click', ev => {
+    const x = ev.target.closest('button[data-i]'); if(!x) return;
+    const o = opts[+x.dataset.i];
+    puCommit(tr, o.plain && !o.rate ? null : o.rate, o.unit);
+    if(o.plain && o.rate) puCommit(tr, o.rate, o.unit);
+    syncPU(tr); closePUMenu();
+  });
+  setTimeout(() => document.addEventListener('click', function f(ev){ if(!m.contains(ev.target)){ closePUMenu(); document.removeEventListener('click', f); } }), 0);
+}
+function enhanceRatePicker(tr){
+  if(!tr || tr.querySelector('.puInput')) return;
+  const r = tr.querySelector('.itemRate'), u = tr.querySelector('.itemUnit');
+  if(!r || !u) return;
+  r.classList.add('pu-hidden'); u.classList.add('pu-hidden');
+  const box = document.createElement('div'); box.className = 'pu-box';
+  box.innerHTML = '<input type="text" size="1" class="puInput" inputmode="decimal" placeholder="₹0/kg" enterkeyhint="next" autocomplete="off"><button type="button" class="puArrow" aria-label="Unit badlein">▾</button>';
+  r.parentNode.insertBefore(box, r);
+  const pu = box.querySelector('.puInput');
+  pu.addEventListener('focus', () => {
+    const v = parseFloat(r.value) || 0; pu.value = v ? String(+v.toFixed(2)) : '';
+    setTimeout(() => pu.select(), 0);
+  });
+  pu.addEventListener('input', () => {
+    const m = pu.value.replace(/[₹,]|rs\.?/gi, '').match(/^\s*(\d*\.?\d+)\s*(?:\/\s*([A-Za-z]+))?\s*$/);
+    if(m){ r.value = m[1]; if(m[2]) u.value = m[2].toLowerCase(); calcTotal(); }
+    else if(!pu.value.trim()){ r.value = 0; calcTotal(); }
+  });
+  pu.addEventListener('blur', () => { puCommit(tr, parseFloat(r.value) || 0, null); syncPU(tr); });
+  pu.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); pu.blur(); focusNextBillEmptyField(pu); } });
+  box.querySelector('.puArrow').addEventListener('click', ev => { ev.stopPropagation(); openPUMenu(tr, ev.currentTarget); });
+  syncPU(tr);
 }
 window.addEventListener('mittuFirebaseStockReady', refreshBillStockNames);
 
