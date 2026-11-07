@@ -1787,15 +1787,15 @@
 }
 .topbar::after{content:'';position:absolute;left:16%;right:16%;bottom:0;height:3px;border-radius:3px 3px 0 0;background:linear-gradient(90deg,transparent,#ffb454,transparent);opacity:.9}
 .topbar .hamburger-btn{
-  width:44px;height:44px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);
+  width:44px;height:44px;background:transparent;border:none;border-radius:12px;
   box-shadow:none;color:#fff;
 }
 .topbar .hamburger-btn::before{
-  content:'';width:20px;height:14px;transform:none;font-size:0;
+  content:'';width:24px;height:16px;transform:none;font-size:0;
   background:linear-gradient(#fff,#fff) 0 0/100% 2.4px no-repeat,linear-gradient(#fff,#fff) 0 50%/72% 2.4px no-repeat,linear-gradient(#fff,#fff) 0 100%/100% 2.4px no-repeat;
   border-radius:2px;
 }
-.topbar .hamburger-btn:active{background:rgba(255,255,255,.28)}
+.topbar .hamburger-btn:active{background:rgba(255,255,255,.18)}
 .topbar .topbar-title{
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   color:#fff;font-size:21px;font-weight:800;letter-spacing:.2px;line-height:1.15;text-shadow:0 1px 3px rgba(0,0,0,.25);
@@ -1804,10 +1804,10 @@
 .topbar .topbar-title .tb-sub{display:block;font-size:11.5px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:#ffd9a3;text-shadow:none}
 .topbar .topbar-actions{background:transparent;box-shadow:none;padding:0;gap:0}
 .topbar .topbar-action-btn{
-  width:44px;height:44px;background:rgba(255,255,255,.14)!important;border:1px solid rgba(255,255,255,.28);border-radius:50%!important;
+  width:44px;height:44px;background:transparent!important;border:none;border-radius:12px!important;
 }
-.topbar .topbar-action-btn:active{background:rgba(255,255,255,.28)!important}
-.topbar .topbar-action-btn svg{stroke:#fff!important;width:21px!important;height:21px!important}
+.topbar .topbar-action-btn:active{background:rgba(255,255,255,.18)!important}
+.topbar .topbar-action-btn svg{stroke:#fff!important;stroke-width:1.9!important;width:25px!important;height:25px!important}
 @media (max-width:360px){.topbar .topbar-title{font-size:19px}.topbar .topbar-title .tb-sub{letter-spacing:1.6px}}
 </style>
 </head>
