@@ -6148,7 +6148,7 @@ function openItemSuggest(inp){
   m.style.minHeight = _isgMenu ? '200px' : '';
   _isgPlace(inp, m);
 }
-document.addEventListener('focusin', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) openItemSuggest(e.target); else if(!e.target.closest || !e.target.closest('#itemSuggest')) closeItemSuggest(); });
+document.addEventListener('focusin', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')){ openItemSuggest(e.target); setTimeout(() => { if(document.activeElement === e.target) openItemSuggest(e.target); }, 80); } else if(!e.target.closest || !e.target.closest('#itemSuggest')) closeItemSuggest(); });
 document.addEventListener('input', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) openItemSuggest(e.target); });
 document.addEventListener('focusout', e => { if(e.target.matches && e.target.matches('#itemsBody input.itemName')) setTimeout(() => { if(document.activeElement !== e.target) closeItemSuggest(); }, 150); });
 document.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === 'Escape') closeItemSuggest(); }, true);
