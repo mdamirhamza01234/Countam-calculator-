@@ -2270,8 +2270,8 @@ body.order-bill .pu-box .puArrow{background:#e6f6ec}
   </div>
 
   <div class="two-col-btn-row" style="display:flex; gap:10px; margin:14px 0 0;">
-    <button type="button" class="ai-bill-generate-btn" style="background:#0d6e4e; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendBillForCustomerReview()">
-      <span class="ai-bill-spark">📤</span> Customer Review ke liye Bhejein
+    <button type="button" class="ai-bill-generate-btn" style="background:#0d6e4e; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendFixAmountToDqr()">
+      <span class="ai-bill-spark">📲</span> Fix Amount DQR Display
     </button>
     <button type="button" class="ai-bill-generate-btn" style="background:#a04e00; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendListToStaff()">
       <span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein
@@ -8035,6 +8035,42 @@ function pushCustomerReviewCardFromBill(){
   alert('✅ Bill Customer Display par review ke liye bhej diya gaya hai. Customer ab Cash ya Online payment choose kar sakta hai.');
 }
 
+// ---------------- FIX AMOUNT DQR DISPLAY ----------------
+// Bill ka fixed total ka UPI QR seedha Mittu DQR Display app par bhejta hai.
+function sendFixAmountToDqr(){
+  const total = calcTotal();
+  if(!(total > 0)){
+    alert('Pehle bill mein items add karein, tabhi Fix Amount QR ban payega.');
+    return;
+  }
+  if(typeof window.pushBillToDisplay !== 'function'){
+    alert('Mittu DQR Display se connection abhi available nahi hai.');
+    return;
+  }
+  const billNo = document.getElementById('sno').value || '';
+  const upiUrl = buildUpiUrl(total, billNo);
+  window.pushBillToDisplay(billNo, total.toFixed(2), upiUrl);
+  let box = document.getElementById('dqrSentBox');
+  if(box) box.remove();
+  box = document.createElement('div');
+  box.id = 'dqrSentBox';
+  box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:14px;z-index:99999;background:#fff;border:1px solid #cfd8e3;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.28);padding:14px;font-family:inherit;max-width:420px;margin:0 auto;';
+  box.innerHTML = '<div style="font-weight:700;color:#16325c;margin-bottom:4px;">✅ Mittu DQR Display par QR bhej diya</div>'+
+    '<div style="font-size:13px;color:#555;margin-bottom:10px;">Bill '+esc(String(billNo))+' · Fix Amount ₹ '+total.toFixed(2)+'</div>'+
+    '<div style="display:flex;gap:8px;"><button type="button" id="dqrPaidBtn" style="flex:1;padding:11px 6px;border:0;border-radius:10px;background:#0d6e4e;color:#fff;font-weight:700;font-size:14px;">Payment Mil Gaya</button>'+
+    '<button type="button" id="dqrClearBtn" style="flex:1;padding:11px 6px;border:0;border-radius:10px;background:#8a94a6;color:#fff;font-weight:700;font-size:14px;">Display se hatao</button></div>';
+  document.body.appendChild(box);
+  document.getElementById('dqrPaidBtn').onclick = function(){
+    if(window.markDisplayPaid) window.markDisplayPaid();
+    if(window.clearDisplayBill) setTimeout(()=>window.clearDisplayBill(), 4500);
+    box.remove();
+  };
+  document.getElementById('dqrClearBtn').onclick = function(){
+    if(window.clearDisplayBill) window.clearDisplayBill();
+    box.remove();
+  };
+}
+
 // ---------------- SEND SAMAN LIST TO STAFF DISPLAY ----------------
 // Mittu apne phone par ye button dabata hai to bill mein abhi tak jo items
 // bhare hain unki ek "order card" Staff ke display (staff-display.html) par
@@ -8048,7 +8084,7 @@ function sendListToStaff(){
     return;
   }
   if(typeof window.pushOrderToStaff !== 'function'){
-    alert('Staff Display se connection abhi available nahi hai.');
+    alert('Mittu Staff Display se connection abhi available nahi hai.');
     return;
   }
 
@@ -8077,7 +8113,7 @@ function sendListToStaff(){
     items
   });
 
-  alert('✅ Saman ki list Staff ke Display par bhej di gayi hai.');
+  alert('✅ Saman ki list Mittu Staff Display par bhej di gayi hai.');
 }
 
 // Customer ne Display par Cash ya Online payment button dabaya — shopkeeper
