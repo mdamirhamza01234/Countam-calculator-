@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mittu Delivery</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1a237e">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:Arial,"Noto Sans Devanagari",sans-serif;background:#eef1fb;color:#1b1f3b;min-height:100vh;padding-bottom:40px}
+  header{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,#1a237e,#3949ab);color:#fff;padding:14px 16px;box-shadow:0 3px 14px rgba(26,35,126,.4)}
+  .h-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .h-title{font-size:19px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .h-me{font-size:12px;opacity:.9;text-align:right}
+  .h-me button{background:rgba(255,255,255,.18);border:0;color:#fff;border-radius:8px;padding:4px 8px;font-size:11px;margin-left:6px}
+  .tabs{display:flex;gap:8px;margin-top:10px}
+  .tab{flex:1;padding:9px 6px;border:0;border-radius:10px;background:rgba(255,255,255,.16);color:#fff;font-weight:700;font-size:14px}
+  .tab.on{background:#fff;color:#1a237e}
+  .tab b{background:#ff5252;color:#fff;border-radius:10px;padding:0 7px;margin-left:5px;font-size:12px}
+  #wrap{max-width:560px;margin:14px auto;padding:0 12px;display:flex;flex-direction:column;gap:14px}
+  .empty{text-align:center;color:#5b6290;padding:60px 20px;font-weight:600}
+  .card{background:#fff;border-radius:16px;box-shadow:0 4px 16px rgba(26,35,126,.12);overflow:hidden;border-left:6px solid #3949ab}
+  .card.out{border-left-color:#ff9800}.card.delivered{border-left-color:#2e9d57;opacity:.92}
+  .c-top{padding:14px 14px 6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+  .c-name{font-size:18px;font-weight:800}
+  .c-id{font-size:12px;color:#6b72a8;margin-top:2px}
+  .badge{font-size:11.5px;font-weight:800;border-radius:8px;padding:3px 8px;white-space:nowrap}
+  .b-new{background:#e8eaf6;color:#1a237e}.b-out{background:#fff3e0;color:#e65100}.b-done{background:#e6f4ea;color:#137333}
+  .c-addr{padding:2px 14px 8px;font-size:15px;line-height:1.45}
+  .pay{margin:4px 14px 8px;padding:10px 12px;border-radius:12px;font-weight:800;font-size:15px}
+  .pay.cod{background:#fff4d6;color:#7a4b00;border:1.5px solid #ffc94d}
+  .pay.paid{background:#e6f4ea;color:#137333;border:1.5px solid #9fd8b2}
+  .ready{padding:0 14px 6px;font-size:13px;color:#4a5190;font-weight:700}
+  .bar{height:7px;border-radius:5px;background:#e3e6f6;margin:5px 0 2px;overflow:hidden}.bar i{display:block;height:100%;background:#2e9d57}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 14px}
+  .acts a,.acts button{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 6px;border-radius:12px;border:0;font-weight:800;font-size:14px;text-decoration:none;color:#fff}
+  .a-map{background:#1a73e8;grid-column:1/3;font-size:16px !important;padding:14px 6px !important}
+  .a-call{background:#0d6e4e}.a-wa{background:#25a244}
+  .a-go{background:#ff9800;grid-column:1/3}.a-done{background:#2e9d57;grid-column:1/3;font-size:16px !important;padding:14px 6px !important}
+  details{padding:0 14px 12px}summary{font-weight:700;color:#3949ab;padding:6px 0;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}td{padding:6px 3px;border-bottom:1px solid #eceefa}td.r{text-align:right;white-space:nowrap}
+  tr.chk td{color:#2e9d57}
+  #login{position:fixed;inset:0;background:linear-gradient(160deg,#1a237e,#3949ab);display:flex;align-items:center;justify-content:center;padding:22px;z-index:100}
+  .lbox{background:#fff;border-radius:20px;padding:26px 20px;width:min(94vw,380px);text-align:center}
+  .lbox h2{margin:0 0 6px;color:#1a237e}.lbox p{color:#555;font-size:14px;margin:0 0 14px}
+  .lbox input{width:100%;padding:14px;border:2px solid #c5cae9;border-radius:12px;font-size:18px;text-align:center;letter-spacing:1px}
+  .lbox button{margin-top:14px;width:100%;padding:14px;border:0;border-radius:12px;background:#1a237e;color:#fff;font-size:16px;font-weight:800}
+  #lerr{color:#b3261e;font-size:13px;margin-top:8px;min-height:16px}
+  #alert{position:fixed;left:12px;right:12px;top:12px;z-index:200;background:#1a237e;color:#fff;border-radius:14px;padding:14px;font-weight:700;display:none;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+</style>
+</head>
+<body>
+<div id="login"><div class="lbox">
+  <h2>🛵 Mittu Delivery</h2>
+  <p>Apna mobile number likhein — sirf aapko diye gaye orders yahan dikhenge.</p>
+  <input id="lph" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile">
+  <div id="lerr"></div>
+  <button id="lgo">Shuru karein</button>
+</div></div>
+<div id="alert"></div>
+<header>
+  <div class="h-row"><div class="h-title">🛵 Mittu Delivery</div><div class="h-me"><span id="me"></span><button id="chg">Number badlein</button></div></div>
+  <div class="tabs"><button class="tab on" data-t="p">Baaki <b id="cp">0</b></button><button class="tab" data-t="d">Ho gaye</button></div>
+</header>
+<div id="wrap"><div class="empty" id="empty">Orders load ho rahe hain…</div></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  const cfg = {
+    apiKey: "AIzaSyDQ-fm6-_bs728n6rcUS-XS9Zl-hqbIQhA",
+    authDomain: "mittu-billing.firebaseapp.com",
+    databaseURL: "https://mittu-billing-default-rtdb.firebaseio.com",
+    projectId: "mittu-billing",
+    storageBucket: "mittu-billing.firebasestorage.app",
+    messagingSenderId: "9778174452",
+    appId: "1:9778174452:web:99b40c599546a5560541a1"
+  };
+  const app = initializeApp(cfg), db = getDatabase(app), auth = getAuth(app);
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const get = k => { try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } };
+  const set = (k,v) => { try { localStorage.setItem(k,v); } catch(e){} };
+  let me = get('mittu_dp_phone'), tab = 'p', data = {}, known = null, started = false;
+
+  function showLogin(){ $('login').style.display = 'flex'; $('lph').value = me; }
+  $('lgo').onclick = () => {
+    const v = $('lph').value.replace(/\D/g,'').slice(-10);
+    if(!/^[6-9]\d{9}$/.test(v)){ $('lerr').textContent = 'Sahi 10 digit mobile number likhein.'; return; }
+    me = v; set('mittu_dp_phone', v); $('login').style.display = 'none'; known = null; init(); render();
+  };
+  $('chg').onclick = showLogin;
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => { tab = b.dataset.t; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b)); render(); });
+
+  const mine = o => o && o.type === 'online' && o.deliveryPartner && String(o.deliveryPartner.phone || '').replace(/\D/g,'').slice(-10) === me;
+  const dstat = o => o.deliveryStatus || 'new';
+
+  function setStatus(id, st){
+    const u = { deliveryStatus: st };
+    u[st === 'out' ? 'pickedTs' : 'deliveredTs'] = Date.now();
+    update(ref(db, 'staffOrders/' + id), u).catch(e => alert('Update nahi ho paya: ' + (e && e.message || e)));
+  }
+  window.__go = id => setStatus(id, 'out');
+  window.__done = id => { if(confirm('Pakka deliver ho gaya?')) setStatus(id, 'delivered'); };
+
+  function card(o){
+    const items = Array.isArray(o.items) ? o.items : [];
+    const chk = o.checked || {}, n = items.filter((_, i) => chk[i]).length, pct = items.length ? Math.round(n * 100 / items.length) : 0;
+    const st = dstat(o), ph = String(o.custMobile || '').replace(/\D/g,'');
+    const total = Number(o.totalAmount || 0).toFixed(2);
+    const pay = o.pay === 'ONLINE' ? `<div class="pay paid">💳 Online paid — paisa lena nahi hai</div>` : `<div class="pay cod">💵 Customer se ₹${total} lena hai${o.pay === 'UPI' ? ' (UPI se bhi de sakta hai)' : ' (Cash)'}</div>`;
+    const badge = st === 'delivered' ? '<span class="badge b-done">✅ Deliver ho gaya</span>' : st === 'out' ? '<span class="badge b-out">🛵 Raaste mein</span>' : '<span class="badge b-new">🆕 Naya</span>';
+    const map = o.mapUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.address || ''));
+    let btns = `<a class="a-map" href="${esc(map)}" target="_blank" rel="noopener">📍 Google Map mein kholein${o.lat ? ' (GPS)' : ''}</a>`;
+    if(ph) btns += `<a class="a-call" href="tel:${esc(ph)}">📞 Call</a><a class="a-wa" href="https://wa.me/91${esc(ph)}" target="_blank" rel="noopener">WhatsApp</a>`;
+    if(st === 'new') btns += `<button class="a-go" onclick="__go('${esc(o.id)}')">🛵 Saman le liya — Nikal gaya</button>`;
+    if(st !== 'delivered') btns += `<button class="a-done" onclick="__done('${esc(o.id)}')">✅ Deliver ho gaya</button>`;
+    return `<div class="card ${st}">
+      <div class="c-top"><div><div class="c-name">${esc(o.custName || 'Customer')}</div><div class="c-id">${esc(o.orderId || '')} · ${items.length} item · ₹${total}</div></div>${badge}</div>
+      <div class="c-addr">📍 ${esc(o.address || 'Pata nahi diya')}</div>
+      ${pay}
+      <div class="ready">Saman taiyaar: ${n}/${items.length}<div class="bar"><i style="width:${pct}%"></i></div></div>
+      <div class="acts">${btns}</div>
+      <details><summary>Saman ki list</summary><table>${items.map((it,i) => `<tr class="${chk[i] ? 'chk' : ''}"><td>${chk[i] ? '✔' : '•'} ${esc(it.name)}</td><td class="r">${esc(it.qty)} ${esc(it.unit || '')}</td></tr>`).join('')}</table></details>
+    </div>`;
+  }
+
+  function render(){
+    $('me').textContent = me ? '📱 ' + me : '';
+    const all = Object.keys(data).map(id => Object.assign({ id }, data[id])).filter(mine).sort((a,b) => (b.ts||0) - (a.ts||0));
+    const pend = all.filter(o => dstat(o) !== 'delivered'), done = all.filter(o => dstat(o) === 'delivered');
+    $('cp').textContent = pend.length;
+    const list = tab === 'p' ? pend : done;
+    $('wrap').innerHTML = list.length ? list.map(card).join('') : `<div class="empty">${tab === 'p' ? 'Abhi koi delivery baaki nahi hai 🎉' : 'Abhi koi delivery complete nahi hui.'}</div>`;
+  }
+
+  function notify(o){
+    const a = $('alert'); a.innerHTML = '🆕 Nayi delivery: <b>' + esc(o.custName || 'Customer') + '</b> — ₹' + esc(Number(o.totalAmount||0).toFixed(2)); a.style.display = 'block';
+    try { if(navigator.vibrate) navigator.vibrate([250,120,250,120,500]); } catch(e){}
+    try { const AC = window.AudioContext || window.webkitAudioContext; if(AC){ const c = new AC(), os = c.createOscillator(), g = c.createGain(); os.frequency.value = 880; g.gain.value = .05; os.connect(g); g.connect(c.destination); os.start(); setTimeout(() => { try{ os.stop(); c.close(); }catch(e){} }, 450); } } catch(e){}
+    setTimeout(() => a.style.display = 'none', 7000);
+  }
+
+  function listen(){
+    onValue(ref(db, 'staffOrders'), snap => {
+      data = snap.val() || {};
+      const ids = Object.keys(data).filter(id => mine(data[id]));
+      if(known === null){ known = new Set(ids); }
+      else { const fresh = ids.filter(id => !known.has(id)); ids.forEach(id => known.add(id)); if(fresh.length) notify(data[fresh[0]]); }
+      render();
+    }, err => { $('wrap').innerHTML = '<div class="empty">Connection error: ' + esc(err && err.message || err) + '</div>'; });
+  }
+  function init(){ if(started) return; started = true; onAuthStateChanged(auth, u => { if(u) listen(); }); signInAnonymously(auth).catch(e => { $('wrap').innerHTML = '<div class="empty">Login error: ' + esc(e && e.message || e) + '</div>'; }); }
+
+  if(me){ $('login').style.display = 'none'; init(); } else showLogin();
+  (async () => { try { if('wakeLock' in navigator){ let l = await navigator.wakeLock.request('screen'); document.addEventListener('visibilitychange', async () => { if(document.visibilityState === 'visible'){ try{ l = await navigator.wakeLock.request('screen'); }catch(e){} } }); } } catch(e){} })();
+</script>
+</body>
+</html>

@@ -1877,6 +1877,21 @@ body.order-bill .mode-toggle-btn.active{background:#12803f!important}
 body.order-bill .pu-box .puInput,body.order-bill .pu-box .puArrow{color:#0f7a40}
 body.order-bill .pu-box .puArrow{background:#e6f6ec}
 </style>
+
+<style id="delivery-style">
+.only-order{display:none}
+body.order-bill .only-order{display:block}
+body.order-bill #orderStaffPrintBtn{display:flex}
+body.order-bill .two-col-btn-row{display:none !important}
+.dp-box{margin:14px 0 0;background:#fff;border:1.5px solid #cfe3d6;border-radius:14px;padding:12px;box-shadow:0 2px 10px rgba(13,110,78,.10)}
+.dp-title{font-weight:800;color:#0d6e4e;margin-bottom:8px;font-size:15px}
+.dp-row{display:flex;gap:8px}
+.dp-row input{min-width:0;flex:1;padding:11px 10px;border:1.5px solid #cfd8e3;border-radius:10px;font-size:15px;background:#fff}
+.dp-row input#dpPhone{flex:.85}
+.dp-hint{font-size:11.5px;color:#6b7280;margin-top:6px}
+a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
+.oo-gps{display:inline-block;background:#e6f4ea;color:#137333;border-radius:8px;padding:0 6px;font-size:11px;font-weight:700;vertical-align:1px}
+</style>
 </head>
 <body>
 <script>
@@ -2269,6 +2284,20 @@ body.order-bill .pu-box .puArrow{background:#e6f6ec}
     <div class="total-preview">Total: ₹ <span id="totalPreview">0.00</span></div>
   </div>
 
+  <!-- ONLINE ORDER: Delivery partner + staff/print (sirf online order se bane bill mein dikhta hai) -->
+  <div id="deliveryBox" class="only-order dp-box">
+    <div class="dp-title">🛵 Delivery Partner</div>
+    <div class="dp-row">
+      <input id="dpName" list="dpList" placeholder="Delivery partner ka naam" autocomplete="off">
+      <input id="dpPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Mobile number">
+    </div>
+    <datalist id="dpList"></datalist>
+    <div class="dp-hint">Ek baar likhne ke baad agli baar naam/number khud bhar jayega.</div>
+  </div>
+  <button type="button" id="orderStaffPrintBtn" class="only-order ai-bill-generate-btn" style="background:#a04e00; margin:12px 0 0; width:100%; font-size:15px; padding:14px 8px;" onclick="sendOnlineOrderToStaff(true)">
+    <span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein + Bill Print
+  </button>
+
   <div class="two-col-btn-row" style="display:flex; gap:10px; margin:14px 0 0;">
     <button type="button" class="ai-bill-generate-btn" style="background:#0d6e4e; margin:0; flex:1; font-size:14px; padding:14px 8px;" onclick="sendFixAmountToDqr()">
       <span class="ai-bill-spark">📲</span> Fix Amount DQR Display
@@ -2284,7 +2313,7 @@ body.order-bill .pu-box .puArrow{background:#e6f6ec}
       <button type="button" class="thermal-size-btn active" id="thermal58Btn" onclick="setThermalWidth(58)">2 inch / 58mm</button>
       <button type="button" class="thermal-size-btn" id="thermal80Btn" onclick="setThermalWidth(80)">3 inch / 80mm</button>
     </div>
-    <button class="thermal-btn" onclick="requestBillFinalAction('thermal')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Print Bill Directly on Thermal Printer</button>
+    <button class="thermal-btn" id="thermalMainBtn" onclick="thermalPrintClick()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg> Print Bill Directly on Thermal Printer</button>
   </div>
 
   <button class="upi-btn" onclick="requestBillFinalAction('upi')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 9h19M6 14h4"/></svg> Generate UPI Payment QR (Full Screen)</button>
@@ -5279,6 +5308,13 @@ function renderDrawerRecents(){
 function setOrderBillMode(ord){
   window._billOrder = ord && ord.id ? { id: ord.id, name: ord.name || '' } : null;
   document.body.classList.toggle('order-bill', !!window._billOrder);
+  try {
+    const th = document.querySelector('.thermal-print-box'), wa = document.querySelector('.whatsapp-btn'), up = document.querySelector('.upi-btn');
+    if(th && wa && up){ if(window._billOrder) th.after(wa); else up.after(wa); }
+    const tb = document.getElementById('thermalMainBtn');
+    if(tb){ const t = tb.lastChild; if(t && t.nodeType === 3) t.nodeValue = window._billOrder ? ' Thermal Print + Staff ko Order List' : ' Print Bill Directly on Thermal Printer'; }
+    if(window._billOrder) dpRefreshUI(true);
+  } catch(e){}
   let bn = document.getElementById('orderBillBanner');
   if(window._billOrder){
     if(!bn){
@@ -5408,6 +5444,11 @@ function switchToOrdersView(){
 window.__shopOrders = null;      // null = abhi load nahi hua
 window.__shopOrdersError = '';
 function shopSeenTs(){ try { return Number(localStorage.getItem('mittu_shop_orders_seen')) || 0; } catch(e){ return 0; } }
+function orderMapUrl(o){
+  const lat = Number(o && o.lat), lng = Number(o && o.lng);
+  if(lat && lng) return 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng + '&travelmode=driving';
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((o && o.address) || '');
+}
 function shopOrdersList(){
   const o = window.__shopOrders || {};
   return Object.keys(o).map(k => Object.assign({ _k: k }, o[k])).filter(x => x && x.id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -5450,7 +5491,7 @@ function renderShopOrders(){
     const items = (Array.isArray(o.items) ? o.items : Object.values(o.items || {})).map(i =>
       '<div><span>' + shopEsc(i.name) + ' <small>(' + shopEsc(i.unit) + ' × ' + shopEsc(i.qty) + ')</small></span><span>' + shopMoney(i.total) + '</span></div>').join('');
     return '<div class="oo-card' + (isNew ? ' new' : '') + (billedOrders.has(o.id) ? ' billed' : '') + '" data-oid="' + shopEsc(o.id) + '"><div class="oo-top"><div><span class="oo-id">' + shopEsc(o.id) + '</span>' + (isNew ? '<span class="oo-new">NAYA</span>' : '') + '</div><div class="oo-time">' + shopEsc(new Date(o.ts || 0).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>'
-      + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 ' + shopEsc(o.address) + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + (o.payerUpi ? '<br>💳 Customer UPI: <b>' + shopEsc(o.payerUpi) + '</b>' : '') + '</div>'
+      + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 <a class="oo-map" href="' + shopEsc(orderMapUrl(o)) + '" target="_blank" rel="noopener">' + shopEsc(o.address) + '</a>' + ((Number(o.lat) && Number(o.lng)) ? ' <span class="oo-gps">GPS ✓</span>' : '') + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + (o.payerUpi ? '<br>💳 Customer UPI: <b>' + shopEsc(o.payerUpi) + '</b>' : '') + '</div>'
       + '<div class="oo-items">' + items + '</div><div class="oo-tot"><span>Total · ' + (o.pay === 'ONLINE' ? '💳 Online UPI — payment apne UPI mein check karein' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery') + '</span><span>' + shopMoney(o.total) + '</span></div></div>';
   }).join('');
 }
@@ -8069,6 +8110,84 @@ function sendFixAmountToDqr(){
     if(window.clearDisplayBill) window.clearDisplayBill();
     box.remove();
   };
+}
+
+// ---------------- DELIVERY PARTNER + ONLINE ORDER -> STAFF ----------------
+function dpLoad(){ try { return JSON.parse(localStorage.getItem('mittu_dp_list') || '[]') || []; } catch(e){ return []; } }
+function dpRefreshUI(fillLast){
+  const list = dpLoad();
+  const dl = document.getElementById('dpList');
+  if(dl) dl.innerHTML = list.map(p => '<option value="' + esc(p.name) + '">' + esc(p.phone) + '</option>').join('');
+  if(fillLast && list.length){
+    const n = document.getElementById('dpName'), p = document.getElementById('dpPhone');
+    if(n && !n.value) n.value = list[0].name;
+    if(p && !p.value) p.value = list[0].phone;
+  }
+}
+function dpSave(name, phone){
+  name = String(name || '').trim(); phone = String(phone || '').replace(/\D/g, '').slice(-10);
+  if(!name && !phone) return;
+  let list = dpLoad().filter(p => !(p.phone && p.phone === phone) && p.name.toLowerCase() !== name.toLowerCase());
+  list.unshift({ name, phone });
+  try { localStorage.setItem('mittu_dp_list', JSON.stringify(list.slice(0, 15))); } catch(e){}
+}
+document.addEventListener('input', e => {
+  if(e.target && e.target.id === 'dpName'){
+    const m = dpLoad().find(p => p.name.toLowerCase() === e.target.value.trim().toLowerCase());
+    if(m) document.getElementById('dpPhone').value = m.phone;
+  }
+  if(e.target && e.target.id === 'dpPhone'){ e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); }
+});
+window._staffSentFor = window._staffSentFor || {};
+
+function sendOnlineOrderToStaff(thenPrint){
+  const rows = Array.from(document.querySelectorAll('#itemsBody tr'));
+  const items = []; let total = 0;
+  rows.forEach(tr => {
+    const name = (tr.querySelector('.itemName')?.value || '').trim();
+    if(!name) return;
+    const qty = parseFloat(tr.querySelector('.itemQty')?.value) || 0;
+    const rate = parseFloat(tr.querySelector('.itemRate')?.value) || 0;
+    const unit = (tr.querySelector('.itemUnit')?.value || '').trim() || 'pcs';
+    const amt = qty * rate; total += amt;
+    items.push({ name, qty, unit, rate, amt: amt.toFixed(2) });
+  });
+  if(!items.length){ alert('Pehle bill mein items add karein.'); return; }
+  if(typeof window.pushOrderToStaff !== 'function'){ alert('Mittu Staff Display se connection abhi available nahi hai.'); return; }
+
+  const dpName = (document.getElementById('dpName')?.value || '').trim();
+  const dpPhone = (document.getElementById('dpPhone')?.value || '').replace(/\D/g, '');
+  if(dpPhone && dpPhone.length !== 10){ alert('Delivery partner ka mobile number 10 digit ka likhein.'); return; }
+  if(!dpName && !dpPhone && !confirm('Delivery partner ka naam/number nahi bhara hai. Bina delivery partner ke aage badhein?')) return;
+  dpSave(dpName, dpPhone);
+
+  const bo = window._billOrder || {};
+  const ord = (bo.id && typeof shopOrdersList === 'function') ? (shopOrdersList().find(x => x.id === bo.id) || {}) : {};
+  const billNo = document.getElementById('sno').value || '';
+  const key = bo.id || billNo;
+  if(!window._staffSentFor[key]){
+    const payload = {
+      type: 'online',
+      orderId: bo.id || '',
+      custName: document.getElementById('custName').value.trim() || 'Customer',
+      custMobile: (document.getElementById('custMobile').value || '').replace(/\D/g, '').slice(-10),
+      address: document.getElementById('custAddr').value.trim(),
+      mapUrl: orderMapUrl({ lat: ord.lat, lng: ord.lng, address: document.getElementById('custAddr').value.trim() }),
+      lat: Number(ord.lat) || null, lng: Number(ord.lng) || null,
+      pay: ord.pay || 'COD', payerUpi: ord.payerUpi || '',
+      deliveryPartner: { name: dpName, phone: dpPhone },
+      billNo, totalItems: items.length, totalAmount: total.toFixed(2), items
+    };
+    window.pushOrderToStaff(payload);
+    window._staffSentFor[key] = true;
+    try { if(navigator.vibrate) navigator.vibrate(40); } catch(e){}
+    if(!thenPrint) alert('✅ Online order ki saman list Mittu Staff Display par bhej di gayi hai.');
+  }
+  if(thenPrint) requestBillFinalAction('thermal');
+}
+function thermalPrintClick(){
+  if(document.body.classList.contains('order-bill')) sendOnlineOrderToStaff(true);
+  else requestBillFinalAction('thermal');
 }
 
 // ---------------- SEND SAMAN LIST TO STAFF DISPLAY ----------------

@@ -212,6 +212,16 @@
     font-weight: 800;
     cursor: pointer;
   }
+
+  /* Online order card — sky blue */
+  .order-card.online { background: #1E9FE8; border-color: rgba(255,255,255,.45); }
+  .order-card.online::before { background: linear-gradient(90deg, #0b6fb3, #fff, #0b6fb3); }
+  .order-card.online .arrow-btn { background: linear-gradient(135deg, #0b6fb3, #1E9FE8); }
+  .online-badge { display:inline-block; background:#fff; color:#0b6fb3; font-size:11.5px; font-weight:800; letter-spacing:.5px; border-radius:8px; padding:2px 8px; margin-bottom:5px; }
+  .dp-line { font-size:12.5px; color:#fff; margin-top:4px; font-weight:700; }
+  .dp-line.done { color:#d7ffe3; }
+  .order-info { padding:8px 4px 4px; font-size:13px; color:#fff; line-height:1.5; }
+  .order-info a { color:#fff; text-decoration:underline; font-weight:700; }
 </style>
 </head>
 <body>
@@ -287,6 +297,19 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
       '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
     }[c]));
+  }
+
+  function dpLine(o){
+    const dp = o.deliveryPartner || {};
+    const st = o.deliveryStatus;
+    const stTxt = st === 'delivered' ? ' · ✅ Deliver ho gaya' : st === 'out' ? ' · 🛵 Nikal gaya' : '';
+    const who = dp.name || dp.phone ? ('🛵 ' + escHtml(dp.name || 'Delivery partner') + (dp.phone ? ' (' + escHtml(dp.phone) + ')' : '')) : '🛵 Delivery partner tay nahi';
+    return `<div class="dp-line ${st === 'delivered' ? 'done' : ''}">${who}${stTxt}</div>`;
+  }
+  function onlineInfo(o){
+    const addr = escHtml(o.address || '');
+    const map = o.mapUrl ? ` · <a href="${escHtml(o.mapUrl)}" target="_blank" rel="noopener">📍 Map</a>` : '';
+    return `<div class="order-info">${o.orderId ? 'Order: <b>' + escHtml(o.orderId) + '</b><br>' : ''}${addr ? '📍 ' + addr + map + '<br>' : ''}${o.pay === 'ONLINE' ? '💳 Online paid' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery'}</div>`;
   }
 
   function toggleCard(orderId){
@@ -393,7 +416,7 @@
       const timerIcon = completedTs ? iconCheck('icon-done') : iconClock('icon-pending');
 
       const card = document.createElement('div');
-      card.className = 'order-card' + (isExpanded ? ' expanded' : '');
+      card.className = 'order-card' + (order.type === 'online' ? ' online' : '') + (isExpanded ? ' expanded' : '');
       card.dataset.id = order.id;
 
       const rowsHtml = items.map((it, i) => {
@@ -415,12 +438,14 @@
       card.innerHTML = `
         <div class="order-head" onclick="window.__toggleStaffCard('${order.id}')">
           <div class="order-head-left">
+            ${order.type === 'online' ? '<div class="online-badge">🛒 ONLINE ORDER</div>' : ''}
             <div class="order-cust">${escHtml(order.custName || 'Customer')}</div>
             <div class="order-meta">${items.length} item${items.length > 1 ? 's' : ''} &middot; ₹${escHtml(Number(order.totalAmount || 0).toFixed(2))}</div>
             <div class="order-timer-row ${timerRowClass}">
               <span class="timer-icon">${timerIcon}</span>
               <span class="order-timer" id="timer-${order.id}" data-start="${order.ts}" data-completed="${completedTs}">${timerText}</span>
             </div>
+            ${order.type === 'online' ? dpLine(order) : ''}
             <div class="order-sent">Bheja gaya: ${escHtml(formatSentDateTime(order.ts))}</div>
           </div>
           <div class="order-head-right">
@@ -429,6 +454,7 @@
           </div>
         </div>
         <div class="order-body">
+          ${order.type === 'online' ? onlineInfo(order) : ''}
           <table class="item-table">
             <thead>
               <tr>
