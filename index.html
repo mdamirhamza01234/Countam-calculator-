@@ -269,6 +269,7 @@
 
   onAuthStateChanged(fbAuth, (user) => {
     window.currentFirebaseUser = user || null;
+    window.__authResolved = true;
     try { window.dispatchEvent(new CustomEvent('mittuFirebaseUserReady')); } catch(e){}
     const loginScreen = document.getElementById('loginScreen');
     if(user) {
@@ -721,7 +722,7 @@
   try {
     onValue(ref(fbDb, 'staffOrders/_partners'), snap => {
       window.__dpPartners = snap.val() || {};
-      if (typeof window.dpRefreshUI === 'function') window.dpRefreshUI(false);
+      if (typeof window.dpRefreshUI === 'function') window.dpRefreshUI(document.body.classList.contains('order-bill'));
     }, () => {});
   } catch(e){}
   window.pushOrderToStaff = function(payload){
@@ -747,7 +748,7 @@
   body.auth-required { overflow: hidden; }
   #loginScreen {
     position: fixed; inset: 0; z-index: 20000;
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
     padding: 24px;
     background: #faf9f7;
     overflow-y: auto;
@@ -1921,6 +1922,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
 })();
 </script>
 <!-- Google Login: billing app is shown only after Firebase Authentication succeeds. -->
+<script>setTimeout(function(){ if(!window.__authResolved){ var l=document.getElementById('loginScreen'); if(l) l.style.display='flex'; } }, 7000);</script>
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo"><span class="cart-glow">🛒</span></div>

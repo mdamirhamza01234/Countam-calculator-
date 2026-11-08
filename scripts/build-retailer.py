@@ -231,8 +231,6 @@ rep("const customerReqRef = ref(fbDb, 'customerRequest');", "const customerReqRe
 # delivery jobs: retailer ka apna path (owner ke Staff Display mein na mile)
 rep("    const newRef = push(staffOrdersRef);\n    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))",
     "    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\\D/g, '').slice(-10);\n    if(!ph) return Promise.resolve();\n    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_') || push(staffOrdersRef).key;\n    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))")
-# delivery partners list: sirf retailer ke apne likhe hue (owner ke partners mix na ho)
-rep("onValue(ref(fbDb, 'staffOrders/_partners'), snap => {", "onValue(ref(fbDb, 'retailerDisplay/_none/_partners'), snap => {")
 # login screen branding + Google error ka madad-message
 s = s.replace('<h1 class="login-title">Welcome to Mittu Billing</h1>', '<h1 class="login-title">Welcome to Mittu Associated Retailer</h1>')
 s = s.replace("errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');", "errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');")
