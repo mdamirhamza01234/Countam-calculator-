@@ -1872,9 +1872,10 @@
 .oo-card.pressing{transform:scale(.98);box-shadow:0 0 0 3px rgba(26,122,62,.35)}
 .oo-card.billed{border-left-color:#1a7a3e}
 .oo-card.billed .oo-id::after{content:' ✓ Bill ban gaya';font-size:11px;font-weight:800;color:#1a7a3e;margin-left:6px}
-.drawer-recent-tabs{display:flex;gap:6px;padding:0 12px 8px;overflow-x:auto;scrollbar-width:none}
+.drawer-recent-tabs{display:flex;gap:6px;padding:0 12px 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:0 0 auto;min-height:44px;box-sizing:border-box;align-items:center}
+.drawer-recents-title,.drawer-recents-list{flex-shrink:0}
 .drawer-recent-tabs::-webkit-scrollbar{display:none}
-.drc-tab{flex:0 0 auto;border:1px solid #d9dde4;background:#fff;color:#444;border-radius:16px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer}
+.drc-tab{flex:0 0 auto;white-space:nowrap;line-height:1.2;border:1px solid #d9dde4;background:#fff;color:#444;border-radius:16px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer}
 .drc-tab.on{background:#16325c;border-color:#16325c;color:#fff}
 .drc-tab.blue.on{background:#1565c0;border-color:#1565c0}
 .drawer-recent-row.online{background:#e8f1ff;border-left:3px solid #1565c0;margin:2px 0}
