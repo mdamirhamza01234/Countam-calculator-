@@ -228,7 +228,6 @@
   .tabs::-webkit-scrollbar { display:none; }
   .tab { flex:0 0 auto; border:1.5px solid rgba(255,255,255,.7); background:rgba(255,255,255,.15); color:#fff; border-radius:20px; padding:9px 14px; font-size:14px; font-weight:800; }
   .tab.on { background:#fff; color:#075E54; }
-  .tab.done-btn { background:#FFD54A; color:#4a3a00; border-color:#FFD54A; }
   #donePage { position:fixed; inset:0; z-index:500; overflow:auto; display:none; background:linear-gradient(160deg,#1ea952 0%,#25D366 55%,#1fbf5c 100%); }
   #donePage.show { display:block; }
   #donePage .wrap { max-width:640px; margin:16px auto; padding:0 12px 40px; display:flex; flex-direction:column; gap:14px; }
@@ -423,7 +422,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
   function renderTabs(){
     const defs = [['all','All'],['phys','Physical Order'],['online','Online Order']];
     document.getElementById('mainTabs').innerHTML = defs.map(d => `<button type="button" class="tab ${mainTab===d[0]?'on':''}" data-t="${d[0]}">${d[1]}</button>`).join('')
-      + '<button type="button" class="tab done-btn" id="openDone">✅ Order Complete</button>';
+      + '<button type="button" class="tab done-btn" id="openDone">Order Complete</button>';
     const dn = [['all','All'],['phys','Physical Order Complete'],['online','Online Order Complete']];
     document.getElementById('doneTabs').innerHTML = dn.map(d => `<button type="button" class="tab ${doneTab===d[0]?'on':''}" data-t="${d[0]}">${d[1]}</button>`).join('');
   }
