@@ -36,6 +36,7 @@ jobs:
             apk: Mittu-Associated-Retailer.apk
             tag: retailer-apk-latest
             title: Mittu Associated Retailer APK (latest)
+            gs: '1'
           - key: dqrretailer
             apk: DQR-Retailer.apk
             tag: dqr-retailer-apk-latest
@@ -54,7 +55,7 @@ jobs:
         run: |
           cp apps/${{ matrix.key }}/capacitor.config.json capacitor.config.json
           rm -rf resources && cp -r apps/${{ matrix.key }}/resources resources
-          rm -f google-services.json
+          if [ -z "${{ matrix.gs }}" ]; then rm -f google-services.json; fi
 
       - name: Install dependencies
         run: npm install
@@ -64,7 +65,7 @@ jobs:
 
       - name: Patch (signing, permissions)
         env:
-          SKIP_GOOGLE_SERVICES: '1'
+          SKIP_GOOGLE_SERVICES: ${{ matrix.gs == '' && '1' || '' }}
         run: node scripts/patch-android.js
 
       - name: App icon

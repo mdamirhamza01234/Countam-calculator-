@@ -16,5 +16,13 @@
       "*.google.com"
     ]
   },
-  "backgroundColor": "#000000"
+  "backgroundColor": "#000000",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com"
+      ]
+    }
+  }
 }

@@ -45,12 +45,57 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:9778174452:android:1eb77d60f3af1e4c0541a1",
+        "android_client_info": {
+          "package_name": "com.mittu.associatedretailer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "9778174452-ejn3ch5er5v921vj26880eur30gklqh1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mittu.associatedretailer",
+            "certificate_hash": "ca715335a973958ca943b29c8594f44204e40a7d"
+          }
+        },
+        {
+          "client_id": "9778174452-0d5h1va79ggmejgs1712tm8l986ig4kr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXKwaafxB241Q84c_srROqH3hYTQMD1E8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "9778174452-0d5h1va79ggmejgs1712tm8l986ig4kr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:9778174452:android:804791bafae74d500541a1",
         "android_client_info": {
           "package_name": "com.mittu.billing"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "9778174452-i0duc0pcptg6k9tf05klht3cg02vlfp3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mittu.billing",
+            "certificate_hash": "ca715335a973958ca943b29c8594f44204e40a7d"
+          }
+        },
         {
           "client_id": "9778174452-0d5h1va79ggmejgs1712tm8l986ig4kr.apps.googleusercontent.com",
           "client_type": 3
