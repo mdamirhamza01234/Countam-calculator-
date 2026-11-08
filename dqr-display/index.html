@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Mittu DQR Display</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#16325c">
@@ -113,6 +113,9 @@
             to { transform: translateY(110vh) rotate(360deg); opacity: 0.9; }
         }
     </style>
+<style id="sat-fix">
+body{padding-top:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));box-sizing:border-box}
+</style>
 </head>
 <body>
 
