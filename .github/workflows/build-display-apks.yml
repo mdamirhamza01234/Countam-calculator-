@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - key: staff
@@ -76,7 +77,8 @@ jobs:
 
       - name: Build signed release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          for i in 1 2 3 4; do ./gradlew assembleRelease --no-daemon && exit 0; echo "retry $i"; sleep 20; done; exit 1
 
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk ${{ matrix.apk }}
