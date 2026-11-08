@@ -223,6 +223,18 @@
   .order-info { padding:8px 4px 4px; font-size:13px; color:#fff; line-height:1.5; }
   .order-info a { color:#fff; text-decoration:underline; font-weight:700; }
 </style>
+<style id="tabs-css">
+  .tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 12px 0; max-width:640px; margin:0 auto; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:0 0 auto; border:1.5px solid rgba(255,255,255,.7); background:rgba(255,255,255,.15); color:#fff; border-radius:20px; padding:9px 14px; font-size:14px; font-weight:800; }
+  .tab.on { background:#fff; color:#075E54; }
+  .tab.done-btn { background:#FFD54A; color:#4a3a00; border-color:#FFD54A; }
+  #donePage { position:fixed; inset:0; z-index:500; overflow:auto; display:none; background:linear-gradient(160deg,#1ea952 0%,#25D366 55%,#1fbf5c 100%); }
+  #donePage.show { display:block; }
+  #donePage .wrap { max-width:640px; margin:16px auto; padding:0 12px 40px; display:flex; flex-direction:column; gap:14px; }
+  .done-head { display:flex; align-items:center; gap:12px; }
+  .done-head button { background:none; border:0; color:#fff; font-size:28px; line-height:1; padding:0 6px; }
+</style>
 <style id="sat-fix">
 header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px))) !important}
 </style>
@@ -233,8 +245,16 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
   <span id="headerIcon" class="header-icon"></span> Mittu Staff Display — Order List
 </header>
 
+<div id="mainTabs" class="tabs"></div>
+
 <div id="ordersWrap">
   <div class="empty-msg" id="emptyMsg">Abhi tak koi order nahi aaya hai…</div>
+</div>
+
+<div id="donePage">
+  <header class="done-head"><button type="button" id="doneBack" aria-label="Back">←</button> Order Complete</header>
+  <div id="doneTabs" class="tabs"></div>
+  <div id="doneWrap" class="wrap"></div>
 </div>
 
 <div id="staffAlertOverlay">
@@ -391,11 +411,43 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
     });
   }, 1000);
 
+  // ---------------- TABS + ORDER COMPLETE PAGE ----------------
+  let mainTab = 'all';       // all | phys | online
+  let doneTab = 'all';       // all | phys | online (Order Complete page)
+  function isDone(o){
+    const items = Array.isArray(o.items) ? o.items : [];
+    const checked = o.checked || {};
+    return items.length > 0 && items.filter((_, i) => checked[i]).length === items.length;
+  }
+  function typeOk(o, tab){ return tab === 'all' || (tab === 'online' ? o.type === 'online' : o.type !== 'online'); }
+  function renderTabs(){
+    const defs = [['all','All'],['phys','Physical Order'],['online','Online Order']];
+    document.getElementById('mainTabs').innerHTML = defs.map(d => `<button type="button" class="tab ${mainTab===d[0]?'on':''}" data-t="${d[0]}">${d[1]}</button>`).join('')
+      + '<button type="button" class="tab done-btn" id="openDone">✅ Order Complete</button>';
+    const dn = [['all','All'],['phys','Physical Order Complete'],['online','Online Order Complete']];
+    document.getElementById('doneTabs').innerHTML = dn.map(d => `<button type="button" class="tab ${doneTab===d[0]?'on':''}" data-t="${d[0]}">${d[1]}</button>`).join('');
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('.tab'); if(!t) return;
+    if(t.id === 'openDone'){ document.getElementById('donePage').classList.add('show'); renderOrders(latestOrders); return; }
+    if(t.closest('#mainTabs')) mainTab = t.dataset.t; else doneTab = t.dataset.t;
+    renderOrders(latestOrders);
+  });
+  document.getElementById('doneBack').addEventListener('click', () => document.getElementById('donePage').classList.remove('show'));
+
   function renderOrders(ordersObj){
-    const ids = Object.keys(ordersObj || {}).filter(id => id.charAt(0) !== '_');
+    renderTabs();
+    renderInto(ordersWrap, ordersObj, o => !isDone(o) && typeOk(o, mainTab), 'Abhi tak koi order nahi aaya hai…');
+    renderInto(document.getElementById('doneWrap'), ordersObj, o => isDone(o) && typeOk(o, doneTab), 'Abhi koi order complete nahi hua hai');
+  }
+
+  function renderInto(container, ordersObj, pred, emptyText){
+    const ids = Object.keys(ordersObj || {}).filter(id => id.charAt(0) !== '_' && pred(ordersObj[id] || {}));
     if(!ids.length){
-      ordersWrap.innerHTML = '';
-      ordersWrap.appendChild(emptyMsg);
+      container.innerHTML = '';
+      const m = container === ordersWrap ? emptyMsg : document.createElement('div');
+      m.className = 'empty-msg'; if(container !== ordersWrap || !emptyMsg.dataset.err) m.textContent = emptyText;
+      container.appendChild(m);
       return;
     }
     // Naya order sabse upar — timestamp ke hisaab se sort.
@@ -403,7 +455,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
       .map(id => Object.assign({ id }, ordersObj[id]))
       .sort((a, b) => (b.ts || 0) - (a.ts || 0));
 
-    ordersWrap.innerHTML = '';
+    container.innerHTML = '';
     sorted.forEach(order => {
       const items = Array.isArray(order.items) ? order.items : [];
       const checked = order.checked || {};
@@ -476,7 +528,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
           </div>
         </div>
       `;
-      ordersWrap.appendChild(card);
+      container.appendChild(card);
     });
   }
 
@@ -509,10 +561,30 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
     setTimeout(() => { if(overlay.style.display !== 'none') overlay.style.display = 'none'; }, 10000);
   }
 
+  // ---------------- DAILY 4:30 AM CLEANUP ----------------
+  // Roz subah 4:30 par purane saare orders delete (delivery partners ki registration '_partners' safe rehti hai).
+  function lastCleanBoundary(){
+    const d = new Date(); d.setHours(4, 30, 0, 0);
+    if(d.getTime() > Date.now()) d.setDate(d.getDate() - 1);
+    return d.getTime();
+  }
+  function dailyCleanup(){
+    const b = lastCleanBoundary();
+    const upd = {};
+    Object.keys(latestOrders || {}).forEach(id => {
+      if(id.charAt(0) === '_') return;
+      const o = latestOrders[id] || {};
+      if((o.ts || 0) < b) upd[id] = null;
+    });
+    if(Object.keys(upd).length) update(staffOrdersRef, upd).catch(err => console.warn('cleanup failed:', err));
+  }
+  setInterval(dailyCleanup, 60000);
+
   function startListening(){
     onValue(staffOrdersRef, (snapshot) => {
       const data = snapshot.val() || {};
       latestOrders = data;
+      setTimeout(dailyCleanup, 1500);
       const ids = Object.keys(data).filter(id => id.charAt(0) !== '_');
 
       if(knownIds === null){
@@ -542,6 +614,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
       // nahi rahega — pehle yehi wajah thi ki "Abhi tak koi order nahi aaya
       // hai…" hamesha dikhta rehta tha bina kisi wajah ke pata chale.
       if(emptyMsg){
+        emptyMsg.dataset.err = '1';
         emptyMsg.textContent = 'Connection error: ' + (error && error.message ? error.message : error);
         ordersWrap.innerHTML = '';
         ordersWrap.appendChild(emptyMsg);
