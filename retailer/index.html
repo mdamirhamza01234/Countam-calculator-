@@ -743,9 +743,12 @@
     const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\D/g, '').slice(-10);
     if(!ph) return Promise.resolve();
     const key = String(payload.orderId || '').replace(/[.#$\[\]\/]/g, '_') || push(staffOrdersRef).key;
+    window.__lastStaffPath = 'deliveryJobs/' + ph + '/' + key;
     return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))
       .catch(err => console.warn('Firebase push to staff failed (staff display may be offline):', err));
   };
+  // Delivery status (Go to Delivery / Delivered) track karne ke liye
+  window.__fbListen = function(path, cb){ try { return onValue(ref(fbDb, path), snap => cb(snap.val()), () => {}); } catch(e){ return null; } };
 </script>
 <style>
   /* Hindi (Unicode Devanagari) ke liye saaf, standard font — Gboard / chat jaisa */
@@ -903,6 +906,14 @@
   .mode-toggle-row .mode-toggle-btn .pro-icon { width: 16px; height: 16px; flex: none; }
   .orders-badge { position: absolute; top: -8px; right: -4px; min-width: 22px; height: 22px; border-radius: 11px; background: #d62828; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 6px; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
   #onlineOrdersPanel { max-width: 950px; margin: 14px auto 30px; padding: 0 16px; }
+  .oo-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+  .oo-chip { border: 1.5px solid #b8651b; background: #fff; color: #8a4a10; border-radius: 18px; padding: 7px 10px; font-weight: 700; font-size: 12.5px; }
+  .oo-chip b { background: #f3e1cf; border-radius: 9px; padding: 0 6px; margin-left: 2px; }
+  .oo-chip.on { background: #a04e00; color: #fff; border-color: #a04e00; }
+  .oo-chip.on b { background: rgba(255,255,255,.25); }
+  .oo-st { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
+  .oo-st.go { background: #fff3e0; color: #e65100; }
+  .oo-st.dl { background: #e6f4ea; color: #137333; }
   .oo-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
   .oo-title { font-size: 19px; font-weight: 800; color: #a04e00; }
   .oo-sub { font-size: 12.5px; color: #6b5a4a; margin-top: 2px; }
@@ -2204,6 +2215,7 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
 </div>
 <div id="onlineOrdersPanel" style="display:none;">
   <div class="oo-head"><div><div class="oo-title">🛒 Online Orders</div><div class="oo-sub" id="ooSub">Mittu Online Shop se aaye orders</div></div><button type="button" class="oo-mark" onclick="markShopOrdersSeen()">Sab dekha</button></div>
+  <div id="ooFilters" class="oo-filters"></div>
   <div class="oo-pub"><div id="ooPubStatus">Shop ke daam: abhi bheje nahi gaye.</div><button type="button" class="oo-mark" onclick="publishShopStockManual()">🔄 Shop par daam bhejein</button></div>
   <div id="ooList"></div>
 </div>
@@ -5587,7 +5599,7 @@ window.__shopOrdersError = '';
 function shopSeenTs(){ try { return Number(localStorage.getItem('mittu_shop_orders_seen')) || 0; } catch(e){ return 0; } }
 function orderMapUrl(o){
   const lat = Number(o && o.lat), lng = Number(o && o.lng);
-  if(lat && lng) return 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng + '&travelmode=driving';
+  if(lat && lng) return 'https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng;
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((o && o.address) || '');
 }
 function shopOrdersList(){
@@ -5611,9 +5623,50 @@ async function publishShopStockManual(){
 }
 function shopEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function shopMoney(n){ n = Math.round((Number(n) || 0) * 100) / 100; return '₹' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+
+// ---------------- ORDER STATUS: Naya Order / Go to Delivery / Delivered ----------------
+function ordStateMap(){ try { return JSON.parse(localStorage.getItem('mittu_order_state') || '{}') || {}; } catch(e){ return {}; } }
+function ordStateSave(m){ try { localStorage.setItem('mittu_order_state', JSON.stringify(m)); } catch(e){} }
+function setOrderState(id, st, path){
+  if(!id) return;
+  const m = ordStateMap(), e = m[id] || {};
+  if(e.s === 'delivered' && st !== 'delivered') return;
+  m[id] = { s: st, path: path || e.path || '', ts: Date.now() };
+  ordStateSave(m);
+  dlvTrackAll();
+  if(typeof renderShopOrders === 'function') renderShopOrders();
+}
+window.__dlvAttached = window.__dlvAttached || {};
+function dlvTrackAll(){
+  if(typeof window.__fbListen !== 'function') return;
+  const m = ordStateMap();
+  Object.keys(m).forEach(id => {
+    const e = m[id];
+    if(!e || !e.path || e.s === 'delivered' || window.__dlvAttached[id]) return;
+    window.__dlvAttached[id] = true;
+    window.__fbListen(e.path, v => {
+      if(!v) return;
+      if(v.deliveryStatus === 'delivered') setOrderState(id, 'delivered');
+      else if(v.deliveryStatus === 'out') setOrderState(id, 'go');
+    });
+  });
+}
+window.__ooFilter = window.__ooFilter || '';
+function setOoFilter(f){ window.__ooFilter = (window.__ooFilter === f ? '' : f); renderShopOrders(); }
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-ood]');
+  if(b){ if(confirm('Ye order Delivered mark karein?')) setOrderState(b.dataset.ood, 'delivered'); }
+});
 function renderShopOrders(){
   const badge = document.getElementById('ordersBadge');
-  const list = shopOrdersList(), seen = shopSeenTs();
+  const allList = shopOrdersList(), seen = shopSeenTs();
+  const stm = ordStateMap();
+  const cnt = { new: 0, go: 0, delivered: 0 };
+  allList.forEach(o => { const st = (stm[o.id] && stm[o.id].s) || 'new'; cnt[st] = (cnt[st] || 0) + 1; });
+  const fl = document.getElementById('ooFilters');
+  if(fl){ fl.innerHTML = [['new','🆕 Naya Order'],['go','🛵 Go to Delivery'],['delivered','✅ Delivered']].map(x => '<button type="button" class="oo-chip' + (window.__ooFilter === x[0] ? ' on' : '') + '" onclick="setOoFilter(\'' + x[0] + '\')">' + x[1] + ' <b>' + cnt[x[0]] + '</b></button>').join(''); }
+  const list = window.__ooFilter ? allList.filter(o => ((stm[o.id] && stm[o.id].s) || 'new') === window.__ooFilter) : allList;
+  dlvTrackAll();
   const fresh = list.filter(o => (o.ts || 0) > seen).length;
   if(badge){ badge.textContent = fresh > 99 ? '99+' : fresh; badge.style.display = fresh ? 'flex' : 'none'; }
   const box = document.getElementById('ooList'), sub = document.getElementById('ooSub');
@@ -5624,6 +5677,7 @@ function renderShopOrders(){
     return;
   }
   if(window.__shopOrders === null){ box.innerHTML = '<div class="oo-empty">Orders load ho rahe hain…</div>'; return; }
+  if(!list.length && allList.length){ box.innerHTML = '<div class="oo-empty"><b>Is status mein koi order nahi hai</b></div>'; return; }
   if(!list.length){ box.innerHTML = '<div class="oo-empty"><b>Abhi koi online order nahi aaya</b><br>Jab customer shop website se order dega, wo yahin dikhega.</div>'; return; }
   const billedOrders = new Set(((getBillHistory() || [])).filter(r => r && r.orderId).map(r => r.orderId));
   box.innerHTML = list.map(o => {
@@ -5631,9 +5685,9 @@ function renderShopOrders(){
     const ph = String(o.phone || '').replace(/\D/g, '');
     const items = (Array.isArray(o.items) ? o.items : Object.values(o.items || {})).map(i =>
       '<div><span>' + shopEsc(i.name) + ' <small>(' + shopEsc(i.unit) + ' × ' + shopEsc(i.qty) + ')</small></span><span>' + shopMoney(i.total) + '</span></div>').join('');
-    return '<div class="oo-card' + (isNew ? ' new' : '') + (billedOrders.has(o.id) ? ' billed' : '') + '" data-oid="' + shopEsc(o.id) + '"><div class="oo-top"><div><span class="oo-id">' + shopEsc(o.id) + '</span>' + (isNew ? '<span class="oo-new">NAYA</span>' : '') + '</div><div class="oo-time">' + shopEsc(new Date(o.ts || 0).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>'
+    return '<div class="oo-card' + (isNew ? ' new' : '') + (billedOrders.has(o.id) ? ' billed' : '') + '" data-oid="' + shopEsc(o.id) + '"><div class="oo-top"><div><span class="oo-id">' + shopEsc(o.id) + '</span>' + (isNew ? '<span class="oo-new">NAYA</span>' : '') + (() => { const st = (stm[o.id] && stm[o.id].s) || 'new'; return st === 'go' ? ' <span class="oo-st go">🛵 Go to Delivery</span>' : st === 'delivered' ? ' <span class="oo-st dl">✅ Delivered</span>' : ''; })() + '</div><div class="oo-time">' + shopEsc(new Date(o.ts || 0).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>'
       + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 <a class="oo-map" href="' + shopEsc(orderMapUrl(o)) + '" target="_blank" rel="noopener">' + shopEsc(o.address) + '</a>' + ((Number(o.lat) && Number(o.lng)) ? ' <span class="oo-gps">GPS ✓</span>' : '') + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + (o.payerUpi ? '<br>💳 Customer UPI: <b>' + shopEsc(o.payerUpi) + '</b>' : '') + '</div>'
-      + '<div class="oo-items">' + items + '</div><div class="oo-tot"><span>Total · ' + (o.pay === 'ONLINE' ? '💳 Online UPI — payment apne UPI mein check karein' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery') + '</span><span>' + shopMoney(o.total) + '</span></div></div>';
+      + '<div class="oo-items">' + items + '</div><div class="oo-tot"><span>Total · ' + (o.pay === 'ONLINE' ? '💳 Online UPI — payment apne UPI mein check karein' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery') + '</span><span>' + shopMoney(o.total) + '</span></div>' + (((stm[o.id] && stm[o.id].s) === 'go') ? '<div style="margin-top:8px;text-align:right"><button type="button" class="oo-chip" data-ood="' + shopEsc(o.id) + '">✅ Delivered mark karein</button></div>' : '') + '</div>';
   }).join('');
 }
 
@@ -8348,6 +8402,7 @@ function sendOnlineOrderToStaff(thenPrint){
     };
     window.pushOrderToStaff(payload);
     window._staffSentFor[key] = true;
+    if(bo.id) setOrderState(bo.id, 'go', window.__lastStaffPath || '');
     try { if(navigator.vibrate) navigator.vibrate(40); } catch(e){}
     if(!thenPrint) alert('✅ Order Delivery Partner ke app par bhej diya gaya hai.');
   }

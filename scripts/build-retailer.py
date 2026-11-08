@@ -229,8 +229,15 @@ s = s.replace("✅ Mittu DQR Display par QR bhej diya", "✅ DQR Retailer displa
 # customer review (owner ka) retailer app mein nahi
 rep("const customerReqRef = ref(fbDb, 'customerRequest');", "const customerReqRef = ref(fbDb, 'retailerDisplay/_none/customerRequest');")
 # delivery jobs: retailer ka apna path (owner ke Staff Display mein na mile)
-rep("    const newRef = push(staffOrdersRef);\n    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))",
-    "    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\\D/g, '').slice(-10);\n    if(!ph) return Promise.resolve();\n    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_') || push(staffOrdersRef).key;\n    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))")
+rep("""    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_');
+    const newRef = key ? ref(fbDb, 'staffOrders/' + key) : push(staffOrdersRef);
+    window.__lastStaffPath = 'staffOrders/' + (key || newRef.key);
+    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))""",
+    """    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\\D/g, '').slice(-10);
+    if(!ph) return Promise.resolve();
+    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_') || push(staffOrdersRef).key;
+    window.__lastStaffPath = 'deliveryJobs/' + ph + '/' + key;
+    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))""")
 # login screen branding + Google error ka madad-message
 s = s.replace('<h1 class="login-title">Welcome to Mittu Billing</h1>', '<h1 class="login-title">Welcome to Mittu Associated Retailer</h1>')
 s = s.replace("errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');", "errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');")
