@@ -139,6 +139,7 @@ RUNTIME = '''
 #rtOnb .err{color:#b3261e;font-size:13px;min-height:16px;margin-top:8px}
 </style>
 <div id="rtOnb"><div class="card">
+  <button type="button" id="rtBack" aria-label="Wapas" style="display:none;border:0;background:#eef3f0;border-radius:50%;width:42px;height:42px;font-size:22px;color:#0d6e4e;margin:-6px 0 8px -4px;cursor:pointer">←</button>
   <h2>🛒 Mittu Associated Retailer</h2>
   <p class="sub">Apni dukaan ki jaankari bharein. Isi ke hisaab se aapka stock, bill aur online shop banega.</p>
   <label>Dukaan / Retailer ka naam</label><input id="rtName" maxlength="50" placeholder="jaise: Rahim Machli Dukan" autocomplete="off">
@@ -180,8 +181,10 @@ RUNTIME = '''
       var sel = $('rtType'), has = Array.prototype.some.call(sel.options, function(x){ return x.value === p.type || x.text === p.type; });
       if(p.type && has) sel.value = p.type; else if(p.type){ sel.value = '__other'; $('rtTypeOther').style.display = 'block'; $('rtTypeOther').value = p.type; }
     }
+    $('rtBack').style.display = prefill ? 'block' : 'none';
     o.style.display = 'flex';
   }
+  $('rtBack').addEventListener('click', function(){ $('rtOnb').style.display = 'none'; $('rtErr').textContent = ''; });
   window.rtOpenProfile = function(){ show(true); };
   $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; });
   $('rtPhone').addEventListener('input', function(){ this.value = this.value.replace(/\\D/g, '').slice(0, 10); });
@@ -234,7 +237,8 @@ rep("onValue(ref(fbDb, 'staffOrders/_partners'), snap => {", "onValue(ref(fbDb, 
 s = s.replace('<h1 class="login-title">Welcome to Mittu Billing</h1>', '<h1 class="login-title">Welcome to Mittu Associated Retailer</h1>')
 s = s.replace("errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');", "errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');")
 # drawer: Shop profile item (retailer profile edit)
-rep('<div class="drawer-recents-title">Recents</div>', '<button class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🏪</span> Dukaan ki jaankari (naam, type, UPI)</button>\n    <div class="drawer-recents-title">Recents</div>')
+GEAR = '<svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>'
+rep('<div class="drawer-recents-title">Recents</div>', '<div class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border-top:1px solid #eee;"><span class="drawer-icon">' + GEAR + '</span> Dukaan ki jaankari</div>\n    <div class="drawer-recents-title">Recents</div>')
 # retailer app mein Mittu wholesale splash nahi
 rep("(function(){\n  try { if(!(window.Capacitor", "(function(){\n  return;\n  try { if(!(window.Capacitor")
 # onboarding sabse upar (login se bhi pehle)

@@ -1953,6 +1953,7 @@ window.RETAILER_APP = true;
 #rtOnb .err{color:#b3261e;font-size:13px;min-height:16px;margin-top:8px}
 </style>
 <div id="rtOnb"><div class="card">
+  <button type="button" id="rtBack" aria-label="Wapas" style="display:none;border:0;background:#eef3f0;border-radius:50%;width:42px;height:42px;font-size:22px;color:#0d6e4e;margin:-6px 0 8px -4px;cursor:pointer">←</button>
   <h2>🛒 Mittu Associated Retailer</h2>
   <p class="sub">Apni dukaan ki jaankari bharein. Isi ke hisaab se aapka stock, bill aur online shop banega.</p>
   <label>Dukaan / Retailer ka naam</label><input id="rtName" maxlength="50" placeholder="jaise: Rahim Machli Dukan" autocomplete="off">
@@ -1994,8 +1995,10 @@ window.RETAILER_APP = true;
       var sel = $('rtType'), has = Array.prototype.some.call(sel.options, function(x){ return x.value === p.type || x.text === p.type; });
       if(p.type && has) sel.value = p.type; else if(p.type){ sel.value = '__other'; $('rtTypeOther').style.display = 'block'; $('rtTypeOther').value = p.type; }
     }
+    $('rtBack').style.display = prefill ? 'block' : 'none';
     o.style.display = 'flex';
   }
+  $('rtBack').addEventListener('click', function(){ $('rtOnb').style.display = 'none'; $('rtErr').textContent = ''; });
   window.rtOpenProfile = function(){ show(true); };
   $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; });
   $('rtPhone').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, '').slice(0, 10); });
@@ -2109,7 +2112,7 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
     <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> View All Bills Record</div>
     <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span> Customer Record PDF</button>
     <button class="drawer-item" onclick="closeDrawer(); openUdharBook();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 0 6.5 19H20v3H6.5"/><path d="M9 7h7M9 11h5"/></svg></span> Udhar Khata Book Management</button>
-    <button class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🏪</span> Dukaan ki jaankari (naam, type, UPI)</button>
+    <div class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span> Dukaan ki jaankari</div>
     <div class="drawer-recents-title">Recents</div>
     <div class="drawer-recent-tabs" id="drawerRecentTabs"></div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
