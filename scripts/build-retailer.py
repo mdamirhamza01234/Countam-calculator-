@@ -208,6 +208,8 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
 </style>
 '''
 RUNTIME = RUNTIME.replace('__OPTS__', opts).replace('__CATSUG__', json.dumps(CATSUG, ensure_ascii=False))
+# WhatsApp bill (online order): saman ready + delivery partner ki jaankari (sirf retailer app)
+s = s.replace("m += `— ${RT_NAME()}`;", "if(window._billOrder){ const dn = ((document.getElementById('dpName') || {}).value || '').trim(), dp = ((document.getElementById('dpPhone') || {}).value || '').trim(); m += `✅ *Aapka saman ready hai!*\\n`; if(dn || dp) m += `🛵 Delivery Partner: *${dn || 'Delivery Partner'}*${dp ? ' (📞 ' + dp + ')' : ''} jaldi aapke paas pahunchega.\\n\\n`; else m += `\\n`; }\n  m += `— ${RT_NAME()}`;", 1)
 # Delivery partner (retailer ke liye): staff display ki jagah seedha delivery partner ke app par jaata hai
 rep("window._billOrder ? ' Thermal Print + Staff ko Order List' : ' Print Bill Directly on Thermal Printer'", "window._billOrder ? ' Thermal Print + Delivery Partner ko Bhejein' : ' Print Bill Directly on Thermal Printer'")
 rep('<span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein + Bill Print', '<span class="ai-bill-spark">🧾</span> Delivery Partner ko Bhejein + Bill Print')

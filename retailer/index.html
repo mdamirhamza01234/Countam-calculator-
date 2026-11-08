@@ -4919,6 +4919,7 @@ function buildBillMessage(){
   m += (RT_PROFILE().addr ? `📍 ${RT_PROFILE().addr}\n\n` : '\n');
   m += `⭐ _Quality Products | Best Price | Trusted Partner_ ⭐\n\n`;
   m += `🙏 *Dhanyavaad! Phir padharein.*\n`;
+  if(window._billOrder){ const dn = ((document.getElementById('dpName') || {}).value || '').trim(), dp = ((document.getElementById('dpPhone') || {}).value || '').trim(); m += `✅ *Aapka saman ready hai!*\n`; if(dn || dp) m += `🛵 Delivery Partner: *${dn || 'Delivery Partner'}*${dp ? ' (📞 ' + dp + ')' : ''} jaldi aapke paas pahunchega.\n\n`; else m += `\n`; }
   m += `— ${RT_NAME()}`;
   return m;
 }
