@@ -123,7 +123,7 @@
       }
     } catch(err) {
       console.error('Google sign-in failed:', err);
-      if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
+      if(errorEl) errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');
       if(btn) { btn.disabled = false; btn.innerHTML = '<svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg> Continue with Google'; }
     }
   };
@@ -260,7 +260,7 @@
         } else if(err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential')){
           errorEl.textContent = 'Ye password sahi nahi hai. Aapka Gmail password yahan tabhi chalega jab aapne is email ko app ke andar "Change Login Password" se link kiya ho — warna sirf wahi password chalega jo aapne khud "Change Login Password" (Account menu) se banaya tha. Agar password bhool gaye ho ya kabhi set nahi kiya, pehle "Continue with Google" se login karke Account menu mein "Change Login Password" se naya password banayein.';
         } else {
-          errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');
+          errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');
         }
       }
     } finally {
@@ -2041,7 +2041,7 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo"><span class="cart-glow">🛒</span></div>
-    <h1 class="login-title">Welcome to Mittu Billing</h1>
+    <h1 class="login-title">Welcome to Mittu Associated Retailer</h1>
     <p class="login-subtitle">To use the Bill Generator, please continue with your Google account.</p>
     <button id="googleLoginBtn" type="button" onclick="signInWithGoogle()">
       <svg class="google-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26z"/><path fill="#34A853" d="M12 21.82c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.55 0-4.71-1.72-5.49-4.03H3.27v2.53A9.74 9.74 0 0 0 12 21.82z"/><path fill="#FBBC05" d="M6.51 13.9A5.86 5.86 0 0 1 6.2 12c0-.66.11-1.3.31-1.9V7.57H3.27A9.82 9.82 0 0 0 2.18 12c0 1.58.38 3.08 1.09 4.43l3.24-2.53z"/><path fill="#EA4335" d="M12 6.07c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.83 3.17 14.62 2.18 12 2.18a9.74 9.74 0 0 0-8.73 5.39l3.24 2.53C7.29 7.79 9.45 6.07 12 6.07z"/></svg>

@@ -230,6 +230,9 @@ rep("    const newRef = push(staffOrdersRef);\n    return set(newRef, Object.ass
     "    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\\D/g, '').slice(-10);\n    if(!ph) return Promise.resolve();\n    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_') || push(staffOrdersRef).key;\n    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))")
 # delivery partners list: sirf retailer ke apne likhe hue (owner ke partners mix na ho)
 rep("onValue(ref(fbDb, 'staffOrders/_partners'), snap => {", "onValue(ref(fbDb, 'retailerDisplay/_none/_partners'), snap => {")
+# login screen branding + Google error ka madad-message
+s = s.replace('<h1 class="login-title">Welcome to Mittu Billing</h1>', '<h1 class="login-title">Welcome to Mittu Associated Retailer</h1>')
+s = s.replace("errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error');", "errorEl.textContent = 'Login nahi ho paya: ' + (err?.message || 'Unknown error') + (/credential/i.test(err?.message || '') ? ' — Google login abhi taiyaar nahi hai, neeche Email aur password se login karein (naya account apne aap ban jayega).' : '');")
 # drawer: Shop profile item (retailer profile edit)
 rep('<div class="drawer-recents-title">Recents</div>', '<button class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🏪</span> Dukaan ki jaankari (naam, type, UPI)</button>\n    <div class="drawer-recents-title">Recents</div>')
 # retailer app mein Mittu wholesale splash nahi
