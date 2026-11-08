@@ -204,16 +204,30 @@ RUNTIME = '''
 </script>
 <style>
 /* Retailer app: display/delivery/staff wale features yahan nahi */
-.two-col-btn-row,#deliveryBox,#orderStaffPrintBtn,.rt-hide{display:none !important}
+button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
 </style>
 '''
 RUNTIME = RUNTIME.replace('__OPTS__', opts).replace('__CATSUG__', json.dumps(CATSUG, ensure_ascii=False))
-# thermal button: retailer app mein staff display nahi, seedha print
-rep("function thermalPrintClick(){\n  if(document.body.classList.contains('order-bill')) sendOnlineOrderToStaff(true);\n  else requestBillFinalAction('thermal');\n}",
-    "function thermalPrintClick(){\n  requestBillFinalAction('thermal');\n}")
-s = s.replace('/* ---', '/* ---')  # no-op
-# order-bill mode: label ko plain rakhna
-rep("window._billOrder ? ' Thermal Print + Staff ko Order List' : ' Print Bill Directly on Thermal Printer'", "' Print Bill Directly on Thermal Printer'")
+# Delivery partner (retailer ke liye): staff display ki jagah seedha delivery partner ke app par jaata hai
+rep("window._billOrder ? ' Thermal Print + Staff ko Order List' : ' Print Bill Directly on Thermal Printer'", "window._billOrder ? ' Thermal Print + Delivery Partner ko Bhejein' : ' Print Bill Directly on Thermal Printer'")
+rep('<span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein + Bill Print', '<span class="ai-bill-spark">🧾</span> Delivery Partner ko Bhejein + Bill Print')
+rep("alert('✅ Online order ki saman list Mittu Staff Display par bhej di gayi hai.');", "alert('✅ Order Delivery Partner ke app par bhej diya gaya hai.');")
+s = s.replace("Mittu Staff Display se connection abhi available nahi hai.", "Delivery se connection abhi available nahi hai.")
+# Fix Amount DQR: retailer ke apne DQR Retailer display par (mobile number se jud-ta hai)
+rep("const billRef = ref(fbDb, 'currentBill');", "const billRefNow = () => ref(fbDb, 'retailerDisplay/' + ((typeof RT_PROFILE === 'function' && RT_PROFILE().phone) || '_none') + '/currentBill');")
+s = s.replace("update(billRef, { billNo, amount, upiUrl, status: 'pending', ts: Date.now() })", "update(billRefNow(), { billNo, amount, upiUrl, shopName: RT_NAME(), status: 'pending', ts: Date.now() })")
+s = s.replace("update(billRef, { status: 'paid', ts: Date.now() })", "update(billRefNow(), { status: 'paid', ts: Date.now() })")
+s = s.replace("remove(billRef)", "remove(billRefNow())")
+assert 'billRef,' not in s and 'billRef)' not in s
+s = s.replace("alert('Mittu DQR Display se connection abhi available nahi hai.');", "alert('DQR Retailer display se connection abhi available nahi hai.');")
+s = s.replace("✅ Mittu DQR Display par QR bhej diya", "✅ DQR Retailer display par QR bhej diya")
+# customer review (owner ka) retailer app mein nahi
+rep("const customerReqRef = ref(fbDb, 'customerRequest');", "const customerReqRef = ref(fbDb, 'retailerDisplay/_none/customerRequest');")
+# delivery jobs: retailer ka apna path (owner ke Staff Display mein na mile)
+rep("    const newRef = push(staffOrdersRef);\n    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))",
+    "    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\\D/g, '').slice(-10);\n    if(!ph) return Promise.resolve();\n    const key = String(payload.orderId || '').replace(/[.#$\\[\\]\\/]/g, '_') || push(staffOrdersRef).key;\n    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))")
+# delivery partners list: sirf retailer ke apne likhe hue (owner ke partners mix na ho)
+rep("onValue(ref(fbDb, 'staffOrders/_partners'), snap => {", "onValue(ref(fbDb, 'retailerDisplay/_none/_partners'), snap => {")
 # drawer: Shop profile item (retailer profile edit)
 rep('<div class="drawer-recents-title">Recents</div>', '<button class="drawer-item" onclick="closeDrawer(); rtOpenProfile();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon">🏪</span> Dukaan ki jaankari (naam, type, UPI)</button>\n    <div class="drawer-recents-title">Recents</div>')
 # retailer app mein Mittu wholesale splash nahi

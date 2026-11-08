@@ -76,7 +76,7 @@
   const fbStorage = getStorage(fbApp);
   const fbAuth = getAuth(fbApp);
   const googleProvider = new GoogleAuthProvider();
-  const billRef = ref(fbDb, 'currentBill');
+  const billRefNow = () => ref(fbDb, 'retailerDisplay/' + ((typeof RT_PROFILE === 'function' && RT_PROFILE().phone) || '_none') + '/currentBill');
 
   // ---------------- GOOGLE LOGIN ----------------
   window.signInWithGoogle = async function(){
@@ -641,20 +641,20 @@
   // Called when the QR is generated on this (billing) phone — pushes the QR
   // data to Firebase so the old-phone display picks it up instantly.
   window.pushBillToDisplay = function(billNo, amount, upiUrl){
-    return update(billRef, { billNo, amount, upiUrl, status: 'pending', ts: Date.now() })
+    return update(billRefNow(), { billNo, amount, upiUrl, shopName: RT_NAME(), status: 'pending', ts: Date.now() })
       .catch(err => console.warn('Firebase push failed (display may be offline):', err));
   };
 
   // Called when the shopkeeper confirms payment — flips the display to the
   // Thank You animation without losing the billNo/amount already stored.
   window.markDisplayPaid = function(){
-    return update(billRef, { status: 'paid', ts: Date.now() })
+    return update(billRefNow(), { status: 'paid', ts: Date.now() })
       .catch(err => console.warn('Firebase update failed (display may be offline):', err));
   };
 
   // Clears the display entirely (back to the welcome screen).
   window.clearDisplayBill = function(){
-    return remove(billRef)
+    return remove(billRefNow())
       .catch(err => console.warn('Firebase clear failed (display may be offline):', err));
   };
 
@@ -665,7 +665,7 @@
   // "AI se Bill Generate karein" button uses (with our own live Stock
   // Record), the shopkeeper checks it, then sends a read-only review card
   // back to the Display with Cash/Online buttons.
-  const customerReqRef = ref(fbDb, 'customerRequest');
+  const customerReqRef = ref(fbDb, 'retailerDisplay/_none/customerRequest');
   // Live customer-request listener. Keep the latest snapshot so a timing race
   // cannot make the Mittu alert miss the first request after page load.
   window.__latestCustomerRequestData = null;
@@ -733,14 +733,16 @@
   // Delivery partners jo apne app mein register karte hain (staffOrders/_partners/<mobile>)
   window.__dpPartners = {};
   try {
-    onValue(ref(fbDb, 'staffOrders/_partners'), snap => {
+    onValue(ref(fbDb, 'retailerDisplay/_none/_partners'), snap => {
       window.__dpPartners = snap.val() || {};
       if (typeof window.dpRefreshUI === 'function') window.dpRefreshUI(false);
     }, () => {});
   } catch(e){}
   window.pushOrderToStaff = function(payload){
-    const newRef = push(staffOrdersRef);
-    return set(newRef, Object.assign({}, payload, { checked: {}, ts: Date.now() }))
+    const ph = String((payload.deliveryPartner || {}).phone || '').replace(/\D/g, '').slice(-10);
+    if(!ph) return Promise.resolve();
+    const key = String(payload.orderId || '').replace(/[.#$\[\]\/]/g, '_') || push(staffOrdersRef).key;
+    return set(ref(fbDb, 'deliveryJobs/' + ph + '/' + key), Object.assign({}, payload, { noChecklist: true, shop: { name: RT_NAME(), phone: RT_PROFILE().phone || '' }, ts: Date.now() }))
       .catch(err => console.warn('Firebase push to staff failed (staff display may be offline):', err));
   };
 </script>
@@ -2016,7 +2018,7 @@ window.RETAILER_APP = true;
 </script>
 <style>
 /* Retailer app: display/delivery/staff wale features yahan nahi */
-.two-col-btn-row,#deliveryBox,#orderStaffPrintBtn,.rt-hide{display:none !important}
+button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
 </style>
 
 <script>
@@ -2428,7 +2430,7 @@ window.RETAILER_APP = true;
     <div class="dp-hint">Delivery partner jab apne app mein naam/number daalta hai, wo yahan khud aa jata hai. Naam par tap karke badal sakte hain.</div>
   </div>
   <button type="button" id="orderStaffPrintBtn" class="only-order ai-bill-generate-btn" style="background:#a04e00; margin:12px 0 0; width:100%; font-size:15px; padding:14px 8px;" onclick="sendOnlineOrderToStaff(true)">
-    <span class="ai-bill-spark">🧾</span> Staff ko Saman List Bhejein + Bill Print
+    <span class="ai-bill-spark">🧾</span> Delivery Partner ko Bhejein + Bill Print
   </button>
 
   <div class="two-col-btn-row" style="display:flex; gap:10px; margin:14px 0 0;">
@@ -5445,7 +5447,7 @@ function setOrderBillMode(ord){
     const th = document.querySelector('.thermal-print-box'), wa = document.querySelector('.whatsapp-btn'), up = document.querySelector('.upi-btn');
     if(th && wa && up){ if(window._billOrder) th.after(wa); else up.after(wa); }
     const tb = document.getElementById('thermalMainBtn');
-    if(tb){ const t = tb.lastChild; if(t && t.nodeType === 3) t.nodeValue = ' Print Bill Directly on Thermal Printer'; }
+    if(tb){ const t = tb.lastChild; if(t && t.nodeType === 3) t.nodeValue = window._billOrder ? ' Thermal Print + Delivery Partner ko Bhejein' : ' Print Bill Directly on Thermal Printer'; }
     if(window._billOrder) dpRefreshUI(true);
   } catch(e){}
   let bn = document.getElementById('orderBillBanner');
@@ -8221,7 +8223,7 @@ function sendFixAmountToDqr(){
     return;
   }
   if(typeof window.pushBillToDisplay !== 'function'){
-    alert('Mittu DQR Display se connection abhi available nahi hai.');
+    alert('DQR Retailer display se connection abhi available nahi hai.');
     return;
   }
   const billNo = document.getElementById('sno').value || '';
@@ -8232,7 +8234,7 @@ function sendFixAmountToDqr(){
   box = document.createElement('div');
   box.id = 'dqrSentBox';
   box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:14px;z-index:99999;background:#fff;border:1px solid #cfd8e3;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.28);padding:14px;font-family:inherit;max-width:420px;margin:0 auto;';
-  box.innerHTML = '<div style="font-weight:700;color:#16325c;margin-bottom:4px;">✅ Mittu DQR Display par QR bhej diya</div>'+
+  box.innerHTML = '<div style="font-weight:700;color:#16325c;margin-bottom:4px;">✅ DQR Retailer display par QR bhej diya</div>'+
     '<div style="font-size:13px;color:#555;margin-bottom:10px;">Bill '+esc(String(billNo))+' · Fix Amount ₹ '+total.toFixed(2)+'</div>'+
     '<div style="display:flex;gap:8px;"><button type="button" id="dqrPaidBtn" style="flex:1;padding:11px 6px;border:0;border-radius:10px;background:#0d6e4e;color:#fff;font-weight:700;font-size:14px;">Payment Mil Gaya</button>'+
     '<button type="button" id="dqrClearBtn" style="flex:1;padding:11px 6px;border:0;border-radius:10px;background:#8a94a6;color:#fff;font-weight:700;font-size:14px;">Display se hatao</button></div>';
@@ -8313,7 +8315,7 @@ function sendOnlineOrderToStaff(thenPrint){
     items.push({ name, qty, unit, rate, amt: amt.toFixed(2) });
   });
   if(!items.length){ alert('Pehle bill mein items add karein.'); return; }
-  if(typeof window.pushOrderToStaff !== 'function'){ alert('Mittu Staff Display se connection abhi available nahi hai.'); return; }
+  if(typeof window.pushOrderToStaff !== 'function'){ alert('Delivery se connection abhi available nahi hai.'); return; }
 
   const dpName = (document.getElementById('dpName')?.value || '').trim();
   const dpPhone = (document.getElementById('dpPhone')?.value || '').replace(/\D/g, '');
@@ -8341,12 +8343,13 @@ function sendOnlineOrderToStaff(thenPrint){
     window.pushOrderToStaff(payload);
     window._staffSentFor[key] = true;
     try { if(navigator.vibrate) navigator.vibrate(40); } catch(e){}
-    if(!thenPrint) alert('✅ Online order ki saman list Mittu Staff Display par bhej di gayi hai.');
+    if(!thenPrint) alert('✅ Order Delivery Partner ke app par bhej diya gaya hai.');
   }
   if(thenPrint) requestBillFinalAction('thermal');
 }
 function thermalPrintClick(){
-  requestBillFinalAction('thermal');
+  if(document.body.classList.contains('order-bill')) sendOnlineOrderToStaff(true);
+  else requestBillFinalAction('thermal');
 }
 
 // ---------------- SEND SAMAN LIST TO STAFF DISPLAY ----------------
@@ -8362,7 +8365,7 @@ function sendListToStaff(){
     return;
   }
   if(typeof window.pushOrderToStaff !== 'function'){
-    alert('Mittu Staff Display se connection abhi available nahi hai.');
+    alert('Delivery se connection abhi available nahi hai.');
     return;
   }
 
