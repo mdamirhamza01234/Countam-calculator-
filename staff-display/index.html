@@ -437,7 +437,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
 
   function renderOrders(ordersObj){
     renderTabs();
-    renderInto(ordersWrap, ordersObj, o => !isDone(o) && typeOk(o, mainTab), 'Abhi tak koi order nahi aaya hai…');
+    renderInto(ordersWrap, ordersObj, o => (mainTab === 'all' || !isDone(o)) && typeOk(o, mainTab), 'Abhi tak koi order nahi aaya hai…');
     renderInto(document.getElementById('doneWrap'), ordersObj, o => isDone(o) && typeOk(o, doneTab), 'Abhi koi order complete nahi hua hai');
   }
 
