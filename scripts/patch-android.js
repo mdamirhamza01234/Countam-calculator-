@@ -30,7 +30,7 @@ if (!gradle.includes('signingConfigs')) {
 // 2) Manifest permissions (file chooser mein Camera option ke liye)
 const manifestPath = path.join(appDir, 'src', 'main', 'AndroidManifest.xml');
 let manifest = fs.readFileSync(manifestPath, 'utf8');
-['android.permission.CAMERA', 'android.permission.READ_MEDIA_IMAGES'].forEach(p => {
+['android.permission.CAMERA', 'android.permission.READ_MEDIA_IMAGES', 'android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_COARSE_LOCATION'].forEach(p => {
   if (!manifest.includes(p)) manifest = manifest.replace('</manifest>', `    <uses-permission android:name="${p}" />\n</manifest>`);
 });
 fs.writeFileSync(manifestPath, manifest);

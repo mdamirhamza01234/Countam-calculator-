@@ -41,6 +41,21 @@
   .a-map{background:#1a73e8;grid-column:1/3;font-size:16px !important;padding:14px 6px !important}
   .a-call{background:#0d6e4e}.a-wa{background:#25a244}
   .a-go{background:#ff9800;grid-column:1/3}.a-done{background:#2e9d57;grid-column:1/3;font-size:16px !important;padding:14px 6px !important}
+  .dist{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:2px 14px 8px}
+  .dchip{border:1.5px solid #3949ab;background:#eef0fb;color:#1a237e;border-radius:12px;padding:9px 6px;font-weight:700;font-size:13px;line-height:1.3;text-align:center}
+  .dchip b{display:block;font-size:17px;color:#0d47a1}
+  .dchip.na b{font-size:13px;color:#8a8fb5}
+  #dOptOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-end;justify-content:center}
+  #dOptOverlay .sheet{width:100%;max-width:480px;background:#fff;border-radius:20px 20px 0 0;padding:16px 14px calc(18px + env(safe-area-inset-bottom,0px))}
+  #dOptOverlay h3{margin:0 0 4px;font-size:17px}#dOptOverlay p{margin:0 0 12px;color:#667;font-size:13px}
+  .obtn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:15px;margin-top:8px;color:#fff}
+  .o-app{background:#3949ab}.o-g{background:#1a73e8}.o-x{background:#eceefa;color:#333}
+  #dMapOverlay{display:none;position:fixed;inset:0;background:#fff;z-index:310;flex-direction:column}
+  #dMapOverlay .mh{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#1a237e,#3949ab);color:#fff;padding:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px))) 14px 12px}
+  #dMapOverlay .mh button{background:none;border:0;color:#fff;font-size:26px;line-height:1}
+  #dMapOverlay .mh div{font-weight:800;font-size:15px}
+  #dMap{flex:1;min-height:0}
+  #dMapOverlay .mf{padding:10px 14px calc(16px + env(safe-area-inset-bottom,0px));background:#fff}
   details{padding:0 14px 12px}summary{font-weight:700;color:#3949ab;padding:6px 0;cursor:pointer}
   table{width:100%;border-collapse:collapse;font-size:13.5px}td{padding:6px 3px;border-bottom:1px solid #eceefa}td.r{text-align:right;white-space:nowrap}
   tr.chk td{color:#2e9d57}
@@ -74,6 +89,12 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
 </header>
 <div id="wrap"><div class="empty" id="empty">Orders load ho rahe hain…</div></div>
 
+<div id="dOptOverlay"><div class="sheet"><h3 id="dOptTitle"></h3><p id="dOptSub"></p>
+  <button type="button" class="obtn o-app" id="dOptApp">🗺️ App mein map kholen</button>
+  <button type="button" class="obtn o-g" id="dOptG">🧭 Google Map app kholen</button>
+  <button type="button" class="obtn o-x" id="dOptClose">Band karein</button></div></div>
+<div id="dMapOverlay"><div class="mh"><button type="button" id="dMapClose" aria-label="Back">←</button><div id="dMapTitle"></div></div><div id="dMap"></div>
+  <div class="mf"><button type="button" class="obtn o-g" id="dMapG" style="margin:0">🧭 Google Map app mein kholen</button></div></div>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getDatabase, ref, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -92,6 +113,7 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const get = k => { try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } };
   const set = (k,v) => { try { localStorage.setItem(k,v); } catch(e){} };
+  let myLoc = null, lastRender = 0;
   let myName = get('mittu_dp_name'), me = get('mittu_dp_phone'), tab = 'p', dataA = {}, dataB = {}, data = {}, known = null, started = false, unsubB = null;
 
   function showLogin(){ $('login').style.display = 'flex'; $('lph').value = me; $('lnm').value = myName; }
@@ -103,6 +125,75 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
   };
   $('chg').onclick = showLogin;
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => { tab = b.dataset.t; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b)); render(); });
+
+
+  // ---------- LOCATION + DOORI ----------
+  function startGeo(){
+    if(!navigator.geolocation || window.__geoOn) return; window.__geoOn = true;
+    try { navigator.geolocation.watchPosition(p => {
+      myLoc = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0) };
+      const moved = !window.__lastRL || hav(window.__lastRL, myLoc) > 0.04;
+      if(moved && Date.now() - lastRender > 8000 && !document.querySelector('details[open]') && !$('dMapOverlay').style.display.includes('flex')){ lastRender = Date.now(); window.__lastRL = { lat: myLoc.lat, lng: myLoc.lng }; render(); }
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }); } catch(e){}
+  }
+  function hav(a, b){
+    const R = 6371, rad = x => x * Math.PI / 180, dLa = rad(b.lat - a.lat), dLn = rad(b.lng - a.lng);
+    const h = Math.sin(dLa/2)**2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLn/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const fmtD = km => km < 1 ? '~' + Math.round(km * 1000 / 10) * 10 + ' m' : '~' + km.toFixed(1) + ' km';
+  const shopOf = o => { const l = o.shopLoc || o.shop; return (l && Number(l.lat) && Number(l.lng)) ? { lat: Number(l.lat), lng: Number(l.lng), name: l.name || (o.shop && o.shop.name) || 'Dukaan' } : null; };
+  const custOf = o => (Number(o.lat) && Number(o.lng)) ? { lat: Number(o.lat), lng: Number(o.lng) } : null;
+  function legs(o){
+    const sh = shopOf(o), cu = custOf(o), st = dstat(o);
+    const pk = (myLoc && sh) ? hav(myLoc, sh) : null;
+    const from = st === 'out' ? (myLoc || sh) : (sh || myLoc);
+    const dr = (from && cu) ? hav(from, cu) : null;
+    return { sh, cu, pk, dr };
+  }
+  const gUrl = (pt, o) => 'https://www.google.com/maps/dir/?api=1' + (myLoc ? '&origin=' + myLoc.lat + ',' + myLoc.lng : '') + '&destination=' + (pt ? pt.lat + ',' + pt.lng : encodeURIComponent(o.address || '')) + '&travelmode=driving';
+  let curOpt = null;
+  window.__dopt = (id, kind) => {
+    const o = data[id]; if(!o) return; const L = legs(o), pt = kind === 'p' ? L.sh : L.cu;
+    if(!pt && kind === 'p'){ alert('Dukaan ne abhi apni GPS location save nahi ki hai. Dukaan se poochein ya address dekhein.'); return; }
+    curOpt = { id, kind, pt, o };
+    $('dOptTitle').textContent = kind === 'p' ? '🏬 Pickup: ' + ((pt && pt.name) || 'Dukaan') : '🏠 Drop: ' + (o.custName || 'Customer');
+    $('dOptSub').textContent = (kind === 'p' ? (L.pk != null ? 'Aapse ' + fmtD(L.pk) + ' door (seedhi doori)' : 'Aapki location abhi nahi mili') : (L.dr != null ? fmtD(L.dr) + ' (seedhi doori)' : 'Customer ki GPS location nahi hai')) ;
+    $('dOptOverlay').style.display = 'flex';
+  };
+  $('dOptClose').onclick = () => { $('dOptOverlay').style.display = 'none'; };
+  $('dOptG').onclick = () => { if(!curOpt) return; $('dOptOverlay').style.display = 'none'; window.open(gUrl(curOpt.pt, curOpt.o), '_blank'); };
+  $('dOptApp').onclick = () => { if(!curOpt) return; $('dOptOverlay').style.display = 'none'; openMap(curOpt); };
+  $('dMapG').onclick = () => { if(curOpt) window.open(gUrl(curOpt.pt, curOpt.o), '_blank'); };
+  $('dMapClose').onclick = () => { $('dMapOverlay').style.display = 'none'; render(); };
+
+  // ---------- Leaflet + OpenStreetMap ----------
+  let MAP = null, MLAY = null;
+  function loadScriptT(src, ms){ return new Promise((ok, no) => { const sc = document.createElement('script'); let d = 0; const f = (fn, v) => { if(d) return; d = 1; fn(v); }; sc.onload = () => f(ok); sc.onerror = () => f(no, new Error('x')); setTimeout(() => f(no, new Error('timeout')), ms); sc.src = src; document.head.appendChild(sc); }); }
+  async function loadLeaflet(){
+    if(window.L) return;
+    for(const b of ['https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/', 'https://unpkg.com/leaflet@1.9.4/dist/', 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/']){
+      try { const l = document.createElement('link'); l.rel = 'stylesheet'; const cd = b.includes('cdnjs'); l.href = b + (cd ? 'leaflet.min.css' : 'leaflet.css'); document.head.appendChild(l); await loadScriptT(b + (cd ? 'leaflet.min.js' : 'leaflet.js'), 7000); if(window.L) return; } catch(e){}
+    }
+    throw new Error('map');
+  }
+  const emo = (e, bg) => L.divIcon({ className: '', html: '<div style="font-size:22px;background:' + bg + ';border:2px solid #fff;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4)">' + e + '</div>', iconSize: [34, 34], iconAnchor: [17, 17] });
+  async function openMap(c){
+    $('dMapOverlay').style.display = 'flex';
+    const Lg = legs(c.o), ttl = c.kind === 'p' ? '🏬 Pickup' + (Lg.pk != null ? ' · ' + fmtD(Lg.pk) : '') : '🏠 Drop' + (Lg.dr != null ? ' · ' + fmtD(Lg.dr) : '');
+    $('dMapTitle').textContent = ttl;
+    try { await loadLeaflet(); } catch(e){ $('dMap').innerHTML = '<div class="empty">Map load nahi hua. Internet check karein ya Google Map app wala button dabayein.</div>'; return; }
+    if(!MAP){ MAP = L.map('dMap', { zoomControl: true }); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(MAP); }
+    if(MLAY){ MAP.removeLayer(MLAY); }
+    const pts = [], g = [];
+    if(myLoc){ pts.push([myLoc.lat, myLoc.lng]); g.push(L.circleMarker([myLoc.lat, myLoc.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#1a73e8', fillOpacity: 1 }).bindTooltip('Aap', { permanent: true, direction: 'top', offset: [0, -8] })); }
+    if(Lg.sh){ pts.push([Lg.sh.lat, Lg.sh.lng]); g.push(L.marker([Lg.sh.lat, Lg.sh.lng], { icon: emo('🏬', '#fff3e0') }).bindTooltip('Pickup: ' + Lg.sh.name, { permanent: c.kind === 'p', direction: 'top', offset: [0, -16] })); }
+    if(Lg.cu){ pts.push([Lg.cu.lat, Lg.cu.lng]); g.push(L.marker([Lg.cu.lat, Lg.cu.lng], { icon: emo('🏠', '#e6f4ea') }).bindTooltip('Drop: ' + (c.o.custName || 'Customer'), { permanent: c.kind === 'd', direction: 'top', offset: [0, -16] })); }
+    const route = [myLoc, Lg.sh, Lg.cu].filter(Boolean).map(p => [p.lat, p.lng]);
+    if(route.length > 1) g.push(L.polyline(route, { color: '#3949ab', weight: 4, dashArray: '8 8' }));
+    MLAY = L.layerGroup(g).addTo(MAP);
+    setTimeout(() => { MAP.invalidateSize(); if(pts.length > 1) MAP.fitBounds(pts, { padding: [50, 50], maxZoom: 17 }); else if(pts.length) MAP.setView(pts[0], 16); else MAP.setView([25.0, 87.0], 12); }, 200);
+  }
 
   function register(){
     if(!me || !myName || !auth.currentUser) return;
@@ -141,6 +232,7 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
     return `<div class="card ${st}">
       <div class="c-top"><div><div class="c-name">${esc(o.custName || 'Customer')}</div><div class="c-id">${esc(o.orderId || '')} · ${items.length} item · ₹${total}</div></div>${badge}</div>
       <div class="c-addr">📍 ${esc(o.address || 'Pata nahi diya')}</div>
+      ${(() => { const L = legs(o); const pk = L.pk != null ? `<b>${fmtD(L.pk)}</b>` : `<b>${myLoc ? 'Dukaan location nahi' : 'Location on karein'}</b>`; const dr = L.dr != null ? `<b>${fmtD(L.dr)}</b>` : `<b>${L.cu ? 'Location on karein' : 'GPS nahi hai'}</b>`; return `<div class="dist"><button type="button" class="dchip ${L.pk != null ? '' : 'na'}" onclick="__dopt('${esc(o.id)}','p')">🏬 Pickup distance${pk}</button><button type="button" class="dchip ${L.dr != null ? '' : 'na'}" onclick="__dopt('${esc(o.id)}','d')">🏠 Drop distance${dr}</button></div>`; })()}
       ${pay}
       ${o.noChecklist ? `<div class="rdy-ok">🏬 ${esc((o.shop && o.shop.name) || 'Dukaan')} se saman lein${o.shop && o.shop.phone ? ' · <a href="tel:' + esc(o.shop.phone) + '" style="color:#137333">📞 ' + esc(o.shop.phone) + '</a>' : ''}</div>` : allReady ? '<div class="rdy-ok">✅ SAMAN READY — le ja sakte hain</div>' : `<div class="ready">⏳ Saman taiyaar ho raha hai: ${n}/${items.length}<div class="bar"><i style="width:${pct}%"></i></div></div>`}
       <div class="acts">${btns}</div>
@@ -190,6 +282,7 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
   }
   function init(){ if(started) return; started = true; onAuthStateChanged(auth, u => { if(u){ register(); listen(); } }); signInAnonymously(auth).catch(e => { $('wrap').innerHTML = '<div class="empty">Login error: ' + esc(e && e.message || e) + '</div>'; }); }
 
+  startGeo();
   if(me){ $('login').style.display = 'none'; init(); } else showLogin();
   (async () => { try { if('wakeLock' in navigator){ let l = await navigator.wakeLock.request('screen'); document.addEventListener('visibilitychange', async () => { if(document.visibilityState === 'visible'){ try{ l = await navigator.wakeLock.request('screen'); }catch(e){} } }); } } catch(e){} })();
 </script>

@@ -2013,6 +2013,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     <div class="drawer-item" onclick="closeDrawer(); openBillHistory();" style="border-top:1px solid #eee;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="5" width="13" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h7M9 14h7M9 18h4"/></svg></span> View All Bills Record</div>
     <button class="drawer-item" onclick="closeDrawer(); openCustomerRecords();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span> Customer Record PDF</button>
     <button class="drawer-item" onclick="closeDrawer(); openUdharBook();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 0 6.5 19H20v3H6.5"/><path d="M9 7h7M9 11h5"/></svg></span> Udhar Khata Book Management</button>
+    <button class="drawer-item" onclick="closeDrawer(); openShopSetting();" style="border:0; width:100%; text-align:left; background:#fff;"><span class="drawer-icon"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span> Setting (Dukaan ki GPS location)</button>
     <div class="drawer-recents-title">Recents</div>
     <div class="drawer-recent-tabs" id="drawerRecentTabs"></div>
     <div id="drawerRecentsList" class="drawer-recents-list"></div>
@@ -2100,6 +2101,19 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
   <button type="button" class="mode-toggle-btn" id="modeStockBtn" onclick="switchToStockView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"/><path d="M3 8h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 12h6"/></svg> Stock Record</button>
   <button type="button" class="mode-toggle-btn" id="modeOrdersBtn" onclick="switchToOrdersView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21 8H6"/></svg> Online Orders<span id="ordersBadge" class="orders-badge" style="display:none;">0</span></button>
 </div>
+<div id="shopSettingOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10030;align-items:flex-end;justify-content:center">
+  <div style="width:100%;max-width:460px;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(22px + env(safe-area-inset-bottom,0px))">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><b style="font-size:18px">⚙️ Setting</b><button type="button" id="shopSettingClose" style="border:0;background:#f1f1f1;border-radius:50%;width:34px;height:34px;font-size:18px">✕</button></div>
+    <div style="font-weight:800;margin:6px 0">📍 Dukaan ki GPS location</div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px">Delivery partner ko pata chalta hai ki saman kahan se uthana hai (pickup). Dukaan par khade hokar save karein.</div>
+    <div id="shopLocInfo" style="background:#f6f1ea;border-radius:12px;padding:12px;font-size:14px;margin-bottom:10px"></div>
+    <button type="button" id="shopLocSave" style="width:100%;padding:13px;border:0;border-radius:12px;background:#a04e00;color:#fff;font-weight:800;font-size:15px">📍 Abhi ki location save karein</button>
+    <div style="font-size:12.5px;font-weight:700;margin:12px 0 4px">Ya Google Map ke coordinates paste karein</div>
+    <div style="display:flex;gap:8px"><input id="shopLocTxt" placeholder="25.388395,87.193987" style="flex:1;min-width:0;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px"><button type="button" id="shopLocPaste" style="padding:0 16px;border:1.5px solid #a04e00;background:#fff;color:#a04e00;border-radius:10px;font-weight:800">Save</button></div>
+    <div id="shopLocMsg" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
+  </div>
+</div>
+
 <div id="onlineOrdersPanel" style="display:none;">
   <div class="oo-head"><div><div class="oo-title">🛒 Online Orders</div><div class="oo-sub" id="ooSub">Mittu Online Shop se aaye orders</div></div><button type="button" class="oo-mark" onclick="markShopOrdersSeen()">Sab dekha</button></div>
   <div id="ooFilters" class="oo-filters"></div>
@@ -8274,6 +8288,7 @@ function sendOnlineOrderToStaff(thenPrint){
       address: document.getElementById('custAddr').value.trim(),
       mapUrl: orderMapUrl({ lat: ord.lat, lng: ord.lng, address: document.getElementById('custAddr').value.trim() }),
       lat: Number(ord.lat) || null, lng: Number(ord.lng) || null,
+      shopLoc: (typeof shopLocPayload === 'function' ? shopLocPayload() : null),
       acc: Number(ord.acc) || 0, pin: ord.pin ? 1 : 0,
       pay: ord.pay || 'COD', payerUpi: ord.payerUpi || '',
       deliveryPartner: { name: dpName, phone: dpPhone },
@@ -9638,6 +9653,52 @@ addRow();
 attachCustNameAutofill();
 syncItemSortSwitch();
 refreshCustNameSuggestions();
+</script>
+<script id="shoploc">
+/* ---- Dukaan ki GPS location (pickup point) ---- */
+function shopLocGet(){ try { var v = JSON.parse(localStorage.getItem('mittu_shop_loc') || 'null'); return (v && v.lat && v.lng) ? v : null; } catch(e){ return null; } }
+function shopLocSet(v){ try { localStorage.setItem('mittu_shop_loc', JSON.stringify(v)); } catch(e){} }
+function shopLocPayload(){ var l = shopLocGet(); if(!l) return null; return { lat: l.lat, lng: l.lng, name: (typeof window.RT_NAME === 'function' ? window.RT_NAME() : 'Mittu Wholesaler') }; }
+function shopLocRender(){
+  var l = shopLocGet(), box = document.getElementById('shopLocInfo'); if(!box) return;
+  box.innerHTML = l ? ('✅ Save hai: <b>' + l.lat + ', ' + l.lng + '</b>' + (l.acc ? ' (±' + l.acc + ' m)' : '') + '<br><a href="https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lng + '" target="_blank" rel="noopener" style="color:#1a56c4;font-weight:700">Google Map mein dekhein</a>') : '⚠️ Abhi dukaan ki location save nahi hai.';
+}
+function openShopSetting(){ shopLocRender(); document.getElementById('shopLocMsg').textContent = ''; document.getElementById('shopSettingOverlay').style.display = 'flex'; }
+function shopLocFetch(cb){
+  if(!navigator.geolocation){ cb(null); return; }
+  navigator.geolocation.getCurrentPosition(function(p){ cb({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy || 0), ts: Date.now() }); }, function(){ cb(null); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+document.addEventListener('click', function(e){
+  var t = e.target; if(!t || !t.id) return;
+  var msg = document.getElementById('shopLocMsg');
+  if(t.id === 'shopSettingClose'){ document.getElementById('shopSettingOverlay').style.display = 'none'; return; }
+  if(t.id === 'shopLocSave'){
+    msg.style.color = '#555'; msg.textContent = 'Location dhoondh rahe hain…'; t.disabled = true;
+    shopLocFetch(function(g){ t.disabled = false;
+      if(g){ shopLocSet(g); shopLocRender(); msg.style.color = '#137333'; msg.textContent = '✅ Dukaan ki location save ho gayi.'; }
+      else { msg.style.color = '#b3261e'; msg.textContent = 'Location nahi mili. Phone ki Location ON karein aur app ko permission dein.'; } });
+    return;
+  }
+  if(t.id === 'shopLocPaste'){
+    var m = (document.getElementById('shopLocTxt').value || '').match(/(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})/);
+    if(!m){ msg.style.color = '#b3261e'; msg.textContent = 'Coordinates sahi nahi hain. Jaise: 25.388395,87.193987'; return; }
+    shopLocSet({ lat: +(+m[1]).toFixed(6), lng: +(+m[2]).toFixed(6), acc: 0, ts: Date.now() }); shopLocRender();
+    msg.style.color = '#137333'; msg.textContent = '✅ Save ho gaya.'; return;
+  }
+});
+// Pehli baar (login/onboarding ke baad) ek hi baar location permission mangna
+(function(){
+  var tries = 0, iv = setInterval(function(){
+    tries++; if(tries > 40){ clearInterval(iv); return; }
+    try { if(localStorage.getItem('mittu_loc_asked') || shopLocGet()){ clearInterval(iv); return; } } catch(e){}
+    var blockers = ['loginScreen', 'rtOnb'];
+    for(var i = 0; i < blockers.length; i++){ var el = document.getElementById(blockers[i]); if(el && el.offsetParent !== null && getComputedStyle(el).display !== 'none') return; }
+    if(!document.getElementById('appWrap')) return;
+    clearInterval(iv);
+    try { localStorage.setItem('mittu_loc_asked', '1'); } catch(e){}
+    shopLocFetch(function(g){ if(g) shopLocSet(g); });
+  }, 3000);
+})();
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
