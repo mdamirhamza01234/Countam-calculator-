@@ -12,7 +12,8 @@
       "*.firebaseio.com",
       "*.gstatic.com",
       "cdnjs.cloudflare.com"
-    ]
+    ],
+    "errorPath": "offline.html"
   },
   "backgroundColor": "#000000"
 }

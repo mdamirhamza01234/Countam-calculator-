@@ -14,7 +14,8 @@
       "cdnjs.cloudflare.com",
       "accounts.google.com",
       "*.google.com"
-    ]
+    ],
+    "errorPath": "offline.html"
   },
   "backgroundColor": "#000000",
   "plugins": {

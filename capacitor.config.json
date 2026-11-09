@@ -10,7 +10,8 @@
       "*.firebaseapp.com",
       "*.googleapis.com",
       "accounts.google.com"
-    ]
+    ],
+    "errorPath": "offline.html"
   },
   "plugins": {
     "FirebaseAuthentication": {

@@ -49,6 +49,9 @@ jobs:
             echo "resources/icon-only.png nahi hai — default icon use hoga"
           fi
 
+      - name: Offline page (app URL)
+        run: sed -i "s|__APP_URL__|$(node -p "require('./capacitor.config.json').server.url")|" www/offline.html
+
       - name: Sync
         run: npx cap sync android
 
