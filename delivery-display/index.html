@@ -134,7 +134,7 @@ header{padding-top:calc(14px + max(env(safe-area-inset-top,0px),var(--safe-area-
     const pay = o.pay === 'ONLINE' ? `<div class="pay paid">💳 Online paid — paisa lena nahi hai</div>` : `<div class="pay cod">💵 Customer se ₹${total} lena hai${o.pay === 'UPI' ? ' (UPI se bhi de sakta hai)' : ' (Cash)'}</div>`;
     const badge = st === 'delivered' ? '<span class="badge b-done">✅ Deliver ho gaya</span>' : st === 'out' ? '<span class="badge b-out">🛵 Raaste mein</span>' : '<span class="badge b-new">🆕 Naya</span>';
     const map = o.mapUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.address || ''));
-    let btns = `<a class="a-map" href="${esc(map)}" target="_blank" rel="noopener">📍 Google Map mein kholein${o.lat ? ' (GPS)' : ''}</a>`;
+    let btns = `<a class="a-map" href="${esc(map)}" target="_blank" rel="noopener">📍 Google Map mein kholein${o.lat ? (o.pin ? ' (📌 Customer ka pin)' : ' (GPS' + (Number(o.acc) ? ' ±' + Math.round(o.acc) + ' m' : '') + ')') : ''}</a>`;
     if(ph) btns += `<a class="a-call" href="tel:${esc(ph)}">📞 Call</a><a class="a-wa" href="https://wa.me/91${esc(ph)}" target="_blank" rel="noopener">WhatsApp</a>`;
     if(st === 'new') btns += `<button class="a-go" onclick="__go('${esc(o.id)}')">🛵 Saman le liya — Nikal gaya</button>`;
     if(st !== 'delivered') btns += `<button class="a-done" onclick="__done('${esc(o.id)}')">✅ Deliver ho gaya</button>`;

@@ -5567,7 +5567,7 @@ function renderShopOrders(){
     const items = (Array.isArray(o.items) ? o.items : Object.values(o.items || {})).map(i =>
       '<div><span>' + shopEsc(i.name) + ' <small>(' + shopEsc(i.unit) + ' × ' + shopEsc(i.qty) + ')</small></span><span>' + shopMoney(i.total) + '</span></div>').join('');
     return '<div class="oo-card' + (isNew ? ' new' : '') + (billedOrders.has(o.id) ? ' billed' : '') + '" data-oid="' + shopEsc(o.id) + '"><div class="oo-top"><div><span class="oo-id">' + shopEsc(o.id) + '</span>' + (isNew ? '<span class="oo-new">NAYA</span>' : '') + (() => { const st = (stm[o.id] && stm[o.id].s) || 'new'; return st === 'go' ? ' <span class="oo-st go">🛵 Go to Delivery</span>' : st === 'delivered' ? ' <span class="oo-st dl">✅ Delivered</span>' : ''; })() + '</div><div class="oo-time">' + shopEsc(new Date(o.ts || 0).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</div></div>'
-      + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 <a class="oo-map" href="' + shopEsc(orderMapUrl(o)) + '" target="_blank" rel="noopener">' + shopEsc(o.address) + '</a>' + ((Number(o.lat) && Number(o.lng)) ? ' <span class="oo-gps">GPS ✓</span>' : '') + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + (o.payerUpi ? '<br>💳 Customer UPI: <b>' + shopEsc(o.payerUpi) + '</b>' : '') + '</div>'
+      + '<div class="oo-cust"><b>' + shopEsc(o.name) + '</b> · <a href="tel:' + shopEsc(ph) + '">📞 ' + shopEsc(ph) + '</a> · <a href="https://wa.me/91' + shopEsc(ph) + '" target="_blank" rel="noopener">WhatsApp</a><br>📍 <a class="oo-map" href="' + shopEsc(orderMapUrl(o)) + '" target="_blank" rel="noopener">' + shopEsc(o.address) + '</a>' + ((Number(o.lat) && Number(o.lng)) ? (o.pin ? ' <span class="oo-gps">📌 Pin ✓</span>' : ' <span class="oo-gps">GPS ✓' + (Number(o.acc) ? ' ±' + Math.round(o.acc) + ' m' : '') + '</span>') : '') + (o.note ? '<br>📝 ' + shopEsc(o.note) : '') + (o.payerUpi ? '<br>💳 Customer UPI: <b>' + shopEsc(o.payerUpi) + '</b>' : '') + '</div>'
       + '<div class="oo-items">' + items + '</div><div class="oo-tot"><span>Total · ' + (o.pay === 'ONLINE' ? '💳 Online UPI — payment apne UPI mein check karein' : o.pay === 'UPI' ? 'UPI (delivery par)' : 'Cash on delivery') + '</span><span>' + shopMoney(o.total) + '</span></div>' + (((stm[o.id] && stm[o.id].s) === 'go') ? '<div style="margin-top:8px;text-align:right"><button type="button" class="oo-chip" data-ood="' + shopEsc(o.id) + '">✅ Delivered mark karein</button></div>' : '') + '</div>';
   }).join('');
 }
@@ -8274,6 +8274,7 @@ function sendOnlineOrderToStaff(thenPrint){
       address: document.getElementById('custAddr').value.trim(),
       mapUrl: orderMapUrl({ lat: ord.lat, lng: ord.lng, address: document.getElementById('custAddr').value.trim() }),
       lat: Number(ord.lat) || null, lng: Number(ord.lng) || null,
+      acc: Number(ord.acc) || 0, pin: ord.pin ? 1 : 0,
       pay: ord.pay || 'COD', payerUpi: ord.payerUpi || '',
       deliveryPartner: { name: dpName, phone: dpPhone },
       billNo, totalItems: items.length, totalAmount: total.toFixed(2), items
