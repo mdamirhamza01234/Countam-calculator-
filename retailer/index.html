@@ -437,6 +437,14 @@
     }, 4000);
   });
   attachShopOrders();
+  // ---- Walk-in: dukandaar ka jawab (customer ko dikhta hai) + dukaan ki location publish ----
+  window.walkinSetStatus = function(id, st){ try { set(ref(fbDb, 'walkinStatus/' + id), { s: st, ts: Date.now() }).catch(e => console.warn('walkin status', e)); } catch(e){} };
+  window.publishShopLoc = function(l){
+    const u = window.currentFirebaseUser; if(!l || !u || u.isAnonymous) return;
+    const path = (typeof window.RT_NAME === 'function') ? 'retailers/' + u.uid + '/loc' : 'publicShop/loc';
+    set(ref(fbDb, path), { lat: l.lat, lng: l.lng, ts: Date.now() }).catch(e => console.warn('shop loc publish', e));
+  };
+  window.addEventListener('mittuFirebaseUserReady', () => { setTimeout(() => { try { const l = (typeof shopLocGet === 'function') ? shopLocGet() : null; if(l) window.publishShopLoc(l); } catch(e){} }, 3500); });
 
   // ---- Mittu Online Shop: public copy of stock (sirf naam, sale price, unit, in-stock). Purchase price kabhi nahi jata. ----
   let _shopPubT = null;
@@ -5499,12 +5507,12 @@ function setOrderBillMode(ord){
     bn.style.display = 'block';
   } else if(bn){ bn.style.display = 'none'; }
 }
-function fillBillFromOrder(id){
-  const o = shopOrdersList().find(x => x.id === id);
-  if(!o) return;
+function fillBillFromOrder(id, walk){
+  const o = (walk ? walkinAll() : shopOrdersList()).find(x => x.id === id);
+  if(!o) return false;
   const cur = document.getElementById('custName').value.trim() || document.getElementById('custMobile').value.trim() ||
               Array.from(document.querySelectorAll('#itemsBody .itemName')).some(i => i.value.trim());
-  if(cur && !confirm('Abhi ka bill hata kar ' + id + ' order ka bill bharein?')) return;
+  if(cur && !confirm('Abhi ka bill hata kar ' + id + (walk ? ' (dukaan par aaye customer) ki list se bill bharein?' : ' order ka bill bharein?'))) return false;
   try { if(navigator.vibrate) navigator.vibrate(35); } catch(e){}
   switchToBillView();
   document.getElementById('custName').value = o.name || '';
@@ -5524,8 +5532,9 @@ function fillBillFromOrder(id){
   if(!tbody.children.length) addRow();
   generateRandomBillNo();
   calcTotal();
-  setOrderBillMode({ id: o.id, name: o.name });
+  if(walk){ setOrderBillMode(null); window._walkBillId = o.id; } else setOrderBillMode({ id: o.id, name: o.name });
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  return true;
 }
 (function(){
   let t = null, sx = 0, sy = 0, fired = false;
@@ -5623,10 +5632,12 @@ function orderMapUrl(o){
   if(lat && lng) return 'https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng;
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((o && o.address) || '');
 }
-function shopOrdersList(){
+function shopOrdersAll(){
   const o = window.__shopOrders || {};
   return Object.keys(o).map(k => Object.assign({ _k: k }, o[k])).filter(x => x && x.id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
 }
+function shopOrdersList(){ return shopOrdersAll().filter(x => !x.walkin); }
+function walkinAll(){ return shopOrdersAll().filter(x => x.walkin); }
 function markShopOrdersSeen(){
   const l = shopOrdersList();
   try { localStorage.setItem('mittu_shop_orders_seen', String(l.length ? l[0].ts : Date.now())); } catch(e){}
@@ -5679,6 +5690,7 @@ document.addEventListener('click', e => {
   if(b){ if(confirm('Ye order Delivered mark karein?')) setOrderState(b.dataset.ood, 'delivered'); }
 });
 function renderShopOrders(){
+  try { if(typeof wkCheck === 'function') wkCheck(); } catch(e){}
   const badge = document.getElementById('ordersBadge');
   const allList = shopOrdersList(), seen = shopSeenTs();
   const stm = ordStateMap();
@@ -9783,10 +9795,113 @@ attachCustNameAutofill();
 syncItemSortSwitch();
 refreshCustNameSuggestions();
 </script>
+<script id="walkin">
+/* ---- Walk-in: dukaan par khade customer ki saman list -> Accept / Waiting / Deny ---- */
+function wkState(){ try { return JSON.parse(localStorage.getItem('mittu_walkin_state') || '{}') || {}; } catch(e){ return {}; } }
+function wkSave(m){ try { localStorage.setItem('mittu_walkin_state', JSON.stringify(m)); } catch(e){} }
+function wkBusy(){
+  var a = document.getElementById('custName'), b = document.getElementById('custMobile');
+  if(!a) return false;
+  return !!(a.value.trim() || (b && b.value.trim()) || Array.prototype.some.call(document.querySelectorAll('#itemsBody .itemName'), function(i){ return i.value.trim(); }));
+}
+function wkBeep(){
+  try { if(navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch(e){}
+  try { var C = window.AudioContext || window.webkitAudioContext, c = new C(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = .15; o.start(); setTimeout(function(){ o.frequency.value = 1175; }, 150); setTimeout(function(){ o.stop(); c.close(); }, 320); } catch(e){}
+}
+function wkToast(t){
+  var d = document.createElement('div'); d.textContent = t;
+  d.style.cssText = 'position:fixed;left:50%;top:80px;transform:translateX(-50%);background:#1a3a8a;color:#fff;padding:11px 18px;border-radius:22px;font:700 14px sans-serif;z-index:2147483000;max-width:88vw;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+  document.body.appendChild(d); setTimeout(function(){ d.remove(); }, 3200);
+}
+function wkSet(id, st){
+  var m = wkState(); m[id] = { s: st, ts: Date.now() }; wkSave(m);
+  if(window.walkinSetStatus) window.walkinSetStatus(id, st);
+  wkRender();
+}
+function wkActive(){
+  var m = wkState(), lim = Date.now() - 6 * 3600 * 1000;
+  return walkinAll().filter(function(o){ return (o.ts || 0) > lim && m[o.id] && (m[o.id].s === 'prompt' || m[o.id].s === 'waiting'); }).map(function(o){ return Object.assign({ _s: m[o.id].s }, o); });
+}
+var WK_SEEN = false;
+function wkCheck(){
+  if(window.__shopOrders === null || window.__shopOrders === undefined) return;
+  var m = wkState(), lim = Date.now() - 3 * 3600 * 1000, fresh = 0, auto = 0;
+  walkinAll().forEach(function(o){
+    if(m[o.id] || (o.ts || 0) < lim) return;
+    if(!WK_SEEN && (o.ts || 0) < Date.now() - 20 * 60 * 1000){ m[o.id] = { s: 'old', ts: Date.now() }; return; }   // pehli baar load par purane ko ignore
+    fresh++;
+    if(wkBusy() || wkOverlayOpen()){ m[o.id] = { s: 'waiting', ts: Date.now() }; auto++; if(window.walkinSetStatus) window.walkinSetStatus(o.id, 'waiting'); }
+    else m[o.id] = { s: 'prompt', ts: Date.now() };
+  });
+  WK_SEEN = true;
+  if(fresh){ wkSave(m); wkBeep(); if(auto) wkToast('🔔 Naya walk-in aaya — "Waiting for next billing" mein chala gaya'); wkRender(true); }
+}
+function wkOverlayOpen(){ var e = document.getElementById('walkinOverlay'); return !!(e && e.style.display === 'flex'); }
+function wkSummary(o){
+  var it = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+  return it.slice(0, 4).map(function(x){ return (x.name || '') + ' × ' + (x.qty || 1); }).join(', ') + (it.length > 4 ? ' +' + (it.length - 4) + ' aur' : '');
+}
+function wkEnsure(){
+  var ov = document.getElementById('walkinOverlay');
+  if(ov) return ov;
+  ov = document.createElement('div'); ov.id = 'walkinOverlay';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10040;align-items:flex-end;justify-content:center';
+  ov.innerHTML = '<div style="width:100%;max-width:480px;max-height:88vh;overflow:auto;background:#fff;border-radius:20px 20px 0 0;padding:16px 14px calc(22px + env(safe-area-inset-bottom,0px))"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:18px">🔔 Dukaan par aaye customer</b><button type="button" id="walkinClose" style="border:0;background:#f1f1f1;border-radius:50%;width:34px;height:34px;font-size:18px">✕</button></div><div id="walkinList"></div></div>';
+  document.body.appendChild(ov);
+  var pill = document.createElement('button'); pill.id = 'walkinPill'; pill.type = 'button';
+  pill.style.cssText = 'display:none;position:fixed;left:12px;bottom:84px;z-index:10020;border:0;border-radius:24px;background:#1a56c4;color:#fff;font:800 14px sans-serif;padding:12px 16px;box-shadow:0 4px 14px rgba(0,0,0,.35)';
+  document.body.appendChild(pill);
+  return ov;
+}
+function wkRender(open){
+  var ov = wkEnsure(), pill = document.getElementById('walkinPill'), list = wkActive();
+  // Agar koi dusra prompt pending hai aur billing busy hai to use bhi waiting mein bhejo
+  if(wkBusy()){ var m = wkState(), ch = false; list.forEach(function(o){ if(o._s === 'prompt' && !wkOverlayOpen()){ m[o.id] = { s: 'waiting', ts: Date.now() }; o._s = 'waiting'; ch = true; if(window.walkinSetStatus) window.walkinSetStatus(o.id, 'waiting'); } }); if(ch) wkSave(m); }
+  var w = list.filter(function(o){ return o._s === 'waiting'; }).length, p = list.length - w;
+  pill.style.display = (list.length && !wkOverlayOpen()) ? 'block' : 'none';
+  pill.textContent = '🔔 Walk-in: ' + list.length + (w ? ' (⏳ ' + w + ' waiting)' : '');
+  var box = document.getElementById('walkinList');
+  box.innerHTML = list.length ? list.map(function(o){
+    var t = new Date(o.ts || 0).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return '<div class="wkcard" data-wid="' + esc(o.id) + '" style="border:1.5px solid ' + (o._s === 'waiting' ? '#e0a800' : '#1a56c4') + ';border-radius:14px;padding:12px;margin-bottom:10px;background:' + (o._s === 'waiting' ? '#fffbea' : '#f2f7ff') + '">'
+      + '<div style="display:flex;justify-content:space-between"><b>' + esc(o.name || 'Customer') + '</b><span style="color:#666;font-size:12.5px">' + t + (o._s === 'waiting' ? ' · ⏳ Waiting' : '') + '</span></div>'
+      + '<div style="font-size:13px;color:#555;margin:2px 0">📞 ' + esc(o.phone || '') + '</div>'
+      + '<div style="font-size:14px;margin:4px 0">' + esc(wkSummary(o)) + '</div><div style="font-weight:800;margin-bottom:8px">₹' + Number(o.total || 0).toFixed(2) + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-wk="acc" style="flex:1;min-width:90px;border:0;border-radius:10px;background:#1a7a3e;color:#fff;font-weight:800;padding:11px 6px">✅ Accept</button>'
+      + (o._s === 'prompt' ? '<button type="button" data-wk="wait" style="flex:1.4;min-width:120px;border:0;border-radius:10px;background:#e0a800;color:#fff;font-weight:800;padding:11px 6px">⏳ Waiting for next billing</button>' : '')
+      + '<button type="button" data-wk="deny" style="flex:1;min-width:80px;border:0;border-radius:10px;background:#c62828;color:#fff;font-weight:800;padding:11px 6px">❌ Deny</button></div></div>';
+  }).join('') : '<div style="padding:20px;text-align:center;color:#777">Abhi koi walk-in list nahi hai.</div>';
+  if(open && list.some(function(o){ return o._s === 'prompt'; })) ov.style.display = 'flex';
+  if(!list.length) ov.style.display = 'none';
+  pill.style.display = (list.length && ov.style.display !== 'flex') ? 'block' : 'none';
+}
+document.addEventListener('click', function(e){
+  var t = e.target; if(!t || !t.closest) return;
+  if(t.id === 'walkinPill'){ document.getElementById('walkinOverlay').style.display = 'flex'; wkRender(); return; }
+  if(t.id === 'walkinClose'){ document.getElementById('walkinOverlay').style.display = 'none'; wkRender(); return; }
+  var btn = t.closest('[data-wk]'), card = t.closest('.wkcard');
+  if(!card) return;
+  var id = card.getAttribute('data-wid'), act = btn ? btn.getAttribute('data-wk') : 'acc';
+  if(act === 'acc'){
+    if(fillBillFromOrder(id, true)){ wkSet(id, 'accepted'); document.getElementById('walkinOverlay').style.display = 'none'; wkRender(); }
+  } else if(act === 'wait'){ wkSet(id, 'waiting'); }
+  else if(act === 'deny'){ if(confirm('Is customer ki list deny karein?')) wkSet(id, 'denied'); }
+});
+// Billing complete / khaali hote hi waiting walk-in yaad dilao
+(function(){
+  var wasBusy = false;
+  setInterval(function(){
+    var b = wkBusy(), w = 0;
+    try { w = wkActive().filter(function(o){ return o._s === 'waiting'; }).length; } catch(e){}
+    if(wasBusy && !b && w){ wkBeep(); wkToast('⏳ ' + w + ' walk-in waiting hai — tap karke bill bharein'); var p = document.getElementById('walkinPill'); if(p){ p.style.background = '#e65100'; setTimeout(function(){ p.style.background = '#1a56c4'; }, 6000); } }
+    wasBusy = b;
+  }, 2500);
+})();
+</script>
 <script id="shoploc">
 /* ---- Dukaan ki GPS location (pickup point) ---- */
 function shopLocGet(){ try { var v = JSON.parse(localStorage.getItem('mittu_shop_loc') || 'null'); return (v && v.lat && v.lng) ? v : null; } catch(e){ return null; } }
-function shopLocSet(v){ try { localStorage.setItem('mittu_shop_loc', JSON.stringify(v)); } catch(e){} }
+function shopLocSet(v){ try { localStorage.setItem('mittu_shop_loc', JSON.stringify(v)); } catch(e){} try { if(window.publishShopLoc) window.publishShopLoc(v); } catch(e){} }
 function shopLocPayload(){ var l = shopLocGet(); if(!l) return null; return { lat: l.lat, lng: l.lng, name: (typeof window.RT_NAME === 'function' ? window.RT_NAME() : 'Mittu Wholesaler') }; }
 function shopLocRender(){
   var l = shopLocGet(), box = document.getElementById('shopLocInfo'); if(!box) return;
