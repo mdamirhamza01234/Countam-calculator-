@@ -94,7 +94,13 @@
 
       if (capAuth) {
         // Capacitor APK ke andar: native Google Sign-In (Chrome/popup nahi khulta).
-        const r = await capAuth.signInWithGoogle();
+        // Pehle purana Google account chooser (Credential Manager "No credentials available" deta hai), fail ho to Credential Manager.
+        let r;
+        try { r = await capAuth.signInWithGoogle({ useCredentialManager: false }); }
+        catch(e1){
+          if(/cancel/i.test(String((e1 && (e1.message || e1.code)) || ''))) throw e1;
+          r = await capAuth.signInWithGoogle();
+        }
         const idToken = r && r.credential && r.credential.idToken;
         if (!idToken) throw new Error('Google login cancel ya fail ho gaya.');
         await signInWithCredential(fbAuth, GoogleAuthProvider.credential(idToken));
