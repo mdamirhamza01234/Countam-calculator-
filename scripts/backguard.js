@@ -83,3 +83,20 @@
   });
   if(!tryNative()){ var n = 0, iv = setInterval(function(){ if(tryNative() || ++n > 10) clearInterval(iv); }, 500); }
 })();
+
+/* Bahari links (Google Maps, WhatsApp, tel) APK ke WebView mein kaam karein */
+(function(){
+  if(window.__extLinks) return; window.__extLinks = 1;
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null; if(!a) return;
+    var h = a.getAttribute('href') || '';
+    if(!/^https?:/i.test(h)) return;
+    var u; try{ u = new URL(h, location.href); }catch(x){ return; }
+    if(a.target === '_blank' || u.origin !== location.origin){
+      e.preventDefault();
+      var w = null; try{ w = window.open(h, '_blank'); }catch(x){}
+      if(!w){ try{ location.href = h; }catch(x){} }
+    }
+  }, true);
+})();
+

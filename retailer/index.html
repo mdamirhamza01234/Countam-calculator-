@@ -2236,8 +2236,8 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
     <div style="font-size:13px;color:#666;margin-bottom:8px">Delivery partner ko pata chalta hai ki saman kahan se uthana hai (pickup). Dukaan par khade hokar save karein.</div>
     <div id="shopLocInfo" style="background:#f6f1ea;border-radius:12px;padding:12px;font-size:14px;margin-bottom:10px"></div>
     <button type="button" id="shopLocSave" style="width:100%;padding:13px;border:0;border-radius:12px;background:#a04e00;color:#fff;font-weight:800;font-size:15px">📍 Abhi ki location save karein</button>
-    <div style="font-size:12.5px;font-weight:700;margin:12px 0 4px">Ya Google Map ke coordinates paste karein</div>
-    <div style="display:flex;gap:8px"><input id="shopLocTxt" placeholder="25.388395,87.193987" style="flex:1;min-width:0;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px"><button type="button" id="shopLocPaste" style="padding:0 16px;border:1.5px solid #a04e00;background:#fff;color:#a04e00;border-radius:10px;font-weight:800">Save</button></div>
+    <div style="font-size:12.5px;font-weight:700;margin:12px 0 4px">Ya Google Map ke coordinates / link paste karein</div>
+    <div style="display:flex;gap:8px"><input id="shopLocTxt" placeholder="Coordinates ya Google Map link" style="flex:1;min-width:0;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px"><button type="button" id="shopLocPaste" style="padding:0 16px;border:1.5px solid #a04e00;background:#fff;color:#a04e00;border-radius:10px;font-weight:800">Save</button></div>
     <div id="shopLocMsg" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
   </div>
 </div>
@@ -9907,6 +9907,22 @@ function shopLocRender(){
   var l = shopLocGet(), box = document.getElementById('shopLocInfo'); if(!box) return;
   box.innerHTML = l ? ('✅ Save hai: <b>' + l.lat + ', ' + l.lng + '</b>' + (l.acc ? ' (±' + l.acc + ' m)' : '') + '<br><a href="https://www.google.com/maps/search/?api=1&query=' + l.lat + ',' + l.lng + '" target="_blank" rel="noopener" style="color:#1a56c4;font-weight:700">Google Map mein dekhein</a>') : '⚠️ Abhi dukaan ki location save nahi hai.';
 }
+function shopLocParse(t, strict){
+  t = String(t || '');
+  var pats = [/@(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/, /!3d(-?\d{1,2}\.\d{3,})!4d(-?\d{1,3}\.\d{3,})/, /[?&](?:q|ll|query|destination)=(-?\d{1,2}\.\d{3,})(?:,|%2C)\s*(-?\d{1,3}\.\d{3,})/, /(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})/];
+  if(strict) pats = pats.slice(0, 3);
+  for(var i = 0; i < pats.length; i++){ var m = t.match(pats[i]); if(m){ var la = +m[1], ln = +m[2]; if(Math.abs(la) <= 90 && Math.abs(ln) <= 180) return { lat: +la.toFixed(6), lng: +ln.toFixed(6) }; } }
+  return null;
+}
+function shopLocResolve(t){
+  var ll = shopLocParse(t); if(ll) return Promise.resolve(ll);
+  var m = String(t || '').match(/https?:\/\/[^\s]*(?:goo\.gl|g\.co|share\.google|google\.[a-z.]+\/maps|maps\.google)[^\s]*/i);
+  if(!m) return Promise.resolve(null);
+  var ctl = new AbortController(), tm = setTimeout(function(){ ctl.abort(); }, 9000);
+  return fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(m[0]), { signal: ctl.signal }).then(function(r){ return r.json(); }).then(function(j){
+    clearTimeout(tm); return shopLocParse((j.status && j.status.url) || '', true) || shopLocParse(j.contents || '', true);
+  }).catch(function(){ return null; });
+}
 function openShopSetting(){ shopLocRender(); document.getElementById('shopLocMsg').textContent = ''; document.getElementById('shopSettingOverlay').style.display = 'flex'; }
 function shopLocFetch(cb){
   if(!navigator.geolocation){ cb(null); return; }
@@ -9924,10 +9940,13 @@ document.addEventListener('click', function(e){
     return;
   }
   if(t.id === 'shopLocPaste'){
-    var m = (document.getElementById('shopLocTxt').value || '').match(/(-?\d{1,2}\.\d{3,})\s*[,;\s]\s*(-?\d{1,3}\.\d{3,})/);
-    if(!m){ msg.style.color = '#b3261e'; msg.textContent = 'Coordinates sahi nahi hain. Jaise: 25.388395,87.193987'; return; }
-    shopLocSet({ lat: +(+m[1]).toFixed(6), lng: +(+m[2]).toFixed(6), acc: 0, ts: Date.now() }); shopLocRender();
-    msg.style.color = '#137333'; msg.textContent = '✅ Save ho gaya.'; return;
+    msg.style.color = '#555'; msg.textContent = 'Link / coordinates check ho rahe hain…';
+    shopLocResolve(document.getElementById('shopLocTxt').value).then(function(ll){
+      if(!ll){ msg.style.color = '#b3261e'; msg.textContent = 'Coordinates ya Google Map link se location nahi mili. Google Maps mein pin par tap karke upar dikhne wale coordinates copy karein.'; return; }
+      shopLocSet({ lat: ll.lat, lng: ll.lng, acc: 0, ts: Date.now() }); shopLocRender();
+      msg.style.color = '#137333'; msg.textContent = '✅ Save ho gaya: ' + ll.lat + ', ' + ll.lng;
+    });
+    return;
   }
 });
 // Pehli baar (login/onboarding ke baad) ek hi baar location permission mangna
@@ -10038,6 +10057,23 @@ window.__bgExtra=function(){
   });
   if(!tryNative()){ var n = 0, iv = setInterval(function(){ if(tryNative() || ++n > 10) clearInterval(iv); }, 500); }
 })();
+
+/* Bahari links (Google Maps, WhatsApp, tel) APK ke WebView mein kaam karein */
+(function(){
+  if(window.__extLinks) return; window.__extLinks = 1;
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null; if(!a) return;
+    var h = a.getAttribute('href') || '';
+    if(!/^https?:/i.test(h)) return;
+    var u; try{ u = new URL(h, location.href); }catch(x){ return; }
+    if(a.target === '_blank' || u.origin !== location.origin){
+      e.preventDefault();
+      var w = null; try{ w = window.open(h, '_blank'); }catch(x){}
+      if(!w){ try{ location.href = h; }catch(x){} }
+    }
+  }, true);
+})();
+
 </script>
 </body>
 </html>
