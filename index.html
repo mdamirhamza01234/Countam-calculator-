@@ -9884,6 +9884,10 @@ document.addEventListener('click', function(e){
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
+  var pk=document.getElementById('rtPick');
+  if(pk&&pk.style.display==='flex'){pk.style.display='none';return true;}
+  var ob=document.getElementById('rtOnb'),bk=document.getElementById('rtBack');
+  if(ob&&ob.style.display==='flex'&&bk&&bk.style.display==='block'){bk.click();return true;}
   var ids=['stockRecordPanel','onlineOrdersPanel'];
   for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);
     if(el&&el.style.display==='block'&&typeof switchToBillView==='function'){switchToBillView();return true;}}
