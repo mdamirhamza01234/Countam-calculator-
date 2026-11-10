@@ -1985,7 +1985,8 @@ window.RETAILER_APP = true;
   <p class="sub">Apni dukaan ki jaankari bharein. Isi ke hisaab se aapka stock, bill aur online shop banega.</p>
   <label>Dukaan / Retailer ka naam</label><input id="rtName" maxlength="50" placeholder="jaise: Rahim Machli Dukan" autocomplete="off">
   <label>Dukaan ka type</label>
-  <select id="rtType"><option value="">— Type chunein —</option><optgroup label="Khane-Peene aur Daily Needs"><option>Grocery Store</option><option>Vegetable Store</option><option>Fruit Store</option><option>Fish Store</option><option>Chicken &amp; Meat Store</option><option>Milk &amp; Dairy Store</option><option>Sweet &amp; Snacks Store</option><option>Bakery &amp; Cake Store</option><option>Dry Fruits &amp; Spice Store</option><option>Pan &amp; Mouth Freshener Store</option></optgroup><optgroup label="Kapde aur Fashion"><option>Clothing / Apparel Store</option><option>Readymade Garments Store</option><option>Designer Boutique Store</option><option>Footwear Store</option><option>Cosmetic &amp; Beauty Store</option><option>Jewellery Store</option><option>Bangles &amp; Accessories Store</option></optgroup><optgroup label="Padhai aur Sehat"><option>Medical Store / Pharmacy</option><option>Book Store</option><option>Stationery Store</option><option>Optical Store</option><option>Surgical &amp; Health Equipment Store</option></optgroup><optgroup label="Ghar aur Construction"><option>Hardware Store</option><option>Sanitary &amp; Plumbing Store</option><option>Electrical Store</option><option>Paint Store</option><option>Utensil Store</option><option>Furniture Store</option><option>Home Decor Store</option></optgroup><optgroup label="Electronics aur Gadgets"><option>Mobile &amp; Gadget Store</option><option>Mobile Repairing &amp; Accessories Store</option><option>Electronic Appliance Store</option><option>Computer &amp; Laptop Store</option><option>Camera &amp; Photo Studio Store</option></optgroup><optgroup label="Khel, Entertainment aur Gifts"><option>Toy Store</option><option>Gift &amp; Greeting Store</option><option>Sports Goods Store</option><option>Pooja Samagri Store</option><option>Pet Food &amp; Care Store</option></optgroup><option value="__other">Mere type ki dukaan list mein nahi hai (khud likhein)</option></select>
+  <button type="button" id="rtTypeBtn" style="width:100%;text-align:left;padding:13px 12px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;background:#fff;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center"><span id="rtTypeTxt" style="color:#777">— Type chunein —</span><span>🔍</span></button>
+  <select id="rtType" style="display:none"><option value="">— Type chunein —</option><optgroup label="Restaurant aur Hotel"><option>Restaurant</option><option>Biryani Store</option></optgroup><optgroup label="Khane-Peene aur Daily Needs"><option>Grocery Store</option><option>Vegetable Store</option><option>Fruit Store</option><option>Fish Store</option><option>Chicken &amp; Meat Store</option><option>Milk &amp; Dairy Store</option><option>Sweet &amp; Snacks Store</option><option>Bakery &amp; Cake Store</option><option>Dry Fruits &amp; Spice Store</option><option>Pan &amp; Mouth Freshener Store</option></optgroup><optgroup label="Kapde aur Fashion"><option>Clothing / Apparel Store</option><option>Readymade Garments Store</option><option>Designer Boutique Store</option><option>Footwear Store</option><option>Cosmetic &amp; Beauty Store</option><option>Jewellery Store</option><option>Bangles &amp; Accessories Store</option></optgroup><optgroup label="Padhai aur Sehat"><option>Medical Store / Pharmacy</option><option>Book Store</option><option>Stationery Store</option><option>Optical Store</option><option>Surgical &amp; Health Equipment Store</option></optgroup><optgroup label="Ghar aur Construction"><option>Hardware Store</option><option>Sanitary &amp; Plumbing Store</option><option>Electrical Store</option><option>Paint Store</option><option>Utensil Store</option><option>Furniture Store</option><option>Home Decor Store</option></optgroup><optgroup label="Electronics aur Gadgets"><option>Mobile &amp; Gadget Store</option><option>Mobile Repairing &amp; Accessories Store</option><option>Electronic Appliance Store</option><option>Computer &amp; Laptop Store</option><option>Camera &amp; Photo Studio Store</option></optgroup><optgroup label="Khel, Entertainment aur Gifts"><option>Toy Store</option><option>Gift &amp; Greeting Store</option><option>Sports Goods Store</option><option>Pooja Samagri Store</option><option>Pet Food &amp; Care Store</option></optgroup><option value="__other">Mere type ki dukaan list mein nahi hai (khud likhein)</option></select>
   <input id="rtTypeOther" maxlength="40" placeholder="Apni dukaan ka type likhein" style="display:none;margin-top:8px">
   <label>Mobile number</label><input id="rtPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile">
   <label>UPI ID (payment lene ke liye)</label><input id="rtUpi" placeholder="jaise: name@okaxis" autocapitalize="off" autocomplete="off">
@@ -2023,11 +2024,50 @@ window.RETAILER_APP = true;
       if(p.type && has) sel.value = p.type; else if(p.type){ sel.value = '__other'; $('rtTypeOther').style.display = 'block'; $('rtTypeOther').value = p.type; }
     }
     $('rtBack').style.display = prefill ? 'block' : 'none';
+    if(window.rtSyncType) window.rtSyncType();
     o.style.display = 'flex';
   }
   $('rtBack').addEventListener('click', function(){ $('rtOnb').style.display = 'none'; $('rtErr').textContent = ''; });
   window.rtOpenProfile = function(){ show(true); };
-  $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; });
+  $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; window.rtSyncType(); });
+  // App ka apna searchable Store-type picker (phone ka dropdown nahi)
+  window.rtSyncType = function(){
+    var v = $('rtType').value, t = $('rtTypeTxt');
+    t.textContent = !v ? '— Type chunein —' : (v === '__other' ? 'Khud likhein (list mein nahi)' : v); t.style.color = v ? '#111' : '#777';
+  };
+  (function(){
+    var pk = document.createElement('div'); pk.id = 'rtPick';
+    pk.style.cssText = 'display:none;position:fixed;inset:0;z-index:2147483100;background:rgba(0,0,0,.55);align-items:flex-end;justify-content:center';
+    pk.innerHTML = '<div style="width:100%;max-width:480px;height:82vh;background:#fff;border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)">'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 8px"><b style="flex:1;font-size:18px;color:#0d6e4e">Dukaan ka type chunein</b><button type="button" id="rtPickX" style="border:0;background:#eef3f0;border-radius:50%;width:36px;height:36px;font-size:18px">✕</button></div>'
+      + '<div style="padding:0 14px 8px"><input id="rtPickQ" placeholder="🔍 Search: jaise Biryani, Mobile, Dawai…" autocomplete="off" style="width:100%;padding:12px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;box-sizing:border-box"></div>'
+      + '<div id="rtPickList" style="flex:1;overflow:auto;padding:0 14px 14px"></div></div>';
+    document.body.appendChild(pk);
+    function build(q){
+      q = (q || '').trim().toLowerCase(); var h = '', sel = $('rtType'), any = false;
+      Array.prototype.forEach.call(sel.querySelectorAll('optgroup'), function(g){
+        var items = Array.prototype.filter.call(g.querySelectorAll('option'), function(o){ return !q || o.textContent.toLowerCase().indexOf(q) > -1 || g.label.toLowerCase().indexOf(q) > -1; });
+        if(!items.length) return; any = true;
+        h += '<div style="font-weight:800;color:#0d6e4e;font-size:13px;margin:12px 0 4px">' + g.label + '</div>' + items.map(function(o){
+          var on = sel.value === o.textContent;
+          return '<div data-v="' + o.textContent.replace(/"/g, '&quot;') + '" style="padding:13px 12px;border-radius:12px;margin:3px 0;font-size:16px;background:' + (on ? '#e3f6ec' : '#f6f8f7') + ';font-weight:' + (on ? '800' : '500') + '">' + o.textContent + (on ? ' ✓' : '') + '</div>';
+        }).join('');
+      });
+      var oth = !q || 'khud likhein list mein nahi other'.indexOf(q) > -1;
+      if(oth){ any = true; h += '<div data-v="__other" style="padding:13px 12px;border-radius:12px;margin:12px 0 3px;font-size:16px;background:#fff6e0;font-weight:700">✏️ Mere type ki dukaan list mein nahi hai (khud likhein)</div>'; }
+      if(!any) h = '<div style="padding:24px;text-align:center;color:#777">Kuch nahi mila</div>';
+      $('rtPickList').innerHTML = h;
+    }
+    $('rtTypeBtn').addEventListener('click', function(){ $('rtPickQ').value = ''; build(''); pk.style.display = 'flex'; });
+    $('rtPickX').addEventListener('click', function(){ pk.style.display = 'none'; });
+    pk.addEventListener('click', function(e){ if(e.target === pk) pk.style.display = 'none'; });
+    $('rtPickQ').addEventListener('input', function(){ build(this.value); });
+    $('rtPickList').addEventListener('click', function(e){
+      var d = e.target.closest ? e.target.closest('[data-v]') : null; if(!d) return;
+      $('rtType').value = d.getAttribute('data-v'); $('rtType').dispatchEvent(new Event('change')); pk.style.display = 'none';
+      if(d.getAttribute('data-v') === '__other') setTimeout(function(){ $('rtTypeOther').focus(); }, 50);
+    });
+  })();
   $('rtPhone').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, '').slice(0, 10); });
   $('rtGo').addEventListener('click', function(){
     var name = $('rtName').value.trim(), sel = $('rtType').value, type = sel === '__other' ? $('rtTypeOther').value.trim() : sel,

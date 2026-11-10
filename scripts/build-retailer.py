@@ -104,6 +104,7 @@ rep("  overlay.style.display = 'flex';\n}\nfunction closeStockItemModal(){", "  
 
 # ---------- retailer onboarding + runtime ----------
 GROUPS = [
+ ("Restaurant aur Hotel", ["Restaurant","Biryani Store"]),
  ("Khane-Peene aur Daily Needs", ["Grocery Store","Vegetable Store","Fruit Store","Fish Store","Chicken & Meat Store","Milk & Dairy Store","Sweet & Snacks Store","Bakery & Cake Store","Dry Fruits & Spice Store","Pan & Mouth Freshener Store"]),
  ("Kapde aur Fashion", ["Clothing / Apparel Store","Readymade Garments Store","Designer Boutique Store","Footwear Store","Cosmetic & Beauty Store","Jewellery Store","Bangles & Accessories Store"]),
  ("Padhai aur Sehat", ["Medical Store / Pharmacy","Book Store","Stationery Store","Optical Store","Surgical & Health Equipment Store"]),
@@ -144,7 +145,8 @@ RUNTIME = '''
   <p class="sub">Apni dukaan ki jaankari bharein. Isi ke hisaab se aapka stock, bill aur online shop banega.</p>
   <label>Dukaan / Retailer ka naam</label><input id="rtName" maxlength="50" placeholder="jaise: Rahim Machli Dukan" autocomplete="off">
   <label>Dukaan ka type</label>
-  <select id="rtType"><option value="">— Type chunein —</option>__OPTS__<option value="__other">Mere type ki dukaan list mein nahi hai (khud likhein)</option></select>
+  <button type="button" id="rtTypeBtn" style="width:100%;text-align:left;padding:13px 12px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;background:#fff;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center"><span id="rtTypeTxt" style="color:#777">— Type chunein —</span><span>🔍</span></button>
+  <select id="rtType" style="display:none"><option value="">— Type chunein —</option>__OPTS__<option value="__other">Mere type ki dukaan list mein nahi hai (khud likhein)</option></select>
   <input id="rtTypeOther" maxlength="40" placeholder="Apni dukaan ka type likhein" style="display:none;margin-top:8px">
   <label>Mobile number</label><input id="rtPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile">
   <label>UPI ID (payment lene ke liye)</label><input id="rtUpi" placeholder="jaise: name@okaxis" autocapitalize="off" autocomplete="off">
@@ -182,11 +184,50 @@ RUNTIME = '''
       if(p.type && has) sel.value = p.type; else if(p.type){ sel.value = '__other'; $('rtTypeOther').style.display = 'block'; $('rtTypeOther').value = p.type; }
     }
     $('rtBack').style.display = prefill ? 'block' : 'none';
+    if(window.rtSyncType) window.rtSyncType();
     o.style.display = 'flex';
   }
   $('rtBack').addEventListener('click', function(){ $('rtOnb').style.display = 'none'; $('rtErr').textContent = ''; });
   window.rtOpenProfile = function(){ show(true); };
-  $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; });
+  $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; window.rtSyncType(); });
+  // App ka apna searchable Store-type picker (phone ka dropdown nahi)
+  window.rtSyncType = function(){
+    var v = $('rtType').value, t = $('rtTypeTxt');
+    t.textContent = !v ? '— Type chunein —' : (v === '__other' ? 'Khud likhein (list mein nahi)' : v); t.style.color = v ? '#111' : '#777';
+  };
+  (function(){
+    var pk = document.createElement('div'); pk.id = 'rtPick';
+    pk.style.cssText = 'display:none;position:fixed;inset:0;z-index:2147483100;background:rgba(0,0,0,.55);align-items:flex-end;justify-content:center';
+    pk.innerHTML = '<div style="width:100%;max-width:480px;height:82vh;background:#fff;border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)">'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 8px"><b style="flex:1;font-size:18px;color:#0d6e4e">Dukaan ka type chunein</b><button type="button" id="rtPickX" style="border:0;background:#eef3f0;border-radius:50%;width:36px;height:36px;font-size:18px">✕</button></div>'
+      + '<div style="padding:0 14px 8px"><input id="rtPickQ" placeholder="🔍 Search: jaise Biryani, Mobile, Dawai…" autocomplete="off" style="width:100%;padding:12px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;box-sizing:border-box"></div>'
+      + '<div id="rtPickList" style="flex:1;overflow:auto;padding:0 14px 14px"></div></div>';
+    document.body.appendChild(pk);
+    function build(q){
+      q = (q || '').trim().toLowerCase(); var h = '', sel = $('rtType'), any = false;
+      Array.prototype.forEach.call(sel.querySelectorAll('optgroup'), function(g){
+        var items = Array.prototype.filter.call(g.querySelectorAll('option'), function(o){ return !q || o.textContent.toLowerCase().indexOf(q) > -1 || g.label.toLowerCase().indexOf(q) > -1; });
+        if(!items.length) return; any = true;
+        h += '<div style="font-weight:800;color:#0d6e4e;font-size:13px;margin:12px 0 4px">' + g.label + '</div>' + items.map(function(o){
+          var on = sel.value === o.textContent;
+          return '<div data-v="' + o.textContent.replace(/"/g, '&quot;') + '" style="padding:13px 12px;border-radius:12px;margin:3px 0;font-size:16px;background:' + (on ? '#e3f6ec' : '#f6f8f7') + ';font-weight:' + (on ? '800' : '500') + '">' + o.textContent + (on ? ' ✓' : '') + '</div>';
+        }).join('');
+      });
+      var oth = !q || 'khud likhein list mein nahi other'.indexOf(q) > -1;
+      if(oth){ any = true; h += '<div data-v="__other" style="padding:13px 12px;border-radius:12px;margin:12px 0 3px;font-size:16px;background:#fff6e0;font-weight:700">✏️ Mere type ki dukaan list mein nahi hai (khud likhein)</div>'; }
+      if(!any) h = '<div style="padding:24px;text-align:center;color:#777">Kuch nahi mila</div>';
+      $('rtPickList').innerHTML = h;
+    }
+    $('rtTypeBtn').addEventListener('click', function(){ $('rtPickQ').value = ''; build(''); pk.style.display = 'flex'; });
+    $('rtPickX').addEventListener('click', function(){ pk.style.display = 'none'; });
+    pk.addEventListener('click', function(e){ if(e.target === pk) pk.style.display = 'none'; });
+    $('rtPickQ').addEventListener('input', function(){ build(this.value); });
+    $('rtPickList').addEventListener('click', function(e){
+      var d = e.target.closest ? e.target.closest('[data-v]') : null; if(!d) return;
+      $('rtType').value = d.getAttribute('data-v'); $('rtType').dispatchEvent(new Event('change')); pk.style.display = 'none';
+      if(d.getAttribute('data-v') === '__other') setTimeout(function(){ $('rtTypeOther').focus(); }, 50);
+    });
+  })();
   $('rtPhone').addEventListener('input', function(){ this.value = this.value.replace(/\\D/g, '').slice(0, 10); });
   $('rtGo').addEventListener('click', function(){
     var name = $('rtName').value.trim(), sel = $('rtType').value, type = sel === '__other' ? $('rtTypeOther').value.trim() : sel,
