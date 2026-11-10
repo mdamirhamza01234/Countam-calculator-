@@ -104,7 +104,7 @@ rep("  overlay.style.display = 'flex';\n}\nfunction closeStockItemModal(){", "  
 
 # ---------- retailer onboarding + runtime ----------
 GROUPS = [
- ("Restaurant aur Hotel", ["Restaurant","Biryani Store"]),
+ ("Restaurant", ["Restaurant","Biryani Restaurant"]),
  ("Khane-Peene aur Daily Needs", ["Grocery Store","Vegetable Store","Fruit Store","Fish Store","Chicken & Meat Store","Milk & Dairy Store","Sweet & Snacks Store","Bakery & Cake Store","Dry Fruits & Spice Store","Pan & Mouth Freshener Store"]),
  ("Kapde aur Fashion", ["Clothing / Apparel Store","Readymade Garments Store","Designer Boutique Store","Footwear Store","Cosmetic & Beauty Store","Jewellery Store","Bangles & Accessories Store"]),
  ("Padhai aur Sehat", ["Medical Store / Pharmacy","Book Store","Stationery Store","Optical Store","Surgical & Health Equipment Store"]),
