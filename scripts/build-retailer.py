@@ -32,7 +32,7 @@ window.RETAILER_APP = true;
     Object.defineProperty(window, 'localStorage', { value: new Proxy(wrap, { get: function(t, k){ var v = t[k]; return typeof v === 'function' ? v.bind(t) : v; }, set: function(t, k, v){ t.setItem(k, v); return true; }, deleteProperty: function(t, k){ t.removeItem(k); return true; }, ownKeys: function(){ return Object.keys(real).filter(function(k){ return k.indexOf(P) === 0; }).map(function(k){ return k.slice(P.length); }); }, getOwnPropertyDescriptor: function(t, k){ return real.getItem(P + k) == null ? undefined : { value: real.getItem(P + k), enumerable: true, configurable: true, writable: true }; } }), configurable: true });
   } catch(e){}
   window.RT_PROFILE = function(){ try { return JSON.parse(localStorage.getItem('retailer_profile') || 'null') || {}; } catch(e){ return {}; } };
-  window.RT_NAME = function(){ return (window.RT_PROFILE().name || 'Mittu Associated Retailer'); };
+  window.RT_NAME = function(){ var p = window.RT_PROFILE(); return (p.store || p.name || 'Mittu Associated Retailer'); };
   window.RT_UPI = function(){ return (window.RT_PROFILE().upi || ''); };
 })();
 </script>
@@ -83,8 +83,9 @@ rep("  // Turant publish karta hai aur result {ok, count, msg} deta hai",
     user = user || window.currentFirebaseUser || fbAuth.currentUser;
     const p = (typeof RT_PROFILE === 'function') ? RT_PROFILE() : {};
     if(!user || user.isAnonymous || !p.name || !p.type) return;
-    await set(ref(fbDb, 'retailerIndex/' + user.uid), { name: String(p.name).slice(0, 60), type: String(p.type).slice(0, 60), upi: String(p.upi || ''), ts: Date.now() });
-    await set(ref(fbDb, 'retailerProfiles/' + user.uid), { name: p.name, type: p.type, phone: p.phone || '', upi: p.upi || '', addr: p.addr || '', ts: Date.now() });
+    var shopNm = p.store || p.name;
+    await set(ref(fbDb, 'retailerIndex/' + user.uid), { name: String(shopNm).slice(0, 60), type: String(p.type).slice(0, 60), upi: String(p.upi || ''), ts: Date.now() });
+    await set(ref(fbDb, 'retailerProfiles/' + user.uid), { name: shopNm, type: p.type, phone: p.phone || '', upi: p.upi || '', addr: p.addr || '', ts: Date.now() });
   };
   window.addEventListener('mittuFirebaseUserReady', () => { setTimeout(() => { try { window.rtPublishIndex(); } catch(e){} }, 2500); });
   // Turant publish karta hai aur result {ok, count, msg} deta hai""")
@@ -148,6 +149,9 @@ RUNTIME = '''
   <button type="button" id="rtTypeBtn" style="width:100%;text-align:left;padding:13px 12px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;background:#fff;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center"><span id="rtTypeTxt" style="color:#777">— Type chunein —</span><span>🔍</span></button>
   <select id="rtType" style="display:none"><option value="">— Type chunein —</option>__OPTS__<option value="__other">Mere type ki dukaan list mein nahi hai (khud likhein)</option></select>
   <input id="rtTypeOther" maxlength="40" placeholder="Apni dukaan ka type likhein" style="display:none;margin-top:8px">
+  <label>Store ka naam (bill aur online shop mein yahi dikhega)</label>
+  <input id="rtStore" maxlength="60" placeholder="jaise: Lalan Restaurant" autocomplete="off">
+  <div id="rtStoreHint" style="font-size:12.5px;color:#0d6e4e;margin-top:4px"></div>
   <label>Mobile number</label><input id="rtPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="10 digit mobile">
   <label>UPI ID (payment lene ke liye)</label><input id="rtUpi" placeholder="jaise: name@okaxis" autocapitalize="off" autocomplete="off">
   <label>Dukaan ka pata (optional)</label><input id="rtAddr" maxlength="120" placeholder="gaon / mohalla / shahar">
@@ -159,8 +163,8 @@ RUNTIME = '''
   var CATSUG = __CATSUG__;
   var $ = function(id){ return document.getElementById(id); };
   function applyBrand(){
-    var p = RT_PROFILE(), n = p.name || 'Mittu Associated Retailer';
-    document.querySelectorAll('.rt-name').forEach(function(e){ e.textContent = p.name || 'Mittu Associated'; });
+    var p = RT_PROFILE(), n = p.store || p.name || 'Mittu Associated Retailer';
+    document.querySelectorAll('.rt-name').forEach(function(e){ e.textContent = p.store || p.name || 'Mittu Associated'; });
     document.querySelectorAll('.rt-name-full').forEach(function(e){ e.textContent = n; });
     document.querySelectorAll('.rt-name-up').forEach(function(e){ e.textContent = n.toUpperCase(); });
     document.querySelectorAll('.rt-upi').forEach(function(e){ e.textContent = p.upi || ''; });
@@ -179,11 +183,12 @@ RUNTIME = '''
   function show(prefill){
     var p = RT_PROFILE(), o = $('rtOnb');
     if(prefill){
-      $('rtName').value = p.name || ''; $('rtPhone').value = p.phone || ''; $('rtUpi').value = p.upi || ''; $('rtAddr').value = p.addr || '';
+      $('rtName').value = p.name || ''; $('rtStore').value = p.store || ''; $('rtPhone').value = p.phone || ''; $('rtUpi').value = p.upi || ''; $('rtAddr').value = p.addr || '';
       var sel = $('rtType'), has = Array.prototype.some.call(sel.options, function(x){ return x.value === p.type || x.text === p.type; });
       if(p.type && has) sel.value = p.type; else if(p.type){ sel.value = '__other'; $('rtTypeOther').style.display = 'block'; $('rtTypeOther').value = p.type; }
     }
     $('rtBack').style.display = prefill ? 'block' : 'none';
+    window.rtStoreTouched = !!(prefill && p.store && p.store !== window.rtSuggest());
     if(window.rtSyncType) window.rtSyncType();
     o.style.display = 'flex';
   }
@@ -191,7 +196,22 @@ RUNTIME = '''
   window.rtOpenProfile = function(){ show(true); };
   $('rtType').addEventListener('change', function(){ $('rtTypeOther').style.display = this.value === '__other' ? 'block' : 'none'; window.rtSyncType(); });
   // App ka apna searchable Store-type picker (phone ka dropdown nahi)
+  window.rtSuggest = function(){
+    var n = $('rtName').value.trim(), v = $('rtType').value, t = v === '__other' ? $('rtTypeOther').value.trim() : v;
+    t = (t || '').split(' / ')[0].trim();
+    if(!n) return ''; if(t && n.toLowerCase().indexOf(t.toLowerCase()) > -1) return n;
+    return (n + ' ' + t).trim();
+  };
+  window.rtStoreAuto = function(){
+    var sg = window.rtSuggest(), st = $('rtStore');
+    if(!window.rtStoreTouched || !st.value.trim()){ st.value = sg; window.rtStoreTouched = false; }
+    $('rtStoreHint').textContent = sg ? 'Suggestion: ' + sg + ' (aap badal bhi sakte hain)' : '';
+  };
+  $('rtName').addEventListener('input', function(){ window.rtStoreAuto(); });
+  $('rtTypeOther').addEventListener('input', function(){ window.rtStoreAuto(); });
+  $('rtStore').addEventListener('input', function(){ window.rtStoreTouched = true; });
   window.rtSyncType = function(){
+    if(window.rtStoreAuto) window.rtStoreAuto();
     var v = $('rtType').value, t = $('rtTypeTxt');
     t.textContent = !v ? '— Type chunein —' : (v === '__other' ? 'Khud likhein (list mein nahi)' : v); t.style.color = v ? '#111' : '#777';
   };
@@ -230,13 +250,13 @@ RUNTIME = '''
   })();
   $('rtPhone').addEventListener('input', function(){ this.value = this.value.replace(/\\D/g, '').slice(0, 10); });
   $('rtGo').addEventListener('click', function(){
-    var name = $('rtName').value.trim(), sel = $('rtType').value, type = sel === '__other' ? $('rtTypeOther').value.trim() : sel,
+    var store = $('rtStore').value.trim(), name = $('rtName').value.trim(), sel = $('rtType').value, type = sel === '__other' ? $('rtTypeOther').value.trim() : sel,
         phone = $('rtPhone').value.replace(/\\D/g, ''), upi = $('rtUpi').value.trim(), addr = $('rtAddr').value.trim(), err = $('rtErr');
     if(name.length < 2){ err.textContent = 'Dukaan ka naam likhein.'; return; }
     if(!type){ err.textContent = 'Dukaan ka type chunein (ya khud likhein).'; return; }
     if(!/^[6-9]\\d{9}$/.test(phone)){ err.textContent = 'Sahi 10 digit mobile number likhein.'; return; }
     if(!/^[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9]{1,}$/.test(upi)){ err.textContent = 'UPI ID sahi likhein (jaise name@okaxis).'; return; }
-    try { localStorage.setItem('retailer_profile', JSON.stringify({ name: name, type: type, phone: phone, upi: upi, addr: addr })); } catch(e){}
+    try { localStorage.setItem('retailer_profile', JSON.stringify({ name: name, store: store || window.rtSuggest(), type: type, phone: phone, upi: upi, addr: addr })); } catch(e){}
     $('rtOnb').style.display = 'none'; err.textContent = '';
     applyBrand();
     try { if(typeof window.rtPublishIndex === 'function') window.rtPublishIndex(); } catch(e){}
