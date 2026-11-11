@@ -2439,11 +2439,13 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
     </div>
     <div class="field">
       <label>Photo (shop par dikhegi)</label>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span id="stockItemPhotoBox"></span>
-        <button type="button" id="stockItemPhotoBtn" onclick="stockPickPhoto()" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px">📷 Photo daalein</button>
         <button type="button" id="stockItemPhotoDel" onclick="stockSetPhoto('')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:10px;padding:9px 12px;font-weight:700">Hatayein</button>
       </div>
+      <button type="button" id="stockItemWebBtn" onclick="stockWebPhoto()" style="width:100%;margin-top:8px;border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:10px;padding:11px 14px;font-weight:800;font-size:14.5px">🔍 Internet se photo dhundhein (item ke naam se)</button>
+      <button type="button" id="stockItemPhotoBtn" onclick="stockPickPhoto()" style="width:100%;margin-top:8px;border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:11px 14px;font-weight:800;font-size:14.5px">📷 Photo daalein</button>
+      <div style="font-size:12px;color:#777;margin-top:4px">Asli photo (apni kheenchi hui) sabse achhi rehti hai.</div>
       <input type="hidden" id="stockItemImg">
     </div>
     <div class="field">
@@ -7370,12 +7372,16 @@ function closeStockItemModal(){
 function stockSetPhoto(url){
   document.getElementById('stockItemImg').value = url || '';
   document.getElementById('stockItemPhotoBox').innerHTML = cldThumb(url);
-  document.getElementById('stockItemPhotoBtn').textContent = url ? '📷 Photo badlein' : '📷 Photo daalein';
+  document.getElementById('stockItemPhotoBtn').textContent = url ? '📷 Apni photo se badlein' : '📷 Photo daalein';
   document.getElementById('stockItemPhotoDel').style.display = url ? 'inline-block' : 'none';
+}
+function stockWebPhoto(){
+  var nm = document.getElementById('stockItemName').value.trim();
+  cldWebPick(nm, function(url){ stockSetPhoto(url); }, function(on){ var b = document.getElementById('stockItemWebBtn'); b.disabled = on; b.textContent = on ? '⏳ Upload ho rahi hai…' : '🔍 Internet se photo dhundhein (item ke naam se)'; });
 }
 function stockPickPhoto(){
   var b = document.getElementById('stockItemPhotoBtn');
-  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; else b.textContent = document.getElementById('stockItemImg').value ? '📷 Photo badlein' : '📷 Photo daalein'; });
+  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; else b.textContent = document.getElementById('stockItemImg').value ? '📷 Apni photo se badlein' : '📷 Photo daalein'; });
 }
 function saveStockItemModal(){
   const name = document.getElementById('stockItemName').value.trim();
@@ -9484,8 +9490,9 @@ function renderStockScanRows(){
         <button type="button" class="scan-del" onclick="removeStockScanRow(${idx})" aria-label="Row hatayein">✕</button>
       </div>
       <input type="text" class="scan-in" id="scanName${idx}" value="${scanEsc(it.itemName)}" placeholder="Item ka naam *" oninput="scanFieldEdited(${idx}, false)" onchange="scanRecordRefresh(${idx})">
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span id="scanPhotoBox${idx}">${cldThumb(it.imageUrl)}</span>
+        <button type="button" onclick="scanWebPhoto(${idx})" style="border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:10px;padding:8px 12px;font-weight:700;font-size:14px">🔍 Internet se</button>
         <button type="button" id="scanPhotoBtn${idx}" onclick="scanPickPhoto(${idx})" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:8px 12px;font-weight:700;font-size:14px">${it.imageUrl ? '📷 Photo badlein' : '📷 Photo daalein'}</button>
       </div>
       <div style="margin-top:8px;">
@@ -9596,6 +9603,15 @@ function addStockScanRow(){
   renderStockScanRows();
   const last = document.getElementById('scanName' + (stockScanParsedItems.length - 1));
   if(last){ last.scrollIntoView({ block: 'center' }); last.focus(); }
+}
+function scanWebPhoto(idx){
+  var it = stockScanParsedItems[idx]; if(!it) return;
+  var nm = (document.getElementById('scanName' + idx) || {}).value || it.itemName || '';
+  cldWebPick(nm, function(url){
+    it.imageUrl = url;
+    var bx = document.getElementById('scanPhotoBox' + idx); if(bx) bx.innerHTML = cldThumb(url);
+    var b = document.getElementById('scanPhotoBtn' + idx); if(b) b.textContent = '📷 Photo badlein';
+  });
 }
 function scanPickPhoto(idx){
   var it = stockScanParsedItems[idx], b = document.getElementById('scanPhotoBtn' + idx); if(!it) return;
@@ -10209,10 +10225,70 @@ window.cldPick = function(cb, busy){
   };
   inp.click();
 };
+// Internet (free-license) se item ki photo dhundhna: Wikimedia Commons + Openverse
+window.cldWebSearch = async function(q){
+  var out = [], enc = encodeURIComponent(q);
+  function ok(u){ return typeof u === 'string' && /^https:\/\//.test(u); }
+  var jobs = [
+    fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=' + enc + '&prop=imageinfo&iiprop=url|mime&iiurlwidth=700')
+      .then(function(r){ return r.json(); }).then(function(d){
+        Object.values((d.query && d.query.pages) || {}).forEach(function(pg){
+          var ii = pg.imageinfo && pg.imageinfo[0];
+          if(ii && /^image\/(jpeg|png|webp)$/.test(ii.mime || '') && ok(ii.thumburl || ii.url)) out.push({ t: ii.thumburl || ii.url, src: 'Wikimedia' });
+        });
+      }).catch(function(){}),
+    fetch('https://api.openverse.org/v1/images/?page_size=12&mature=false&q=' + enc)
+      .then(function(r){ return r.json(); }).then(function(d){
+        (d.results || []).forEach(function(x){ var u = x.thumbnail || x.url; if(ok(u)) out.push({ t: u, src: 'Openverse' }); });
+      }).catch(function(){})
+  ];
+  await Promise.all(jobs);
+  return out.slice(0, 20);
+};
+window.cldWebPick = function(query, cb, busy){
+  var ov = document.createElement('div'); ov.id = 'cldWebOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483100;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML = '<div style="width:100%;max-width:480px;height:86vh;background:#fff;border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)">'
+    + '<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 6px"><b style="flex:1;font-size:18px;color:#1a3a8a">🔍 Internet se photo</b><button type="button" id="cldWebX" style="border:0;background:#eee;border-radius:50%;width:36px;height:36px;font-size:18px">✕</button></div>'
+    + '<div style="padding:0 14px 6px;display:flex;gap:8px"><input id="cldWebQ" style="flex:1;padding:11px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;min-width:0" placeholder="Item ka naam (English mein behtar)"><button type="button" id="cldWebGo" style="border:0;background:#1a56c4;color:#fff;border-radius:12px;padding:0 16px;font-weight:800">Search</button></div>'
+    + '<div style="padding:0 14px 6px;font-size:12px;color:#666">Free-license photos hain. Packet wale (brand) items ki photo na mile to apni khud ki asli photo lagayein.</div>'
+    + '<div id="cldWebRes" style="flex:1;overflow:auto;padding:6px 14px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start"></div></div>';
+  document.body.appendChild(ov);
+  var qi = ov.querySelector('#cldWebQ'), res = ov.querySelector('#cldWebRes'); qi.value = query || '';
+  function close(){ ov.remove(); }
+  ov.querySelector('#cldWebX').onclick = close;
+  ov.addEventListener('click', function(e){ if(e.target === ov) close(); });
+  async function go(){
+    var q = qi.value.trim(); if(!q) return;
+    res.style.display = 'block'; res.innerHTML = '<div style="padding:30px;text-align:center;color:#666">⏳ Dhundh rahe hain…</div>';
+    var list = await window.cldWebSearch(q);
+    if(!list.length){ res.innerHTML = '<div style="padding:30px;text-align:center;color:#666">Kuch nahi mila. Doosra naam try karein (jaise English mein) ya apni khud ki photo lagayein.</div>'; return; }
+    res.style.display = 'grid';
+    res.innerHTML = list.map(function(x, i){ return '<button type="button" data-i="' + i + '" style="border:1px solid #dde3ea;border-radius:12px;padding:0;background:#f6f8fa;aspect-ratio:1/1;overflow:hidden"><img src="' + x.t.replace(/"/g, '&quot;') + '" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display=\'none\'"></button>'; }).join('');
+    res._list = list;
+  }
+  res.addEventListener('click', async function(e){
+    var b = e.target.closest && e.target.closest('button[data-i]'); if(!b || !res._list) return;
+    var x = res._list[parseInt(b.getAttribute('data-i'), 10)]; if(!x) return;
+    var blob = null;
+    try { var r = await fetch(x.t); if(r.ok) blob = await r.blob(); } catch(err){}
+    if(!blob){ if(confirm('Ye photo set karne wali window mein nahi khul payi. Seedha isi photo ko laga dein?')){ close(); cb(x.t); } return; }
+    close();
+    var cropped = await window.cldCrop(blob); if(!cropped) return;
+    if(busy) busy(true);
+    try { cb(await window.cldUpload(cropped, true)); }
+    catch(err){ alert('❌ ' + (err && err.message || 'Photo upload nahi hui')); }
+    if(busy) busy(false);
+  });
+  ov.querySelector('#cldWebGo').onclick = go; qi.addEventListener('keydown', function(e){ if(e.key === 'Enter') go(); });
+  go();
+};
 window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace(/"/g, '&quot;') + '" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:10px;border:1px solid #cfd8e3">' : ''; };
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
+  var wx=document.getElementById('cldWebX');
+  if(wx){wx.click();return true;}
   var cc=document.getElementById('cldCancel');
   if(cc){cc.click();return true;}
   var pk=document.getElementById('rtPick');
