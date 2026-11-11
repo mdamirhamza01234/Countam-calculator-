@@ -10127,10 +10127,10 @@ window.cldResize = function(file, max){
     fr.readAsDataURL(file);
   });
 };
-window.cldUpload = async function(file){
+window.cldUpload = async function(file, ready){
   var u = window.currentFirebaseUser;
   if(!u || u.isAnonymous) throw new Error('Pehle apne account se login karein');
-  var blob = await window.cldResize(file, 640);
+  var blob = ready ? file : await window.cldResize(file, 640);
   var tok = await u.getIdToken();
   var sr = await fetch('/api/cloudinary-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tok }) });
   var sg = await sr.json().catch(function(){ return {}; });
@@ -10143,14 +10143,68 @@ window.cldUpload = async function(file){
   if(!ur.ok || !ud.secure_url) throw new Error((ud.error && ud.error.message) || 'Photo upload nahi hui');
   return ud.secure_url;
 };
+// Photo ko shop ke square (1:1) frame mein zoom/move karke set karne wali window. Cancel par null.
+window.cldCrop = function(file){
+  return new Promise(function(resolve){
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onerror = function(){ URL.revokeObjectURL(url); alert('Ye photo khul nahi rahi'); resolve(null); };
+    im.onload = function(){
+      var F = Math.min(Math.round(window.innerWidth * 0.86), 360), W = im.naturalWidth, H = im.naturalHeight;
+      var fit = F / Math.max(W, H), z = 1, tx = 0, ty = 0;
+      var ov = document.createElement('div'); ov.id = 'cldCropOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;font-family:sans-serif';
+      ov.innerHTML = '<div style="color:#fff;font-weight:800;font-size:17px;margin-bottom:4px">Photo set karein</div>'
+        + '<div style="color:#ddd;font-size:13px;margin-bottom:10px;text-align:center">Shop par isi square mein dikhegi. Ungli se khiskayein, do ungli se zoom karein.</div>'
+        + '<div id="cldFrame" style="position:relative;width:' + F + 'px;height:' + F + 'px;background:#fff;border-radius:14px;overflow:hidden;touch-action:none;box-shadow:0 0 0 2px #fff"></div>'
+        + '<div style="display:flex;align-items:center;gap:10px;width:' + F + 'px;margin:14px 0 4px;color:#fff"><span style="font-size:20px">−</span><input id="cldZoom" type="range" min="1" max="6" step="0.01" value="1" style="flex:1"><span style="font-size:20px">+</span></div>'
+        + '<div style="display:flex;gap:10px;width:' + F + 'px;margin-top:10px"><button type="button" id="cldReset" style="flex:1;border:0;border-radius:12px;padding:13px;font-weight:800;background:#e8eefc;color:#1a3a8a">Reset</button><button type="button" id="cldCancel" style="flex:1;border:0;border-radius:12px;padding:13px;font-weight:800;background:#444;color:#fff">Cancel</button><button type="button" id="cldOk" style="flex:1.4;border:0;border-radius:12px;padding:13px;font-weight:800;background:#1a7a3e;color:#fff">✓ Upload</button></div>';
+      document.body.appendChild(ov);
+      var fr = ov.querySelector('#cldFrame'), zr = ov.querySelector('#cldZoom');
+      im.style.cssText = 'position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;user-select:none;-webkit-user-drag:none;pointer-events:none';
+      im.width = W; im.height = H; fr.appendChild(im);
+      function apply(){ im.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + (fit * z) + ')'; zr.value = z; }
+      function reset(){ z = 1; tx = (F - W * fit) / 2; ty = (F - H * fit) / 2; apply(); }
+      function zoomTo(nz, cx, cy){ nz = Math.min(6, Math.max(1, nz)); var k = nz / z, s0 = fit * z; var ix = (cx - tx) / s0, iy = (cy - ty) / s0; z = nz; var s1 = fit * z; tx = cx - ix * s1; ty = cy - iy * s1; apply(); }
+      reset();
+      var pts = {}, lastD = 0, lastX = 0, lastY = 0;
+      function rel(e){ var r = fr.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+      fr.addEventListener('pointerdown', function(e){ fr.setPointerCapture(e.pointerId); pts[e.pointerId] = rel(e); lastD = 0; lastX = e.clientX; lastY = e.clientY; });
+      fr.addEventListener('pointermove', function(e){
+        if(!pts[e.pointerId]) return;
+        pts[e.pointerId] = rel(e); var ids = Object.keys(pts);
+        if(ids.length >= 2){
+          var a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y);
+          if(lastD) zoomTo(z * d / lastD, (a.x + b.x) / 2, (a.y + b.y) / 2);
+          lastD = d;
+        } else { tx += e.clientX - lastX; ty += e.clientY - lastY; apply(); }
+        lastX = e.clientX; lastY = e.clientY;
+      });
+      function up(e){ delete pts[e.pointerId]; lastD = 0; lastX = e.clientX; lastY = e.clientY; }
+      fr.addEventListener('pointerup', up); fr.addEventListener('pointercancel', up);
+      fr.addEventListener('wheel', function(e){ e.preventDefault(); var p = rel(e); zoomTo(z * (e.deltaY < 0 ? 1.1 : 0.9), p.x, p.y); }, { passive: false });
+      zr.addEventListener('input', function(){ zoomTo(parseFloat(zr.value), F / 2, F / 2); });
+      ov.querySelector('#cldReset').onclick = reset;
+      function done(v){ ov.remove(); URL.revokeObjectURL(url); resolve(v); }
+      ov.querySelector('#cldCancel').onclick = function(){ done(null); };
+      ov.querySelector('#cldOk').onclick = function(){
+        var OUT = 600, r = OUT / F, c = document.createElement('canvas'); c.width = OUT; c.height = OUT;
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, OUT, OUT);
+        x.drawImage(im, tx * r, ty * r, W * fit * z * r, H * fit * z * r);
+        c.toBlob(function(b){ done(b); }, 'image/jpeg', 0.85);
+      };
+    };
+    im.src = url;
+  });
+};
 // Camera / gallery chunne ke liye: cb(url) milta hai
 window.cldPick = function(cb, busy){
   var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
   inp.onchange = async function(){
     var f = inp.files && inp.files[0]; if(!f) return;
+    var blob = await window.cldCrop(f); if(!blob) return;
     if(busy) busy(true);
-    try { cb(await window.cldUpload(f)); }
-    catch(e){ alert('❌ ' + (e && e.message || 'Photo upload nahi hui') + '\n\nItem bina photo ke save ho sakta hai, baad mein photo jod sakte hain.'); }
+    try { cb(await window.cldUpload(blob, true)); }
+    catch(e){ alert('❌ ' + (e && e.message || 'Photo upload nahi hui') + '\\n\\nItem bina photo ke save ho sakta hai, baad mein photo jod sakte hain.'); }
     if(busy) busy(false);
   };
   inp.click();
@@ -10159,6 +10213,8 @@ window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
+  var cc=document.getElementById('cldCancel');
+  if(cc){cc.click();return true;}
   var pk=document.getElementById('rtPick');
   if(pk&&pk.style.display==='flex'){pk.style.display='none';return true;}
   var ob=document.getElementById('rtOnb'),bk=document.getElementById('rtBack');
