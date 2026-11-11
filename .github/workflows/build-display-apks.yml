@@ -1,4 +1,4 @@
-name: Build Display APKs (Staff, DQR, Delivery, Retailer)
+name: Build Display APKs (Staff, DQR, Delivery, Retailer, Online Shop)
 
 on:
   workflow_dispatch:
@@ -41,6 +41,11 @@ jobs:
             apk: DQR-Retailer.apk
             tag: dqr-retailer-apk-latest
             title: DQR Retailer APK (latest)
+          - key: shop
+            apk: Mittu-Online-Shop.apk
+            tag: shop-apk-latest
+            title: Mittu Online Shop APK (latest)
+            ks: shop
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -81,6 +86,12 @@ jobs:
 
       - name: Build signed release APK
         working-directory: android
+        env:
+          # Online Shop apni purani signing key se bane (taaki purane install par update ho sake)
+          KS_PATH: ${{ matrix.ks == 'shop' && '../../android-signing/mittu-shop.keystore' || '' }}
+          KS_PASS: ${{ matrix.ks == 'shop' && 'mittushop123' || '' }}
+          KS_ALIAS: ${{ matrix.ks == 'shop' && 'mittushop' || '' }}
+          KS_KEY_PASS: ${{ matrix.ks == 'shop' && 'mittushop123' || '' }}
         run: |
           P=gradle/wrapper/gradle-wrapper.properties
           cp $P $P.orig
