@@ -7187,7 +7187,7 @@ function stockSetPhoto(url){
 }
 function stockPickPhoto(){
   var b = document.getElementById('stockItemPhotoBtn');
-  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; });
+  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; else b.textContent = document.getElementById('stockItemImg').value ? '📷 Photo badlein' : '📷 Photo daalein'; });
 }
 function saveStockItemModal(){
   const name = document.getElementById('stockItemName').value.trim();
@@ -9414,7 +9414,7 @@ function scanPickPhoto(idx){
     it.imageUrl = url;
     var bx = document.getElementById('scanPhotoBox' + idx); if(bx) bx.innerHTML = cldThumb(url);
     if(b) b.textContent = '📷 Photo badlein';
-  }, function(on){ if(b){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; } });
+  }, function(on){ if(b){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; else b.textContent = it.imageUrl ? '📷 Photo badlein' : '📷 Photo daalein'; } });
 }
 function removeStockScanRow(idx){
   syncStockScanFromDOM();
