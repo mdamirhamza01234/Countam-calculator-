@@ -2258,6 +2258,15 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
       <input type="text" id="stockItemHindi" placeholder="आलू">
     </div>
     <div class="field">
+      <label>Photo (shop par dikhegi)</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="stockItemPhotoBox"></span>
+        <button type="button" id="stockItemPhotoBtn" onclick="stockPickPhoto()" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px">📷 Photo daalein</button>
+        <button type="button" id="stockItemPhotoDel" onclick="stockSetPhoto('')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:10px;padding:9px 12px;font-weight:700">Hatayein</button>
+      </div>
+      <input type="hidden" id="stockItemImg">
+    </div>
+    <div class="field">
       <label id="stockQtyLabel">Quantity</label>
       <input type="number" id="stockItemQty" placeholder="0">
     </div>
@@ -7142,6 +7151,7 @@ function openStockItemModal(id){
   if(item){
     document.getElementById('stockItemName').value = item.itemName || '';
     document.getElementById('stockItemHindi').value = item.hindiName || '';
+    stockSetPhoto(item.imageUrl || '');
     document.getElementById('stockItemQty').value = item.quantity || 0;
     document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
     document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
@@ -7153,6 +7163,7 @@ function openStockItemModal(id){
     });
     setUnitBtn(pBtn, '');
     addSalePriceRow('', '');
+    stockSetPhoto('');
   }
   renderConvBox();
   smRecalcAll();
@@ -7167,6 +7178,16 @@ function openStockItemModal(id){
 function closeStockItemModal(){
   closeUnitMenu();
   document.getElementById('stockItemOverlay').style.display = 'none';
+}
+function stockSetPhoto(url){
+  document.getElementById('stockItemImg').value = url || '';
+  document.getElementById('stockItemPhotoBox').innerHTML = cldThumb(url);
+  document.getElementById('stockItemPhotoBtn').textContent = url ? '📷 Photo badlein' : '📷 Photo daalein';
+  document.getElementById('stockItemPhotoDel').style.display = url ? 'inline-block' : 'none';
+}
+function stockPickPhoto(){
+  var b = document.getElementById('stockItemPhotoBtn');
+  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; });
 }
 function saveStockItemModal(){
   const name = document.getElementById('stockItemName').value.trim();
@@ -7193,6 +7214,7 @@ function saveStockItemModal(){
     salePrices: salePrices,
     unitConv: collectConv(),
     lowAlert: Number(document.getElementById('stockItemLowAlert').value) || 0,
+    imageUrl: document.getElementById('stockItemImg').value || '',
     createdAt: (id && (list.find(it => it.id === id) || {}).createdAt) || (id ? stockItemDate({ id: id }) || Date.now() : Date.now())
   };
   const existingIdx = list.findIndex(it => it.id === item.id);
@@ -9273,6 +9295,10 @@ function renderStockScanRows(){
         <button type="button" class="scan-del" onclick="removeStockScanRow(${idx})" aria-label="Row hatayein">✕</button>
       </div>
       <input type="text" class="scan-in" id="scanName${idx}" value="${scanEsc(it.itemName)}" placeholder="Item ka naam *" oninput="scanFieldEdited(${idx}, false)" onchange="scanRecordRefresh(${idx})">
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+        <span id="scanPhotoBox${idx}">${cldThumb(it.imageUrl)}</span>
+        <button type="button" id="scanPhotoBtn${idx}" onclick="scanPickPhoto(${idx})" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:8px 12px;font-weight:700;font-size:14px">${it.imageUrl ? '📷 Photo badlein' : '📷 Photo daalein'}</button>
+      </div>
       <div style="margin-top:8px;">
         <span class="scan-lbl" id="scanQtyLbl${idx}">Qty *</span>
         <input type="number" step="any" inputmode="decimal" class="scan-in" id="scanQty${idx}" value="${it.quantity == null ? '' : it.quantity}" placeholder="0" oninput="scanFieldEdited(${idx}, true)">
@@ -9382,6 +9408,14 @@ function addStockScanRow(){
   const last = document.getElementById('scanName' + (stockScanParsedItems.length - 1));
   if(last){ last.scrollIntoView({ block: 'center' }); last.focus(); }
 }
+function scanPickPhoto(idx){
+  var it = stockScanParsedItems[idx], b = document.getElementById('scanPhotoBtn' + idx); if(!it) return;
+  cldPick(function(url){
+    it.imageUrl = url;
+    var bx = document.getElementById('scanPhotoBox' + idx); if(bx) bx.innerHTML = cldThumb(url);
+    if(b) b.textContent = '📷 Photo badlein';
+  }, function(on){ if(b){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; } });
+}
 function removeStockScanRow(idx){
   syncStockScanFromDOM();
   stockScanParsedItems.splice(idx, 1);
@@ -9422,6 +9456,7 @@ function confirmStockScanReview(){
       salePrice: salePrices[0].price,
       salePrices: salePrices,
       lowAlert: Number(it.lowAlert) || 0,
+      imageUrl: it.imageUrl || '',
       createdAt: Date.now()
     };
     entryItems.push({
@@ -9438,6 +9473,7 @@ function confirmStockScanReview(){
       // Review mein jo Sale Price / Low Alert dikha wahi rahe (user ne badla ho to update)
       if(sales.length){ dup.salePrices = newItem.salePrices; dup.salePrice = newItem.salePrice; }
       if(newItem.lowAlert > 0) dup.lowAlert = newItem.lowAlert;
+      if(newItem.imageUrl) dup.imageUrl = newItem.imageUrl;
     }
     else list.push(newItem);
     if(touched.indexOf(target) < 0) touched.push(target);
@@ -9881,6 +9917,56 @@ document.addEventListener('click', function(e){
     shopLocFetch(function(g){ if(g) shopLocSet(g); });
   }, 3000);
 })();
+</script>
+<script id="cldphoto">
+/* Item ki photo: phone par chhoti karo -> Vercel se signature -> Cloudinary par upload -> https link */
+window.cldResize = function(file, max){
+  return new Promise(function(res, rej){
+    var fr = new FileReader();
+    fr.onerror = function(){ rej(new Error('Photo padh nahi paye')); };
+    fr.onload = function(){
+      var im = new Image();
+      im.onerror = function(){ rej(new Error('Ye photo khul nahi rahi')); };
+      im.onload = function(){
+        var r = Math.min(1, max / Math.max(im.width, im.height)), w = Math.round(im.width * r), h = Math.round(im.height * r);
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
+        c.toBlob(function(b){ b ? res(b) : rej(new Error('Photo chhoti nahi ho payi')); }, 'image/jpeg', 0.8);
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+};
+window.cldUpload = async function(file){
+  var u = window.currentFirebaseUser;
+  if(!u || u.isAnonymous) throw new Error('Pehle apne account se login karein');
+  var blob = await window.cldResize(file, 640);
+  var tok = await u.getIdToken();
+  var sr = await fetch('/api/cloudinary-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tok }) });
+  var sg = await sr.json().catch(function(){ return {}; });
+  if(!sr.ok) throw new Error(sg.error || 'Upload ki permission nahi mili');
+  var fd = new FormData();
+  fd.append('file', blob, 'item.jpg'); fd.append('api_key', sg.apiKey); fd.append('timestamp', sg.timestamp);
+  fd.append('signature', sg.signature); fd.append('folder', sg.folder); fd.append('allowed_formats', sg.allowed_formats);
+  var ur = await fetch('https://api.cloudinary.com/v1_1/' + sg.cloudName + '/image/upload', { method: 'POST', body: fd });
+  var ud = await ur.json().catch(function(){ return {}; });
+  if(!ur.ok || !ud.secure_url) throw new Error((ud.error && ud.error.message) || 'Photo upload nahi hui');
+  return ud.secure_url;
+};
+// Camera / gallery chunne ke liye: cb(url) milta hai
+window.cldPick = function(cb, busy){
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async function(){
+    var f = inp.files && inp.files[0]; if(!f) return;
+    if(busy) busy(true);
+    try { cb(await window.cldUpload(f)); }
+    catch(e){ alert('❌ ' + (e && e.message || 'Photo upload nahi hui') + '\n\nItem bina photo ke save ho sakta hai, baad mein photo jod sakte hain.'); }
+    if(busy) busy(false);
+  };
+  inp.click();
+};
+window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace(/"/g, '&quot;') + '" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:10px;border:1px solid #cfd8e3">' : ''; };
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
