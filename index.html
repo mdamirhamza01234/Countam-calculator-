@@ -10084,6 +10084,79 @@ document.addEventListener('click', function(e){
   };
 })();
 </script>
+<script id="ratepop">
+/* Bill mein rate badalne par: "Stock Sell price update" ya "Sirf is customer ke liye" */
+(function(){
+  document.addEventListener('input', function(e){
+    var t = e.target; if(!t || !t.classList || !t.classList.contains('puInput')) return;
+    var tr = t.closest('tr'); if(tr) tr.dataset.puDirty = '1';
+  });
+  document.addEventListener('focusout', function(e){
+    var t = e.target; if(!t || !t.classList || !t.classList.contains('puInput')) return;
+    var tr = t.closest('tr'); if(!tr || tr.dataset.puDirty !== '1') return;
+    tr.dataset.puDirty = '';
+    setTimeout(function(){ check(tr); }, 60);
+  });
+  function stockPrice(stock, unit){
+    var u = String(unit || '').trim().toLowerCase(), ps = getSalePrices(stock);
+    var p = ps.find(function(x){ return String(x.unit).toLowerCase() === u; });
+    return p ? p.price : null;
+  }
+  function check(tr){
+    try {
+      if(!tr.isConnected) return;
+      var name = tr.querySelector('.itemName').value.trim(); if(!name) return;
+      var stock = smartFindStock(name); if(!stock) return;
+      var rate = parseFloat(tr.querySelector('.itemRate').value) || 0;
+      var unit = String(tr.querySelector('.itemUnit').value || '').trim() || String(stock.unit || 'pcs');
+      if(rate <= 0) return;
+      var old = stockPrice(stock, unit);
+      if(old == null || Math.abs(old - rate) < 0.005) return;
+      var key = rate + '|' + unit.toLowerCase();
+      if(tr.dataset.askedRate === key) return;
+      tr.dataset.askedRate = key;
+      ask(tr, stock, name, unit, old, rate);
+    } catch(err){ console.warn('ratepop', err); }
+  }
+  function applyStock(stock, unit, rate){
+    var list = getStockList();
+    var it = list.find(function(x){ return String(x.id) === String(stock.id); }) || list.find(function(x){ return stockNormName(x.itemName) === stockNormName(stock.itemName); });
+    if(!it) return false;
+    var u = unit.toLowerCase(), fb = String(it.unit || 'pcs');
+    if(Array.isArray(it.salePrices) && it.salePrices.length){
+      var p = it.salePrices.find(function(x){ return String(x.unit || fb).toLowerCase() === u; });
+      if(p) p.price = rate; else it.salePrices.push({ price: rate, unit: unit });
+    } else if(u === fb.toLowerCase()){
+      it.salePrice = rate;
+    } else {
+      it.salePrices = [{ price: Number(it.salePrice) || 0, unit: fb }, { price: rate, unit: unit }];
+    }
+    saveStockList(list);
+    try { if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(it).catch(function(){}); } catch(e){}
+    try { if(typeof renderStockList === 'function') renderStockList(); } catch(e){}
+    return true;
+  }
+  function ask(tr, stock, name, unit, old, rate){
+    var ov = document.getElementById('ratePopOverlay'); if(ov) ov.remove();
+    ov = document.createElement('div'); ov.id = 'ratePopOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center';
+    var esc = function(x){ return String(x).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+    var b = function(k, t, c){ return '<button type="button" data-rp="' + k + '" style="display:block;width:100%;border:0;border-radius:14px;padding:15px;margin-top:10px;font-size:16px;font-weight:800;color:#fff;background:' + c + '">' + t + '</button>'; };
+    ov.innerHTML = '<div style="width:100%;max-width:480px;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))">'
+      + '<div style="font-weight:800;font-size:18px;color:#16325c">Rate badal gaya</div>'
+      + '<div style="font-size:14px;color:#444;margin-top:6px"><b>' + esc(name) + '</b><br>Stock sell price: <b>\u20b9' + (+old.toFixed(2)) + '/' + esc(unit) + '</b> \u2192 naya: <b style="color:#1a7a3e">\u20b9' + (+rate.toFixed(2)) + '/' + esc(unit) + '</b></div>'
+      + b('stock', '\ud83d\udce6 Stock Sell price update', '#16325c') + b('cust', '\ud83d\udc64 Only for this customer', '#a04e00') + '</div>';
+    ov.addEventListener('click', function(e){
+      var x = e.target.closest && e.target.closest('[data-rp]');
+      if(!x && e.target !== ov) return;
+      var k = x ? x.getAttribute('data-rp') : 'cust';
+      ov.remove();
+      if(k === 'stock'){ if(!applyStock(stock, unit, rate)) alert('Stock item nahi mila.'); }
+    });
+    document.body.appendChild(ov);
+  }
+})();
+</script>
 <script id="f2b">
 window.rtFillCatList = window.rtFillCatList || function(){
   var set = {}, out = [];
