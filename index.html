@@ -464,11 +464,25 @@
         const v = (Array.isArray(it.salePrices) && it.salePrices.length ? it.salePrices : [{ price: it.salePrice, unit: it.unit }])
           .map(x => ({ p: Number(x.price) || 0, u: String(x.unit || it.unit || 'pcs') })).filter(x => x.p > 0);
         if(!v.length){ skipped++; return; }
-        const o = { n: String(it.itemName), v: v, s: (Number(it.quantity) || 0) > 0 ? 1 : 0 };
-        if(it.hindiName) o.h = String(it.hindiName);
-        if(it.imageUrl && /^https:\/\//.test(it.imageUrl)) o.i = it.imageUrl;
-        // Firebase key mein . # $ [ ] / allowed nahi — saaf karo
-        out[String(it.id).replace(/[.#$\[\]\/]/g, '_')] = o;
+        const sp = (Array.isArray(it.salePrices) && it.salePrices.length ? it.salePrices : [{ price: it.salePrice, unit: it.unit }]);
+        const okImg = u => (typeof u === 'string' && /^https:\/\//.test(u)) ? u : '';
+        // Jis sale price ki apni alag photo hai wo shop par alag item banta hai; baaki pehle item mein rehte hain
+        const mk = (vv, img, label) => {
+          const o = { n: String(it.itemName), v: vv, s: (Number(it.quantity) || 0) > 0 ? 1 : 0 };
+          if(it.hindiName) o.h = String(it.hindiName);
+          if(img) o.i = img;
+          if(label) o.vl = String(label).slice(0, 20);
+          return o;
+        };
+        const base = String(it.id).replace(/[.#$\[\]\/]/g, '_');
+        const main = [], extra = [];
+        sp.forEach((x, i) => {
+          const pv = { p: Number(x.price) || 0, u: String(x.unit || it.unit || 'pcs') };
+          if(pv.p <= 0) return;
+          if(i > 0 && okImg(x.imageUrl)) extra.push({ pv: pv, img: okImg(x.imageUrl) }); else main.push(pv);
+        });
+        if(main.length) out[base] = mk(main, okImg(it.imageUrl), extra.length ? main[0].u : '');
+        extra.forEach((e, k) => { out[base + '__p' + (k + 1)] = mk([e.pv], e.img, e.pv.u); });
       });
       const count = Object.keys(out).length;
       await set(ref(fbDb, 'publicShop/stock'), out);
@@ -6598,25 +6612,43 @@ function refreshSaleRemoveBtns(){
   renderConvBox();
   smRecalcAll();
 }
-function addSalePriceRow(price, unit){
+function addSalePriceRow(price, unit, img){
   const box = document.getElementById('stockSalePriceRows');
   const wrap = document.createElement('div');
   wrap.className = 'sale-row-wrap';
   wrap.innerHTML = '<div class="price-unit-row"><input type="number" class="stockSalePriceInput" placeholder="0" oninput="smSale(this)" onkeydown="handlePriceUnitEnter(event)">' +
     '<button type="button" class="unit-pick-btn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>' +
     '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.sale-row-wrap\').remove(); refreshSaleRemoveBtns();">×</button></div>' +
-    '<div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" class="sm-slider" min="0" max="100" step="0.01" value="5" oninput="smSlider(this)"><span class="mg-val sm-val">5.00%</span></div>';
+    '<div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" class="sm-slider" min="0" max="100" step="0.01" value="5" oninput="smSlider(this)"><span class="mg-val sm-val">5.00%</span></div>' +
+    '<div class="sale-photo" style="margin-top:8px;padding:8px 10px;background:#fff8ea;border:1px dashed #d9a441;border-radius:10px"><div style="font-size:12.5px;color:#8a5a00;font-weight:700;margin-bottom:6px">Is sale price ki alag photo (shop par ye alag item banega)</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="spBox"></span><button type="button" onclick="salePhotoWeb(this)" style="border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">🔍 Internet se</button><button type="button" onclick="salePhotoOwn(this)" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">📷 Apni photo</button><button type="button" class="spDel" onclick="salePhotoSet(this,\'\')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">Hatayein</button></div></div>';
   box.appendChild(wrap);
+  salePhotoSetWrap(wrap, img || '');
   wrap.querySelector('input').value = price === 0 ? '' : (price || '');
   setUnitBtn(wrap.querySelector('.unit-pick-btn'), unit || '');
   wrap.dataset.src = Number(price) > 0 ? 'sale' : 'pct';
   refreshSaleRemoveBtns();
 }
+function salePhotoSetWrap(wrap, url){
+  wrap.dataset.img = url || '';
+  const bx = wrap.querySelector('.spBox'), d = wrap.querySelector('.spDel');
+  if(bx) bx.innerHTML = cldThumb(url);
+  if(d) d.style.display = url ? 'inline-block' : 'none';
+}
+function salePhotoSet(btn, url){ salePhotoSetWrap(btn.closest('.sale-row-wrap'), url); }
+function salePhotoOwn(btn){
+  const wrap = btn.closest('.sale-row-wrap'), t = btn.textContent;
+  cldPick(function(url){ salePhotoSetWrap(wrap, url); }, function(on){ btn.disabled = on; btn.textContent = on ? '⏳ Upload…' : t; });
+}
+function salePhotoWeb(btn){
+  const wrap = btn.closest('.sale-row-wrap'), t = btn.textContent;
+  const nm = document.getElementById('stockItemName').value.trim();
+  cldWebPick(nm, function(url){ salePhotoSetWrap(wrap, url); }, function(on){ btn.disabled = on; btn.textContent = on ? '⏳ Upload…' : t; });
+}
 // Purana item (sirf ek salePrice) bhi sahi chale, naya item (salePrices list) bhi
 function getSalePrices(item){
   const fb = String(item.unit || 'pcs');
   if(Array.isArray(item.salePrices) && item.salePrices.length){
-    return item.salePrices.map(p => ({ price: Number(p.price) || 0, unit: String(p.unit || fb) }));
+    return item.salePrices.map(p => ({ price: Number(p.price) || 0, unit: String(p.unit || fb), imageUrl: p.imageUrl || '' }));
   }
   return [{ price: Number(item.salePrice) || 0, unit: fb }];
 }
@@ -7158,7 +7190,7 @@ function openStockItemModal(id){
     document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
     document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
     setUnitBtn(pBtn, item.unit || '');
-    getSalePrices(item).forEach(p => addSalePriceRow(p.price, p.unit));
+    getSalePrices(item).forEach(p => addSalePriceRow(p.price, p.unit, p.imageUrl));
   } else {
     ['stockItemName','stockItemHindi','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
       document.getElementById(id2).value = '';
@@ -7202,12 +7234,15 @@ function saveStockItemModal(){
   const list = getStockList();
   const rawSale = Array.from(document.querySelectorAll('#stockSalePriceRows .price-unit-row')).map(r => ({
     price: Number(r.querySelector('input').value) || 0,
-    unit: (r.querySelector('.unit-pick-btn').dataset.unit || '').trim()
+    unit: (r.querySelector('.unit-pick-btn').dataset.unit || '').trim(),
+    img: (r.parentElement && r.parentElement.dataset.img) || ''
   }));
   // Stock ki quantity purchase unit mein hoti hai (na ho to pehli sale unit, phir pcs)
   const qtyUnit = (document.getElementById('stockPurchaseUnitBtn').dataset.unit || '').trim()
     || ((rawSale.find(p => p.unit) || {}).unit) || 'pcs';
-  let salePrices = rawSale.filter(p => p.price > 0).map(p => ({ price: p.price, unit: p.unit || qtyUnit }));
+  let salePrices = rawSale.filter(p => p.price > 0).map(p => ({ price: p.price, unit: p.unit || qtyUnit, imageUrl: p.img || '' }));
+  // Pehle price ki photo upar ke Photo wale box se aati hai; baaki ki apni photo
+  salePrices.forEach((p, i) => { if(i === 0 || !p.imageUrl) delete p.imageUrl; });
   if(!salePrices.length) salePrices = [{ price: 0, unit: qtyUnit }];
   const item = {
     id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),

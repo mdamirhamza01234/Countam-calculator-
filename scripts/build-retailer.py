@@ -73,7 +73,7 @@ rep("const upiId = '7303714309@axl';\n  const payeeName = 'MITTU WHOLESALER & RE
 # ---------- Firebase paths ----------
 rep("onValue(ref(fbDb, 'shopOrders'), (snap) => {", "onValue(ref(fbDb, 'retailerOrders/' + user.uid), (snap) => {")
 rep("Database rules mein shopOrders ka read allow karein.", "Firebase Database rules mein retailerOrders wale rules Publish karein.")
-rep("if(it.imageUrl && /^https:\\/\\//.test(it.imageUrl)) o.i = it.imageUrl;", "if(it.imageUrl && /^https:\\/\\//.test(it.imageUrl)) o.i = it.imageUrl;\n        if(it.category) o.c = String(it.category).slice(0, 40);")
+rep("if(img) o.i = img;", "if(img) o.i = img;\n          if(it.category) o.c = String(it.category).slice(0, 40);")
 rep("await set(ref(fbDb, 'publicShop/stock'), out);",
     "await set(ref(fbDb, 'retailers/' + user.uid + '/stock'), out);\n      if (typeof window.rtPublishIndex === 'function') await window.rtPublishIndex(user);")
 # profile/index publish helper inside the module (needs set/ref)
