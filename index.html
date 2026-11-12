@@ -2191,7 +2191,6 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     <datalist id="stockItemNameSuggestions"></datalist>
     <button type="button" class="stock-add-btn" onclick="openStockItemModal()">+ Add Item</button>
   </div>
-  <div id="stockCatChips" style="display:none;gap:8px;overflow-x:auto;white-space:nowrap;margin:-4px 0 12px;padding:2px 0;-webkit-overflow-scrolling:touch"></div>
   <button type="button" class="stock-ai-advisor-btn" onclick="openAiAdvisorModal()">🤖 Ask from AI — Stock &amp; Marketing Problem</button>
   <button type="button" class="stock-scan-btn" onclick="document.getElementById('stockScanFileInput').click()">🤖 AI Through Scan Bill / Invoice (Printed ya Handwritten) — Auto Add Items</button>
   <button type="button" class="stock-entries-toggle-btn" id="stockEntriesToggleBtn" onclick="toggleStockEntriesList()">🧾 Stocks Data Entry List</button>
@@ -2206,6 +2205,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     <span id="stockSortLabel"></span>
     <button type="button" class="stock-dots-btn" onclick="openStockSortSheet()" aria-label="Sort by"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
   </div>
+  <div id="stockCatChips" style="display:none;gap:8px;overflow-x:auto;white-space:nowrap;margin:0 0 12px;padding:2px 0;-webkit-overflow-scrolling:touch"></div>
   <div id="stockListContainer"></div>
 </div>
 
