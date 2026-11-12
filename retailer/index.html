@@ -438,6 +438,17 @@
   });
   attachShopOrders();
   // ---- Walk-in: dukandaar ka jawab (customer ko dikhta hai) + dukaan ki location publish ----
+  // Payment setting: public cfg -> payConfig/<uid>, secret keys -> gatewaySecrets/<uid>/<gw> (sirf owner padh/likh sakta hai)
+  window.payCfgLoad = async function(){
+    const u = window.currentFirebaseUser || fbAuth.currentUser; if(!u || u.isAnonymous) return null;
+    const sn = await get(ref(fbDb, 'payConfig/' + u.uid)); return sn.val();
+  };
+  window.payCfgSave = async function(cfg, gw, secrets){
+    const u = window.currentFirebaseUser || fbAuth.currentUser;
+    if(!u || u.isAnonymous) throw new Error('Pehle apne account se login karein');
+    await set(ref(fbDb, 'payConfig/' + u.uid), cfg);
+    if(gw && secrets && Object.keys(secrets).length) await update(ref(fbDb, 'gatewaySecrets/' + u.uid + '/' + gw), secrets);
+  };
   window.walkinSetStatus = function(id, st, extra){ try { set(ref(fbDb, 'walkinStatus/' + id), Object.assign({ s: st, ts: Date.now() }, extra || {})).catch(e => console.warn('walkin status', e)); } catch(e){} };
   window.publishShopLoc = function(l){
     const u = window.currentFirebaseUser; if(!l || !u || u.isAnonymous) return;
@@ -2306,8 +2317,20 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
   <button type="button" class="mode-toggle-btn" id="modeOrdersBtn" onclick="switchToOrdersView()"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.5L21 8H6"/></svg> Online Orders<span id="ordersBadge" class="orders-badge" style="display:none;">0</span></button>
 </div>
 <div id="shopSettingOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10030;align-items:flex-end;justify-content:center">
-  <div style="width:100%;max-width:460px;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(22px + env(safe-area-inset-bottom,0px))">
+  <div style="width:100%;max-width:460px;max-height:92vh;overflow:auto;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(22px + env(safe-area-inset-bottom,0px))">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><b style="font-size:18px">⚙️ Setting</b><button type="button" id="shopSettingClose" style="border:0;background:#f1f1f1;border-radius:50%;width:34px;height:34px;font-size:18px">✕</button></div>
+    <div style="font-weight:800;margin:6px 0">💳 Payment lene ka tarika</div>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1.5px solid #ddd;border-radius:12px;margin-bottom:8px"><input type="radio" name="payMode" value="upi" checked style="margin-top:4px"><span><b>Sirf UPI ID</b><br><small style="color:#666">Customer seedha UPI se pay karta hai, payment aap khud (physically) check karte ho.</small></span></label>
+    <div id="payUpiBox" style="margin:-2px 0 8px"><input id="payUpi" autocapitalize="off" autocomplete="off" placeholder="UPI ID, jaise: name@okaxis" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px"></div>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1.5px solid #ddd;border-radius:12px;margin-bottom:8px"><input type="radio" name="payMode" value="gateway" style="margin-top:4px"><span><b>Payment Gateway</b><br><small style="color:#666">Online payment apne-aap confirm hota hai (PhonePe, Razorpay ya Cashfree).</small></span></label>
+    <div id="payGwBox" style="display:none;margin:0 0 8px;padding:10px;background:#f6f8fc;border-radius:12px">
+      <div id="payGwTabs" style="display:flex;gap:6px;margin-bottom:10px"></div>
+      <div id="payGwFields"></div>
+      <div id="payGwHelp" style="font-size:12.5px;color:#555;margin-top:8px"></div>
+    </div>
+    <button type="button" id="paySave" style="width:100%;padding:13px;border:0;border-radius:12px;background:#1a56c4;color:#fff;font-weight:800;font-size:15px">💾 Payment setting save karein</button>
+    <div id="payMsg" style="font-size:12.5px;margin:8px 0 14px;min-height:16px"></div>
+    <div style="border-top:1px solid #eee;margin:4px 0 12px"></div>
     <div style="font-weight:800;margin:6px 0">📍 Dukaan ki GPS location</div>
     <div style="font-size:13px;color:#666;margin-bottom:8px">Delivery partner ko pata chalta hai ki saman kahan se uthana hai (pickup). Dukaan par khade hokar save karein.</div>
     <div id="shopLocInfo" style="background:#f6f1ea;border-radius:12px;padding:12px;font-size:14px;margin-bottom:10px"></div>
@@ -10094,7 +10117,7 @@ function shopLocResolve(t){
     clearTimeout(tm); return shopLocParse((j.status && j.status.url) || '', true) || shopLocParse(j.contents || '', true);
   }).catch(function(){ return null; });
 }
-function openShopSetting(){ shopLocRender(); document.getElementById('shopLocMsg').textContent = ''; document.getElementById('shopSettingOverlay').style.display = 'flex'; }
+function openShopSetting(){ try { payOpen(); } catch(e){} shopLocRender(); document.getElementById('shopLocMsg').textContent = ''; document.getElementById('shopSettingOverlay').style.display = 'flex'; }
 function shopLocFetch(cb){
   if(!navigator.geolocation){ cb(null); return; }
   navigator.geolocation.getCurrentPosition(function(p){ cb({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy || 0), ts: Date.now() }); }, function(){ cb(null); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
@@ -10133,6 +10156,86 @@ document.addEventListener('click', function(e){
     shopLocFetch(function(g){ if(g) shopLocSet(g); });
   }, 3000);
 })();
+</script>
+<script id="paycfg">
+/* Setting > Payment: Sirf UPI ID ya Payment Gateway (PhonePe / Razorpay / Cashfree) */
+var PAYGW = {
+  phonepe: { name: 'PhonePe', pub: [['merchantId', 'Merchant ID'], ['clientId', 'Client ID']], sec: [['clientSecret', 'Client Secret']], sel: [['clientVersion', 'Client Version', [['1', '1'], ['2', '2']]], ['env', 'Mode', [['PRODUCTION', 'Live (Production)'], ['SANDBOX', 'Test (Sandbox)']]]],
+    help: ['PhonePe Business account (KYC approved) chahiye.', 'Merchant ID, Client ID, Client Secret aur Client Version PhonePe Business dashboard ke Developer / API Keys section mein milte hain.', 'Pehle Test mode mein try karein, phir Live karein.'] },
+  razorpay: { name: 'Razorpay', pub: [['keyId', 'Key ID (rzp_live_… ya rzp_test_…)']], sec: [['keySecret', 'Key Secret'], ['webhookSecret', 'Webhook Secret (optional)']], sel: [],
+    help: ['Razorpay account (KYC approved) chahiye.', 'Key ID aur Key Secret Razorpay Dashboard > Account & Settings > API Keys se milte hain. Key Secret sirf ek baar dikhta hai.', 'Webhook Secret Webhooks section se aata hai (payment confirm hone ke liye baad mein kaam aayega).'] },
+  cashfree: { name: 'Cashfree', pub: [['appId', 'App ID (Client ID)']], sec: [['secretKey', 'Secret Key']], sel: [['env', 'Mode', [['PRODUCTION', 'Live (Production)'], ['SANDBOX', 'Test (Sandbox)']]]],
+    help: ['Cashfree Payments account (KYC approved) chahiye.', 'App ID aur Secret Key Cashfree Dashboard > Developers > API Keys se milte hain.', 'Test aur Live ki keys alag hoti hain, Mode usi hisaab se chunein.'] }
+};
+var PAYST = { mode: 'upi', gw: 'razorpay', hasSecret: {}, pub: {} };
+function payLocal(){ try { return JSON.parse(localStorage.getItem('mittu_pay_cfg') || 'null') || {}; } catch(e){ return {}; } }
+function payEsc(x){ return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function payFieldsRender(){
+  var g = PAYGW[PAYST.gw], h = '', pv = (PAYST.pub[PAYST.gw] || {});
+  var inp = 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #ccc;border-radius:10px;font-size:15px;background:#fff';
+  g.pub.forEach(function(f){ h += '<label style="display:block;font-size:12.5px;font-weight:700;margin:8px 0 3px">' + f[1] + '</label><input data-pf="' + f[0] + '" value="' + payEsc(pv[f[0]]) + '" autocapitalize="off" autocomplete="off" style="' + inp + '">'; });
+  g.sec.forEach(function(f){ var saved = !!(PAYST.hasSecret[PAYST.gw] && PAYST.hasSecret[PAYST.gw][f[0]]);
+    h += '<label style="display:block;font-size:12.5px;font-weight:700;margin:8px 0 3px">🔒 ' + f[1] + (saved ? ' <span style="color:#137333">(save hai)</span>' : '') + '</label><input type="password" data-sf="' + f[0] + '" autocapitalize="off" autocomplete="new-password" placeholder="' + (saved ? '•••••••• (badalna ho tabhi likhein)' : 'Yahan paste karein') + '" style="' + inp + '">'; });
+  g.sel.forEach(function(f){ var cur = pv[f[0]] || f[2][0][0];
+    h += '<label style="display:block;font-size:12.5px;font-weight:700;margin:8px 0 3px">' + f[1] + '</label><select data-pf="' + f[0] + '" style="' + inp + '">' + f[2].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; });
+  document.getElementById('payGwFields').innerHTML = h;
+  document.getElementById('payGwHelp').innerHTML = '<b>' + g.name + ' ke liye ye chahiye:</b><ul style="margin:4px 0 0 18px;padding:0">' + g.help.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul><div style="margin-top:6px;color:#8a5a00">🔒 Secret keys sirf aapke account mein save hoti hain (aapke alawa koi nahi padh sakta).</div>';
+  document.getElementById('payGwTabs').innerHTML = Object.keys(PAYGW).map(function(k){ var on = k === PAYST.gw; return '<button type="button" data-pgw="' + k + '" style="flex:1;padding:10px 4px;border-radius:10px;font-weight:800;font-size:13.5px;border:1.5px solid ' + (on ? '#1a56c4' : '#ccc') + ';background:' + (on ? '#e8f0ff' : '#fff') + ';color:' + (on ? '#1a56c4' : '#444') + '">' + PAYGW[k].name + '</button>'; }).join('');
+}
+function payCollectPub(){ var o = {}; document.querySelectorAll('#payGwFields [data-pf]').forEach(function(e){ o[e.getAttribute('data-pf')] = e.value.trim(); }); return o; }
+function payModeRender(){
+  var gw = PAYST.mode === 'gateway';
+  document.getElementById('payGwBox').style.display = gw ? 'block' : 'none';
+  document.getElementById('payUpiBox').style.display = gw ? 'none' : 'block';
+  document.querySelectorAll('input[name=payMode]').forEach(function(r){ r.checked = r.value === PAYST.mode; });
+  if(gw) payFieldsRender();
+}
+function payOpen(){
+  var l = payLocal(), upi = l.upi || (window.RT_PROFILE ? (RT_PROFILE().upi || '') : '');
+  PAYST.mode = l.mode || 'upi'; PAYST.gw = l.gw || 'razorpay'; PAYST.pub = l.pub || {}; PAYST.hasSecret = l.hasSecret || {};
+  document.getElementById('payUpi').value = upi; document.getElementById('payMsg').textContent = '';
+  payModeRender();
+  if(window.payCfgLoad) window.payCfgLoad().then(function(c){
+    if(!c) return;
+    PAYST.mode = c.mode || PAYST.mode; PAYST.gw = c.gw || PAYST.gw; PAYST.pub = c.pub || PAYST.pub; PAYST.hasSecret = c.hasSecret || PAYST.hasSecret;
+    if(c.upi) document.getElementById('payUpi').value = c.upi;
+    payModeRender();
+  }).catch(function(){});
+}
+document.addEventListener('change', function(e){ if(e.target && e.target.name === 'payMode'){ if(PAYST.mode === 'gateway') PAYST.pub[PAYST.gw] = payCollectPub(); PAYST.mode = e.target.value; payModeRender(); } });
+document.addEventListener('click', function(e){
+  var t = e.target; if(!t || !t.closest) return;
+  var tab = t.closest('[data-pgw]');
+  if(tab){ PAYST.pub[PAYST.gw] = payCollectPub(); PAYST.gw = tab.getAttribute('data-pgw'); payFieldsRender(); return; }
+  if(t.id !== 'paySave') return;
+  var msg = document.getElementById('payMsg'); msg.style.color = '#555';
+  var upi = document.getElementById('payUpi').value.trim();
+  if(PAYST.mode === 'upi'){
+    if(!/^[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9]{1,}$/.test(upi)){ msg.style.color = '#b3261e'; msg.textContent = 'UPI ID sahi likhein (jaise name@okaxis).'; return; }
+  }
+  var g = PAYGW[PAYST.gw], pub = payCollectPub(), sec = {};
+  if(PAYST.mode === 'gateway'){
+    for(var i = 0; i < g.pub.length; i++){ if(!pub[g.pub[i][0]]){ msg.style.color = '#b3261e'; msg.textContent = g.pub[i][1] + ' bharein.'; return; } }
+    var saved = PAYST.hasSecret[PAYST.gw] || {};
+    document.querySelectorAll('#payGwFields [data-sf]').forEach(function(el){ if(el.value.trim()) sec[el.getAttribute('data-sf')] = el.value.trim(); });
+    for(var j = 0; j < g.sec.length; j++){ var k = g.sec[j][0]; if(!sec[k] && !saved[k] && !/optional/.test(g.sec[j][1])){ msg.style.color = '#b3261e'; msg.textContent = g.sec[j][1] + ' bharein.'; return; } }
+  }
+  var hs = JSON.parse(JSON.stringify(PAYST.hasSecret || {})); hs[PAYST.gw] = Object.assign({}, hs[PAYST.gw] || {});
+  Object.keys(sec).forEach(function(k){ hs[PAYST.gw][k] = true; });
+  var allPub = Object.assign({}, PAYST.pub); allPub[PAYST.gw] = pub;
+  var cfg = { mode: PAYST.mode, gw: PAYST.gw, upi: upi || '', pub: allPub, hasSecret: hs, ts: Date.now() };
+  t.disabled = true; msg.textContent = 'Save ho raha hai…';
+  Promise.resolve(window.payCfgSave ? window.payCfgSave(cfg, PAYST.mode === 'gateway' ? PAYST.gw : null, sec) : null).then(function(){
+    try { localStorage.setItem('mittu_pay_cfg', JSON.stringify(cfg)); } catch(x){}
+    if(PAYST.mode === 'upi' && window.RT_PROFILE){ try { var p = RT_PROFILE(); p.upi = upi; localStorage.setItem('retailer_profile', JSON.stringify(p)); } catch(x){} }
+    PAYST.hasSecret = hs; PAYST.pub = allPub; t.disabled = false;
+    if(PAYST.mode === 'gateway') payFieldsRender();
+    msg.style.color = '#137333'; msg.textContent = '✅ Save ho gaya.';
+  }).catch(function(err){
+    t.disabled = false; msg.style.color = '#b3261e';
+    msg.textContent = /PERMISSION|permission/.test(String(err && err.message)) ? 'Save nahi hua: Firebase rules mein payConfig / gatewaySecrets wale rules Publish karein.' : ('Save nahi hua: ' + (err && err.message || err));
+  });
+});
 </script>
 <script id="cldphoto">
 /* Item ki photo: phone par chhoti karo -> Vercel se signature -> Cloudinary par upload -> https link */
