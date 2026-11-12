@@ -9876,7 +9876,7 @@ function openCustomerRecords(){
   ov.style.cssText = 'position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center';
   const btn = (k, t, c) => '<button type="button" data-cr="' + k + '" style="display:block;width:100%;border:0;border-radius:14px;padding:15px;margin-top:10px;font-size:16px;font-weight:800;color:#fff;background:' + c + '">' + t + '</button>';
   ov.innerHTML = '<div style="width:100%;max-width:480px;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))"><div style="font-weight:800;font-size:18px;color:#16325c">Customer Record PDF</div><div style="font-size:13px;color:#666;margin-top:2px">Kaun sa PDF banana hai?</div>'
-    + btn('all', 'All PDF', '#16325c') + btn('physical', 'Physical Bill PDF', '#a04e00') + btn('f2b', 'F2B/C2B Bill PDF', '#1a7a3e')
+    + btn('all', 'All PDF', '#16325c') + btn('physical', 'Physical Bill PDF', '#a04e00') + btn('online', 'Online Bill PDF', '#1565c0') + btn('f2b', 'F2B/C2B Bill PDF', '#1a7a3e')
     + '<button type="button" data-cr="x" style="display:block;width:100%;border:0;border-radius:14px;padding:13px;margin-top:10px;font-size:15px;font-weight:700;background:#eef0f4;color:#444">Cancel</button></div>';
   ov.addEventListener('click', function(e){
     const b = e.target.closest && e.target.closest('[data-cr]');
@@ -9905,13 +9905,13 @@ function openCustomerRecords(){
 function exportCustomerRecordsPDF(kind){
   kind = kind || 'all';
   let history = getBillHistory();
-  if (history && kind !== 'all') history = history.filter(r => { const f = !!(r && r.type === 'f2b'), on = !!(r && (r.source === 'online' || r.orderId)); return kind === 'f2b' ? f : (!f && !on); });
+  if (history && kind !== 'all') history = history.filter(r => { const f = !!(r && r.type === 'f2b'), on = !!(r && (r.source === 'online' || r.orderId)); return kind === 'f2b' ? f : kind === 'online' ? (on && !f) : (!f && !on); });
   if (history === null){
     alert('Storage is not available in this environment.');
     return;
   }
   if (history.length === 0){
-    alert(kind === 'f2b' ? 'Abhi koi F2B/C2B bill nahi hai.' : kind === 'physical' ? 'Abhi koi physical bill nahi hai.' : 'No bill has been generated yet.');
+    alert(kind === 'f2b' ? 'Abhi koi F2B/C2B bill nahi hai.' : kind === 'online' ? 'Abhi koi online bill nahi hai.' : kind === 'physical' ? 'Abhi koi physical bill nahi hai.' : 'No bill has been generated yet.');
     return;
   }
 
@@ -9934,7 +9934,7 @@ function exportCustomerRecordsPDF(kind){
   function drawHeader(){
     pdf.setFontSize(15);
     pdf.setFont(undefined, 'bold');
-    pdf.text(RT_NAME() + ' - Customer Record' + (kind === 'f2b' ? ' (F2B/C2B Bills)' : kind === 'physical' ? ' (Physical Bills)' : ''), pageWidth / 2, y, { align: 'center' });
+    pdf.text(RT_NAME() + ' - Customer Record' + (kind === 'f2b' ? ' (F2B/C2B Bills)' : kind === 'online' ? ' (Online Bills)' : kind === 'physical' ? ' (Physical Bills)' : ''), pageWidth / 2, y, { align: 'center' });
     y += 7;
     pdf.setFontSize(9);
     pdf.setFont(undefined, 'normal');
