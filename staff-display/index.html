@@ -237,12 +237,39 @@
 <style id="sat-fix">
 header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px))) !important}
 </style>
+<style id="itemphoto-css">
+#menuBtn{background:none;border:0;color:inherit;font-size:24px;line-height:1;padding:0 10px 0 0;cursor:pointer}
+#menuOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900}
+#menuOverlay.show{display:block}
+#menuDrawer{position:fixed;top:0;bottom:0;left:0;width:78%;max-width:300px;background:#fff;z-index:901;transform:translateX(-102%);transition:transform .2s;box-shadow:2px 0 12px rgba(0,0,0,.25);padding-top:env(safe-area-inset-top,0px)}
+#menuDrawer.open{transform:none}
+#menuDrawer .md-head{padding:22px 18px 12px;font-weight:800;font-size:18px;color:#1a3a8a;border-bottom:1px solid #e4e8ee}
+#menuDrawer button{display:block;width:100%;text-align:left;border:0;background:none;padding:16px 18px;font-size:16px;font-weight:700;color:#222;border-bottom:1px solid #f0f2f5}
+#photosPage{display:none;position:fixed;inset:0;background:#f4f6fa;z-index:800;flex-direction:column}
+#photosPage.show{display:flex}
+#photosPage .ph-head{display:flex;align-items:center;gap:10px;padding:calc(14px + env(safe-area-inset-top,0px)) 14px 12px;background:#1a3a8a;color:#fff;font-weight:800;font-size:18px}
+#photosPage .ph-head button{background:none;border:0;color:#fff;font-size:24px;padding:0 6px}
+#phSearch{margin:10px 12px 4px;padding:11px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px}
+#phList{flex:1;overflow:auto;padding:6px 12px 24px}
+.ph-row{background:#fff;border-radius:14px;padding:10px;margin-top:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.ph-top{display:flex;gap:10px;align-items:center}
+.ph-img{width:64px;height:64px;border-radius:10px;border:1px solid #cfd8e3;background:#eef1f6;object-fit:cover;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;color:#9aa5b5}
+.ph-name{font-weight:800;font-size:15px;color:#1b2430}
+.ph-unit{font-size:13px;color:#566;margin-top:2px}
+.ph-btns{display:flex;gap:6px;margin-top:9px}
+.ph-btns button{flex:1;border:0;border-radius:10px;padding:10px 4px;font-weight:700;font-size:13px;background:#e8eefc;color:#1a3a8a}
+.ph-btns button[disabled]{opacity:.5}
+</style>
 </head>
 <body>
 
 <header>
+  <button type="button" id="menuBtn" aria-label="Menu">☰</button>
   <span id="headerIcon" class="header-icon"></span> Mittu Staff Display — Order List
 </header>
+
+<div id="menuOverlay"></div>
+<nav id="menuDrawer"><div class="md-head">Menu</div><button type="button" id="menuPhotos">🖼️ Item photos</button></nav>
 
 <div id="mainTabs" class="tabs"></div>
 
@@ -256,6 +283,12 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
   <div id="doneWrap" class="wrap"></div>
 </div>
 
+<div id="photosPage">
+  <div class="ph-head"><button type="button" id="phBack" aria-label="Back">←</button> 🖼️ Item photos</div>
+  <input id="phSearch" type="search" placeholder="🔍 Item dhundhein…">
+  <div id="phList"><div style="padding:30px;text-align:center;color:#666">⏳ Items aa rahe hain…</div></div>
+</div>
+
 <div id="staffAlertOverlay">
   <div class="staff-alert-box">
     <div class="staff-alert-emoji" id="staffAlertEmoji"></div>
@@ -265,9 +298,172 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
   </div>
 </div>
 
+<script>window.CLD_SCOPE='staff';</script>
+<script id="cldphoto">
+/* Item ki photo: phone par chhoti karo -> Vercel se signature -> Cloudinary par upload -> https link */
+window.cldResize = function(file, max){
+  return new Promise(function(res, rej){
+    var fr = new FileReader();
+    fr.onerror = function(){ rej(new Error('Photo padh nahi paye')); };
+    fr.onload = function(){
+      var im = new Image();
+      im.onerror = function(){ rej(new Error('Ye photo khul nahi rahi')); };
+      im.onload = function(){
+        var r = Math.min(1, max / Math.max(im.width, im.height)), w = Math.round(im.width * r), h = Math.round(im.height * r);
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
+        c.toBlob(function(b){ b ? res(b) : rej(new Error('Photo chhoti nahi ho payi')); }, 'image/jpeg', 0.8);
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+};
+window.cldUpload = async function(file, ready){
+  var u = window.currentFirebaseUser;
+  if(!u || (u.isAnonymous && window.CLD_SCOPE !== 'staff')) throw new Error('Pehle apne account se login karein');
+  var blob = ready ? file : await window.cldResize(file, 640);
+  var tok = await u.getIdToken();
+  var sr = await fetch('/api/cloudinary-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tok, scope: window.CLD_SCOPE || '' }) });
+  var sg = await sr.json().catch(function(){ return {}; });
+  if(!sr.ok) throw new Error(sg.error || 'Upload ki permission nahi mili');
+  var fd = new FormData();
+  fd.append('file', blob, 'item.jpg'); fd.append('api_key', sg.apiKey); fd.append('timestamp', sg.timestamp);
+  fd.append('signature', sg.signature); fd.append('folder', sg.folder); fd.append('allowed_formats', sg.allowed_formats);
+  var ur = await fetch('https://api.cloudinary.com/v1_1/' + sg.cloudName + '/image/upload', { method: 'POST', body: fd });
+  var ud = await ur.json().catch(function(){ return {}; });
+  if(!ur.ok || !ud.secure_url) throw new Error((ud.error && ud.error.message) || 'Photo upload nahi hui');
+  return ud.secure_url;
+};
+// Photo ko shop ke square (1:1) frame mein zoom/move karke set karne wali window. Cancel par null.
+window.cldCrop = function(file){
+  return new Promise(function(resolve){
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onerror = function(){ URL.revokeObjectURL(url); alert('Ye photo khul nahi rahi'); resolve(null); };
+    im.onload = function(){
+      var F = Math.min(Math.round(window.innerWidth * 0.86), 360), W = im.naturalWidth, H = im.naturalHeight;
+      var fit = F / Math.max(W, H), z = 1, tx = 0, ty = 0;
+      var ov = document.createElement('div'); ov.id = 'cldCropOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;font-family:sans-serif';
+      ov.innerHTML = '<div style="color:#fff;font-weight:800;font-size:17px;margin-bottom:4px">Photo set karein</div>'
+        + '<div style="color:#ddd;font-size:13px;margin-bottom:10px;text-align:center">Photo shop ke card mein poore square mein bharkar dikhegi. Neeche ki dhundhli patti par card ka quantity/ADD button aayega. Ungli se khiskayein, do ungli se zoom karein.</div>'
+        + '<div id="cldFrame" style="position:relative;width:' + F + 'px;height:' + F + 'px;background:#fff;border-radius:14px;overflow:hidden;touch-action:none;box-shadow:0 0 0 2px #fff"><div style="position:absolute;left:0;right:0;bottom:0;height:18%;background:rgba(239,239,242,.82);border-top:2px dashed #888;z-index:2;pointer-events:none;display:flex;align-items:center;padding:0 10px;font-size:12px;color:#555;font-weight:700">1 pcs · ADD (yahan patti aayegi)</div></div>'
+        + '<div style="display:flex;align-items:center;gap:10px;width:' + F + 'px;margin:14px 0 4px;color:#fff"><span style="font-size:20px">−</span><input id="cldZoom" type="range" min="1" max="6" step="0.01" value="1" style="flex:1"><span style="font-size:20px">+</span></div>'
+        + '<div style="display:flex;gap:10px;width:' + F + 'px;margin-top:10px"><button type="button" id="cldReset" style="flex:1;border:0;border-radius:12px;padding:13px;font-weight:800;background:#e8eefc;color:#1a3a8a">Reset</button><button type="button" id="cldCancel" style="flex:1;border:0;border-radius:12px;padding:13px;font-weight:800;background:#444;color:#fff">Cancel</button><button type="button" id="cldOk" style="flex:1.4;border:0;border-radius:12px;padding:13px;font-weight:800;background:#1a7a3e;color:#fff">✓ Upload</button></div>';
+      document.body.appendChild(ov);
+      var fr = ov.querySelector('#cldFrame'), zr = ov.querySelector('#cldZoom');
+      im.style.cssText = 'position:absolute;left:0;top:0;max-width:none;transform-origin:0 0;user-select:none;-webkit-user-drag:none;pointer-events:none';
+      im.width = W; im.height = H; fr.appendChild(im);
+      function apply(){ im.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + (fit * z) + ')'; zr.value = z; }
+      function reset(){ z = 1; tx = (F - W * fit) / 2; ty = (F - H * fit) / 2; apply(); }
+      function zoomTo(nz, cx, cy){ nz = Math.min(6, Math.max(1, nz)); var k = nz / z, s0 = fit * z; var ix = (cx - tx) / s0, iy = (cy - ty) / s0; z = nz; var s1 = fit * z; tx = cx - ix * s1; ty = cy - iy * s1; apply(); }
+      reset();
+      var pts = {}, lastD = 0, lastX = 0, lastY = 0;
+      function rel(e){ var r = fr.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+      fr.addEventListener('pointerdown', function(e){ fr.setPointerCapture(e.pointerId); pts[e.pointerId] = rel(e); lastD = 0; lastX = e.clientX; lastY = e.clientY; });
+      fr.addEventListener('pointermove', function(e){
+        if(!pts[e.pointerId]) return;
+        pts[e.pointerId] = rel(e); var ids = Object.keys(pts);
+        if(ids.length >= 2){
+          var a = pts[ids[0]], b = pts[ids[1]], d = Math.hypot(a.x - b.x, a.y - b.y);
+          if(lastD) zoomTo(z * d / lastD, (a.x + b.x) / 2, (a.y + b.y) / 2);
+          lastD = d;
+        } else { tx += e.clientX - lastX; ty += e.clientY - lastY; apply(); }
+        lastX = e.clientX; lastY = e.clientY;
+      });
+      function up(e){ delete pts[e.pointerId]; lastD = 0; lastX = e.clientX; lastY = e.clientY; }
+      fr.addEventListener('pointerup', up); fr.addEventListener('pointercancel', up);
+      fr.addEventListener('wheel', function(e){ e.preventDefault(); var p = rel(e); zoomTo(z * (e.deltaY < 0 ? 1.1 : 0.9), p.x, p.y); }, { passive: false });
+      zr.addEventListener('input', function(){ zoomTo(parseFloat(zr.value), F / 2, F / 2); });
+      ov.querySelector('#cldReset').onclick = reset;
+      function done(v){ ov.remove(); URL.revokeObjectURL(url); resolve(v); }
+      ov.querySelector('#cldCancel').onclick = function(){ done(null); };
+      ov.querySelector('#cldOk').onclick = function(){
+        var OUT = 600, r = OUT / F, c = document.createElement('canvas'); c.width = OUT; c.height = OUT;
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, OUT, OUT);
+        x.drawImage(im, tx * r, ty * r, W * fit * z * r, H * fit * z * r);
+        c.toBlob(function(b){ done(b); }, 'image/jpeg', 0.85);
+      };
+    };
+    im.src = url;
+  });
+};
+// Camera / gallery chunne ke liye: cb(url) milta hai
+window.cldPick = function(cb, busy){
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async function(){
+    var f = inp.files && inp.files[0]; if(!f) return;
+    var blob = await window.cldCrop(f); if(!blob) return;
+    if(busy) busy(true);
+    try { cb(await window.cldUpload(blob, true)); }
+    catch(e){ alert('❌ ' + (e && e.message || 'Photo upload nahi hui') + '\\n\\nItem bina photo ke save ho sakta hai, baad mein photo jod sakte hain.'); }
+    if(busy) busy(false);
+  };
+  inp.click();
+};
+// Internet (free-license) se item ki photo dhundhna: Wikimedia Commons + Openverse
+window.cldWebSearch = async function(q){
+  var out = [], enc = encodeURIComponent(q);
+  function ok(u){ return typeof u === 'string' && /^https:\/\//.test(u); }
+  var jobs = [
+    fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=' + enc + '&prop=imageinfo&iiprop=url|mime&iiurlwidth=700')
+      .then(function(r){ return r.json(); }).then(function(d){
+        Object.values((d.query && d.query.pages) || {}).forEach(function(pg){
+          var ii = pg.imageinfo && pg.imageinfo[0];
+          if(ii && /^image\/(jpeg|png|webp)$/.test(ii.mime || '') && ok(ii.thumburl || ii.url)) out.push({ t: ii.thumburl || ii.url, src: 'Wikimedia' });
+        });
+      }).catch(function(){}),
+    fetch('https://api.openverse.org/v1/images/?page_size=12&mature=false&q=' + enc)
+      .then(function(r){ return r.json(); }).then(function(d){
+        (d.results || []).forEach(function(x){ var u = x.thumbnail || x.url; if(ok(u)) out.push({ t: u, src: 'Openverse' }); });
+      }).catch(function(){})
+  ];
+  await Promise.all(jobs);
+  return out.slice(0, 20);
+};
+window.cldWebPick = function(query, cb, busy){
+  var ov = document.createElement('div'); ov.id = 'cldWebOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483100;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML = '<div style="width:100%;max-width:480px;height:86vh;background:#fff;border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)">'
+    + '<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 6px"><b style="flex:1;font-size:18px;color:#1a3a8a">🔍 Internet se photo</b><button type="button" id="cldWebX" style="border:0;background:#eee;border-radius:50%;width:36px;height:36px;font-size:18px">✕</button></div>'
+    + '<div style="padding:0 14px 6px;display:flex;gap:8px"><input id="cldWebQ" style="flex:1;padding:11px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;min-width:0" placeholder="Item ka naam (English mein behtar)"><button type="button" id="cldWebGo" style="border:0;background:#1a56c4;color:#fff;border-radius:12px;padding:0 16px;font-weight:800">Search</button></div>'
+    + '<div style="padding:0 14px 6px;font-size:12px;color:#666">Free-license photos hain. Packet wale (brand) items ki photo na mile to apni khud ki asli photo lagayein.</div>'
+    + '<div id="cldWebRes" style="flex:1;overflow:auto;padding:6px 14px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start"></div></div>';
+  document.body.appendChild(ov);
+  var qi = ov.querySelector('#cldWebQ'), res = ov.querySelector('#cldWebRes'); qi.value = query || '';
+  function close(){ ov.remove(); }
+  ov.querySelector('#cldWebX').onclick = close;
+  ov.addEventListener('click', function(e){ if(e.target === ov) close(); });
+  async function go(){
+    var q = qi.value.trim(); if(!q) return;
+    res.style.display = 'block'; res.innerHTML = '<div style="padding:30px;text-align:center;color:#666">⏳ Dhundh rahe hain…</div>';
+    var list = await window.cldWebSearch(q);
+    if(!list.length){ res.innerHTML = '<div style="padding:30px;text-align:center;color:#666">Kuch nahi mila. Doosra naam try karein (jaise English mein) ya apni khud ki photo lagayein.</div>'; return; }
+    res.style.display = 'grid';
+    res.innerHTML = list.map(function(x, i){ return '<button type="button" data-i="' + i + '" style="border:1px solid #dde3ea;border-radius:12px;padding:0;background:#f6f8fa;aspect-ratio:1/1;overflow:hidden"><img src="' + x.t.replace(/"/g, '&quot;') + '" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display=\'none\'"></button>'; }).join('');
+    res._list = list;
+  }
+  res.addEventListener('click', async function(e){
+    var b = e.target.closest && e.target.closest('button[data-i]'); if(!b || !res._list) return;
+    var x = res._list[parseInt(b.getAttribute('data-i'), 10)]; if(!x) return;
+    var blob = null;
+    try { var r = await fetch(x.t); if(r.ok) blob = await r.blob(); } catch(err){}
+    if(!blob){ if(confirm('Ye photo set karne wali window mein nahi khul payi. Seedha isi photo ko laga dein?')){ close(); cb(x.t); } return; }
+    close();
+    var cropped = await window.cldCrop(blob); if(!cropped) return;
+    if(busy) busy(true);
+    try { cb(await window.cldUpload(cropped, true)); }
+    catch(err){ alert('❌ ' + (err && err.message || 'Photo upload nahi hui')); }
+    if(busy) busy(false);
+  });
+  ov.querySelector('#cldWebGo').onclick = go; qi.addEventListener('keydown', function(e){ if(e.key === 'Enter') go(); });
+  go();
+};
+window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace(/"/g, '&quot;') + '" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:10px;border:1px solid #cfd8e3">' : ''; };
+</script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, update, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getDatabase, ref, update, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   // Same Firebase project the Mittu billing phone uses.
@@ -633,6 +829,72 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
     if(user) startListening();
   });
 
+
+  // ---------------- ITEM PHOTOS (hamburger menu) ----------------
+  (function(){
+    const $ = id => document.getElementById(id);
+    const drawer = $('menuDrawer'), ov = $('menuOverlay'), page = $('photosPage'), list = $('phList');
+    let stock = {}, photos = {}, q = '';
+    function openMenu(){ drawer.classList.add('open'); ov.classList.add('show'); }
+    function closeMenu(){ drawer.classList.remove('open'); ov.classList.remove('show'); }
+    window.closeDrawer = closeMenu;
+    $('menuBtn').addEventListener('click', openMenu);
+    ov.addEventListener('click', closeMenu);
+    $('menuPhotos').addEventListener('click', () => { closeMenu(); page.classList.add('show'); render(); });
+    $('phBack').addEventListener('click', () => page.classList.remove('show'));
+    $('phSearch').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); render(); });
+    const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    function items(){
+      const out = [];
+      Object.keys(stock || {}).forEach(id => {
+        const o = stock[id]; if(!o || !o.n) return;
+        const vv = Array.isArray(o.v) ? o.v : Object.values(o.v || {});
+        const units = vv.map(x => x && x.u).filter(Boolean);
+        out.push({ id, name: String(o.n), unit: o.vl ? String(o.vl) : units.join(' / '), img: (photos[id] && photos[id].u) || (typeof o.i === 'string' ? o.i : '') });
+      });
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    }
+    function render(){
+      if(!page.classList.contains('show')) return;
+      const all = items().filter(it => !q || (it.name + ' ' + it.unit).toLowerCase().includes(q));
+      if(!all.length){ list.innerHTML = '<div style="padding:30px;text-align:center;color:#666">' + (Object.keys(stock || {}).length ? 'Kuch nahi mila' : 'Abhi shop par koi item publish nahi hua') + '</div>'; return; }
+      list.innerHTML = all.map((it, i) => '<div class="ph-row" data-id="' + esc(it.id) + '"><div class="ph-top">'
+        + (it.img ? '<img class="ph-img" src="' + esc(it.img) + '" alt="">' : '<div class="ph-img">🖼️</div>')
+        + '<div style="min-width:0"><div class="ph-name">' + (i + 1) + '. ' + esc(it.name) + '</div><div class="ph-unit">' + (it.unit ? 'Unit: ' + esc(it.unit) : '') + '</div></div></div>'
+        + '<div class="ph-btns"><button type="button" data-a="cam">📷 Camera</button><button type="button" data-a="gal">🖼️ Gallery</button><button type="button" data-a="web">🔍 Internet</button></div></div>').join('');
+    }
+    async function save(id, url){
+      await set(ref(fbDb, 'itemPhotos/' + id), { u: url, ts: Date.now() });
+    }
+    list.addEventListener('click', e => {
+      const b = e.target.closest('button[data-a]'); if(!b) return;
+      const row = b.closest('.ph-row'), id = row.getAttribute('data-id'), it = items().find(x => x.id === id); if(!it) return;
+      const btns = row.querySelectorAll('button');
+      const busy = on => btns.forEach(x => { x.disabled = on; });
+      const done = async url => { try { await save(id, url); } catch(err){ alert('❌ Photo save nahi hui: ' + (err && err.message || err)); } };
+      const a = b.getAttribute('data-a');
+      if(a === 'web') return window.cldWebPick(it.name, done, busy);
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      if(a === 'cam') inp.setAttribute('capture', 'environment');
+      inp.onchange = async () => {
+        const f = inp.files && inp.files[0]; if(!f) return;
+        const blob = await window.cldCrop(f); if(!blob) return;
+        busy(true);
+        try { await done(await window.cldUpload(blob, true)); }
+        catch(err){ alert('❌ ' + (err && err.message || 'Photo upload nahi hui')); }
+        busy(false);
+      };
+      inp.click();
+    });
+    onAuthStateChanged(fbAuth, user => {
+      window.currentFirebaseUser = user || null;
+      if(!user) return;
+      onValue(ref(fbDb, 'publicShop/stock'), s => { stock = s.val() || {}; render(); }, () => {});
+      onValue(ref(fbDb, 'itemPhotos'), s => { photos = s.val() || {}; render(); }, () => {});
+    });
+  })();
+
   signInAnonymously(fbAuth).catch(err => {
     console.error('Anonymous sign-in failed:', err);
     if(emptyMsg){
@@ -657,10 +919,11 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
     return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0';
   }
   function zi(el){ var z = parseInt(getComputedStyle(el).zIndex, 10); return isNaN(z) ? 0 : z; }
-  var SEL = '[id$="Overlay"],[id$="Modal"],[id$="Sheet"],[id$="Screen"],[id$="Viewer"],[id$="Popup"],[id$="Dialog"],.page.show,.modal.show,#donePage.show,#drawerPanel.open';
+  var SEL = '[id$="Overlay"],[id$="Modal"],[id$="Sheet"],[id$="Screen"],[id$="Viewer"],[id$="Popup"],[id$="Dialog"],.page.show,.modal.show,#donePage.show,#drawerPanel.open,#photosPage.show,#menuDrawer.open';
   var BTN = '[data-back],[data-close],.close,.back,[aria-label*="ack" i],[aria-label*="lose" i],[id*="Back" i],[id*="Close" i],[id*="Cancel" i],[onclick*="close" i],[onclick*="hide" i],[onclick*="back" i],.stock-modal-cancel,.ph button';
   function closeEl(el){
-    if(el.id === 'drawerPanel' && typeof window.closeDrawer === 'function'){ window.closeDrawer(); return true; }
+    if((el.id === 'drawerPanel' || el.id === 'menuDrawer') && typeof window.closeDrawer === 'function'){ window.closeDrawer(); return true; }
+    if(el.id === 'photosPage'){ document.getElementById('phBack').click(); return true; }
     var b = el.querySelector(BTN);
     if(b){ try{ b.click(); }catch(e){} }
     setTimeout(function(){

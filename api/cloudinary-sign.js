@@ -37,8 +37,10 @@ export default async function handler(req) {
     const d = await r.json();
     const u = d && d.users && d.users[0];
     if (!r.ok || !u) return json({ error: 'Login check fail' }, 401);
-    if (!(u.providerUserInfo && u.providerUserInfo.length)) return json({ error: 'Anonymous login se upload nahi hota' }, 403);
-    uid = String(u.localId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    const anon = !(u.providerUserInfo && u.providerUserInfo.length);
+    // Anonymous sirf Staff display ke item-photo scope ke liye allowed (alag folder mein)
+    if (anon && body.scope !== 'staff') return json({ error: 'Anonymous login se upload nahi hota' }, 403);
+    uid = anon ? 'staff' : String(u.localId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
   } catch (e) { return json({ error: 'Login check fail' }, 401); }
 
   const timestamp = Math.floor(Date.now() / 1000);

@@ -10172,10 +10172,10 @@ window.cldResize = function(file, max){
 };
 window.cldUpload = async function(file, ready){
   var u = window.currentFirebaseUser;
-  if(!u || u.isAnonymous) throw new Error('Pehle apne account se login karein');
+  if(!u || (u.isAnonymous && window.CLD_SCOPE !== 'staff')) throw new Error('Pehle apne account se login karein');
   var blob = ready ? file : await window.cldResize(file, 640);
   var tok = await u.getIdToken();
-  var sr = await fetch('/api/cloudinary-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tok }) });
+  var sr = await fetch('/api/cloudinary-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tok, scope: window.CLD_SCOPE || '' }) });
   var sg = await sr.json().catch(function(){ return {}; });
   if(!sr.ok) throw new Error(sg.error || 'Upload ki permission nahi mili');
   var fd = new FormData();
