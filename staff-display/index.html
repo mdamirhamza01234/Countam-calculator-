@@ -250,6 +250,11 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
 #photosPage .ph-head{display:flex;align-items:center;gap:10px;padding:calc(14px + env(safe-area-inset-top,0px)) 14px 12px;background:#1a3a8a;color:#fff;font-weight:800;font-size:18px}
 #photosPage .ph-head button{background:none;border:0;color:#fff;font-size:24px;padding:0 6px}
 #phSearch{margin:10px 12px 4px;padding:11px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px}
+#phFilters{padding:4px 12px 0}
+#phStatus,#phCats{display:flex;gap:7px;overflow-x:auto;padding:5px 0}
+#phStatus button,#phCats button{flex:none;border:1.5px solid #cfd8e3;background:#fff;color:#1a3a8a;border-radius:999px;padding:7px 14px;font-weight:700;font-size:13px;white-space:nowrap}
+#phStatus button.on{background:#1a3a8a;color:#fff;border-color:#1a3a8a}
+#phCats button.on{background:#0f7a4a;color:#fff;border-color:#0f7a4a}
 #phList{flex:1;overflow:auto;padding:6px 12px 24px}
 .ph-row{background:#fff;border-radius:14px;padding:10px;margin-top:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .ph-top{display:flex;gap:10px;align-items:center}
@@ -286,6 +291,7 @@ header{padding-top:calc(18px + max(env(safe-area-inset-top,0px),var(--safe-area-
 <div id="photosPage">
   <div class="ph-head"><button type="button" id="phBack" aria-label="Back">←</button> 🖼️ Item photos</div>
   <input id="phSearch" type="search" placeholder="🔍 Item dhundhein…">
+  <div id="phFilters"><div id="phStatus"></div><div id="phCats"></div></div>
   <div id="phList"><div style="padding:30px;text-align:center;color:#666">⏳ Items aa rahe hain…</div></div>
 </div>
 
@@ -834,7 +840,7 @@ window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace
   (function(){
     const $ = id => document.getElementById(id);
     const drawer = $('menuDrawer'), ov = $('menuOverlay'), page = $('photosPage'), list = $('phList');
-    let stock = {}, photos = {}, q = '';
+    let stock = {}, photos = {}, q = '', st = 'all', cat = '';
     function openMenu(){ drawer.classList.add('open'); ov.classList.add('show'); }
     function closeMenu(){ drawer.classList.remove('open'); ov.classList.remove('show'); }
     window.closeDrawer = closeMenu;
@@ -850,14 +856,22 @@ window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace
         const o = stock[id]; if(!o || !o.n) return;
         const vv = Array.isArray(o.v) ? o.v : Object.values(o.v || {});
         const units = vv.map(x => x && x.u).filter(Boolean);
-        out.push({ id, name: String(o.n), unit: o.vl ? String(o.vl) : units.join(' / '), img: (photos[id] && photos[id].u) || (typeof o.i === 'string' ? o.i : '') });
+        out.push({ id, name: String(o.n), unit: o.vl ? String(o.vl) : units.join(' / '), cat: String(o.c || 'Anya Saman').trim() || 'Anya Saman', img: (photos[id] && photos[id].u) || (typeof o.i === 'string' ? o.i : '') });
       });
       out.sort((a, b) => a.name.localeCompare(b.name));
       return out;
     }
     function render(){
       if(!page.classList.contains('show')) return;
-      const all = items().filter(it => !q || (it.name + ' ' + it.unit).toLowerCase().includes(q));
+      const base = items();
+      if(cat && !base.some(it => it.cat === cat)) cat = '';
+      const nImg = base.filter(it => it.img).length;
+      $('phStatus').innerHTML = [['all','All (' + base.length + ')'],['has','Photo hai (' + nImg + ')'],['no','Photo nahi (' + (base.length - nImg) + ')']]
+        .map(x => '<button type="button" data-st="' + x[0] + '"' + (st === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>').join('');
+      const pool = base.filter(it => st === 'all' || (st === 'has') === !!it.img);
+      const cats = {}; pool.forEach(it => { cats[it.cat] = (cats[it.cat] || 0) + 1; });
+      $('phCats').innerHTML = Object.keys(cats).sort().map(c => '<button type="button" data-cat="' + esc(c) + '"' + (cat === c ? ' class="on"' : '') + '>' + esc(c) + ' (' + cats[c] + ')</button>').join('');
+      const all = pool.filter(it => (!cat || it.cat === cat) && (!q || (it.name + ' ' + it.unit + ' ' + it.cat).toLowerCase().includes(q)));
       if(!all.length){ list.innerHTML = '<div style="padding:30px;text-align:center;color:#666">' + (Object.keys(stock || {}).length ? 'Kuch nahi mila' : 'Abhi shop par koi item publish nahi hua') + '</div>'; return; }
       list.innerHTML = all.map((it, i) => '<div class="ph-row" data-id="' + esc(it.id) + '"><div class="ph-top">'
         + (it.img ? '<img class="ph-img" src="' + esc(it.img) + '" alt="">' : '<div class="ph-img">🖼️</div>')
@@ -867,6 +881,13 @@ window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace
     async function save(id, url){
       await set(ref(fbDb, 'itemPhotos/' + id), { u: url, ts: Date.now() });
     }
+    $('phFilters').addEventListener('click', e => {
+      const a = e.target.closest('button[data-st]'), c = e.target.closest('button[data-cat]');
+      if(a) st = a.getAttribute('data-st');
+      else if(c){ const v = c.getAttribute('data-cat'); cat = cat === v ? '' : v; }
+      else return;
+      render();
+    });
     list.addEventListener('click', e => {
       const b = e.target.closest('button[data-a]'); if(!b) return;
       const row = b.closest('.ph-row'), id = row.getAttribute('data-id'), it = items().find(x => x.id === id); if(!it) return;
