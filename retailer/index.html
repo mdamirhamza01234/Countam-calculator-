@@ -1280,7 +1280,9 @@
   .sort-switch-row .sw-txt { font-size:12.5px; color:#6b4a2a; line-height:1.35; }
   .sort-switch-row .sw-txt b { color:#a04e00; }
   .conv-box { margin:4px 0 8px; padding:5px 9px; background:#eef6ff; border:1px solid #bcd7f5; border-radius:10px; }
-  .sale-row-wrap { margin-bottom:6px; }
+  .sale-row-wrap { margin:0 0 12px; padding:10px; border:1.5px solid #cfa86a; border-radius:14px; background:#fffdf8; }
+  .sale-row-wrap .spHint { display:none; }
+  .sale-row-wrap:not(:first-child) .spHint { display:block; }
   .sale-row-wrap .mg-row { margin:2px 0 0; }
   .conv-box .conv-title { font-size:11.5px; font-weight:800; color:#16457a; margin-bottom:5px; }
   .conv-row { display:flex; align-items:center; gap:7px; margin:4px 0; font-size:13px; font-weight:700; color:#16325c; }
@@ -2450,17 +2452,6 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
     <div class="field">
       <label>Hindi Naam (optional, jaise आलू)</label>
       <input type="text" id="stockItemHindi" placeholder="आलू">
-    </div>
-    <div class="field">
-      <label>Photo (shop par dikhegi)</label>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span id="stockItemPhotoBox"></span>
-        <button type="button" id="stockItemPhotoDel" onclick="stockSetPhoto('')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:10px;padding:9px 12px;font-weight:700">Hatayein</button>
-      </div>
-      <button type="button" id="stockItemWebBtn" onclick="stockWebPhoto()" style="width:100%;margin-top:8px;border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:10px;padding:11px 14px;font-weight:800;font-size:14.5px">🔍 Internet se photo dhundhein (item ke naam se)</button>
-      <button type="button" id="stockItemPhotoBtn" onclick="stockPickPhoto()" style="width:100%;margin-top:8px;border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:10px;padding:11px 14px;font-weight:800;font-size:14.5px">📷 Photo daalein</button>
-      <div style="font-size:12px;color:#777;margin-top:4px">Asli photo (apni kheenchi hui) sabse achhi rehti hai.</div>
-      <input type="hidden" id="stockItemImg">
     </div>
     <div class="field">
       <label>Category (online shop mein is naam se dikhega)</label>
@@ -6806,7 +6797,7 @@ function addSalePriceRow(price, unit, img){
     '<button type="button" class="unit-pick-btn" onclick="openUnitMenu(this)">Unit<span class="arr">↕</span></button>' +
     '<button type="button" class="sale-remove-btn" onclick="this.closest(\'.sale-row-wrap\').remove(); refreshSaleRemoveBtns();">×</button></div>' +
     '<div class="mg-row"><span class="mg-lbl">Profit %</span><input type="range" class="sm-slider" min="0" max="100" step="0.01" value="5" oninput="smSlider(this)"><span class="mg-val sm-val">5.00%</span></div>' +
-    '<div class="sale-photo" style="margin-top:8px;padding:8px 10px;background:#fff8ea;border:1px dashed #d9a441;border-radius:10px"><div style="font-size:12.5px;color:#8a5a00;font-weight:700;margin-bottom:6px">Is sale price ki alag photo (shop par ye alag item banega)</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="spBox"></span><button type="button" onclick="salePhotoWeb(this)" style="border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">🔍 Internet se</button><button type="button" onclick="salePhotoOwn(this)" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">📷 Apni photo</button><button type="button" class="spDel" onclick="salePhotoSet(this,\'\')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">Hatayein</button></div></div>';
+    '<div class="sale-photo" style="margin-top:8px;padding:8px 10px;background:#fff8ea;border:1px dashed #d9a441;border-radius:10px"><div style="font-size:13px;color:#8a5a00;font-weight:700;margin-bottom:6px">📷 Photo (shop par dikhegi)<div class="spHint" style="font-weight:600;font-size:12px;margin-top:2px">Alag photo daaloge to shop par ye price alag item banega</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="spBox"></span><button type="button" onclick="salePhotoWeb(this)" style="border:1.5px solid #1a7a3e;background:#f1fbf5;color:#1a7a3e;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">🔍 Internet se</button><button type="button" onclick="salePhotoOwn(this)" style="border:1.5px solid #1a56c4;background:#fff;color:#1a56c4;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">📷 Apni photo</button><button type="button" class="spDel" onclick="salePhotoSet(this,\'\')" style="display:none;border:0;background:#fde8e8;color:#c62828;border-radius:9px;padding:8px 10px;font-weight:700;font-size:13.5px">Hatayein</button></div></div>';
   box.appendChild(wrap);
   salePhotoSetWrap(wrap, img || '');
   wrap.querySelector('input').value = price === 0 ? '' : (price || '');
@@ -7372,19 +7363,17 @@ function openStockItemModal(id){
     document.getElementById('stockItemName').value = item.itemName || '';
     document.getElementById('stockItemHindi').value = item.hindiName || '';
     document.getElementById('stockItemCategory').value = item.category || '';
-    stockSetPhoto(item.imageUrl || '');
     document.getElementById('stockItemQty').value = item.quantity || 0;
     document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
     document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
     setUnitBtn(pBtn, item.unit || '');
-    getSalePrices(item).forEach(p => addSalePriceRow(p.price, p.unit, p.imageUrl));
+    getSalePrices(item).forEach((p, i) => addSalePriceRow(p.price, p.unit, i === 0 ? item.imageUrl : p.imageUrl));
   } else {
     ['stockItemName','stockItemHindi','stockItemCategory','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
       document.getElementById(id2).value = '';
     });
     setUnitBtn(pBtn, '');
     addSalePriceRow('', '');
-    stockSetPhoto('');
   }
   renderConvBox();
   smRecalcAll();
@@ -7401,20 +7390,6 @@ function closeStockItemModal(){
   closeUnitMenu();
   document.getElementById('stockItemOverlay').style.display = 'none';
 }
-function stockSetPhoto(url){
-  document.getElementById('stockItemImg').value = url || '';
-  document.getElementById('stockItemPhotoBox').innerHTML = cldThumb(url);
-  document.getElementById('stockItemPhotoBtn').textContent = url ? '📷 Apni photo se badlein' : '📷 Photo daalein';
-  document.getElementById('stockItemPhotoDel').style.display = url ? 'inline-block' : 'none';
-}
-function stockWebPhoto(){
-  var nm = document.getElementById('stockItemName').value.trim();
-  cldWebPick(nm, function(url){ stockSetPhoto(url); }, function(on){ var b = document.getElementById('stockItemWebBtn'); b.disabled = on; b.textContent = on ? '⏳ Upload ho rahi hai…' : '🔍 Internet se photo dhundhein (item ke naam se)'; });
-}
-function stockPickPhoto(){
-  var b = document.getElementById('stockItemPhotoBtn');
-  cldPick(function(url){ stockSetPhoto(url); }, function(on){ b.disabled = on; if(on) b.textContent = '⏳ Upload ho rahi hai…'; else b.textContent = document.getElementById('stockItemImg').value ? '📷 Apni photo se badlein' : '📷 Photo daalein'; });
-}
 function saveStockItemModal(){
   const name = document.getElementById('stockItemName').value.trim();
   if(!name){ alert('Item Name daalein.'); return; }
@@ -7430,6 +7405,7 @@ function saveStockItemModal(){
     || ((rawSale.find(p => p.unit) || {}).unit) || 'pcs';
   let salePrices = rawSale.filter(p => p.price > 0).map(p => ({ price: p.price, unit: p.unit || qtyUnit, imageUrl: p.img || '' }));
   // Pehle price ki photo upar ke Photo wale box se aati hai; baaki ki apni photo
+  const firstImg = (salePrices[0] || {}).imageUrl || '';
   salePrices.forEach((p, i) => { if(i === 0 || !p.imageUrl) delete p.imageUrl; });
   if(!salePrices.length) salePrices = [{ price: 0, unit: qtyUnit }];
   const item = {
@@ -7444,7 +7420,7 @@ function saveStockItemModal(){
     salePrices: salePrices,
     unitConv: collectConv(),
     lowAlert: Number(document.getElementById('stockItemLowAlert').value) || 0,
-    imageUrl: document.getElementById('stockItemImg').value || '',
+    imageUrl: firstImg,
     createdAt: (id && (list.find(it => it.id === id) || {}).createdAt) || (id ? stockItemDate({ id: id }) || Date.now() : Date.now())
   };
   const existingIdx = list.findIndex(it => it.id === item.id);
