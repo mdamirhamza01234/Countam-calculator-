@@ -55,7 +55,7 @@ s = s.replace("3. Subject to 'Bhagalpur' Jurisdiction only.", "3. Subject to loc
 # JS strings
 s = s.replace("pdf.text('Mittu Wholesaler & Retailer', ", "pdf.text(RT_NAME(), ")
 s = s.replace("pdf.text('Mittu Wholesaler & Retailer - Stock Purchase Entry', ", "pdf.text(RT_NAME() + ' - Stock Purchase Entry', ")
-s = s.replace("pdf.text('Mittu Wholesaler & Retailer - Customer Record', ", "pdf.text(RT_NAME() + ' - Customer Record', ")
+s = s.replace("pdf.text('Mittu Wholesaler & Retailer - Customer Record' + ", "pdf.text(RT_NAME() + ' - Customer Record' + ")
 s = s.replace("subject: 'Mittu Wholesaler & Retailer Invoice'", "subject: RT_NAME() + ' Invoice'")
 s = s.replace("m += `🛒 *MITTU WHOLESALER & RETAILER* 🛒\\n`;", "m += `🛒 *${RT_NAME().toUpperCase()}* 🛒\\n`;")
 s = s.replace("m += `Mittu Wholesale se kharidari", "m += `${RT_NAME()} se kharidari")
@@ -89,19 +89,6 @@ rep("  // Turant publish karta hai aur result {ok, count, msg} deta hai",
   };
   window.addEventListener('mittuFirebaseUserReady', () => { setTimeout(() => { try { window.rtPublishIndex(); } catch(e){} }, 2500); });
   // Turant publish karta hai aur result {ok, count, msg} deta hai""")
-# ---------- stock category ----------
-rep('''    <div class="field">
-      <label id="stockQtyLabel">Quantity</label>''', '''    <div class="field">
-      <label>Category (online shop mein is naam se dikhega)</label>
-      <input type="text" id="stockItemCategory" list="stockCatList" placeholder="jaise: Meetha Pani Machli" autocomplete="off">
-      <datalist id="stockCatList"></datalist>
-    </div>
-    <div class="field">
-      <label id="stockQtyLabel">Quantity</label>''')
-rep("    document.getElementById('stockItemHindi').value = item.hindiName || '';", "    document.getElementById('stockItemHindi').value = item.hindiName || '';\n    document.getElementById('stockItemCategory').value = item.category || '';")
-rep("['stockItemName','stockItemHindi','stockItemQty',", "['stockItemName','stockItemHindi','stockItemCategory','stockItemQty',")
-rep("    hindiName: hindiClean(document.getElementById('stockItemHindi').value) || hindiFromDict(name),", "    hindiName: hindiClean(document.getElementById('stockItemHindi').value) || hindiFromDict(name),\n    category: document.getElementById('stockItemCategory').value.trim().slice(0, 40),")
-rep("  overlay.style.display = 'flex';\n}\nfunction closeStockItemModal(){", "  if(typeof rtFillCatList === 'function') rtFillCatList();\n  overlay.style.display = 'flex';\n}\nfunction closeStockItemModal(){")
 
 # ---------- retailer onboarding + runtime ----------
 GROUPS = [

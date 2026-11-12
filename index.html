@@ -2191,6 +2191,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     <datalist id="stockItemNameSuggestions"></datalist>
     <button type="button" class="stock-add-btn" onclick="openStockItemModal()">+ Add Item</button>
   </div>
+  <div id="stockCatChips" style="display:none;gap:8px;overflow-x:auto;white-space:nowrap;margin:-4px 0 12px;padding:2px 0;-webkit-overflow-scrolling:touch"></div>
   <button type="button" class="stock-ai-advisor-btn" onclick="openAiAdvisorModal()">🤖 Ask from AI — Stock &amp; Marketing Problem</button>
   <button type="button" class="stock-scan-btn" onclick="document.getElementById('stockScanFileInput').click()">🤖 AI Through Scan Bill / Invoice (Printed ya Handwritten) — Auto Add Items</button>
   <button type="button" class="stock-entries-toggle-btn" id="stockEntriesToggleBtn" onclick="toggleStockEntriesList()">🧾 Stocks Data Entry List</button>
@@ -2298,6 +2299,11 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
       <input type="text" id="stockItemHindi" placeholder="आलू">
     </div>
     <div class="field">
+      <label>Category (stock filter aur online shop ke liye)</label>
+      <input type="text" id="stockItemCategory" list="stockCatList" placeholder="jaise: Meetha Pani Machli" autocomplete="off">
+      <datalist id="stockCatList"></datalist>
+    </div>
+    <div class="field">
       <label id="stockQtyLabel">Quantity</label>
       <input type="number" id="stockItemQty" placeholder="0">
     </div>
@@ -2336,7 +2342,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     </button>
     <h2 style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span id="billHeadTxt">Customer &amp; Bill Details</span>
       <label id="f2bSw" style="display:flex;align-items:center;gap:6px;flex:0 0 auto;font-size:12px;font-weight:800;color:#1a7a3e;cursor:pointer" title="Farmer/Customer se saman kharidna"><span>F2B/C2B</span><input type="checkbox" id="f2bToggle" style="position:absolute;opacity:0;width:0;height:0"><span id="f2bKnob" style="width:44px;height:25px;border-radius:14px;background:#c9ced6;position:relative;transition:.2s;display:inline-block"><i id="f2bDot" style="position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:.2s"></i></span></label></h2>
-    <div id="f2bBanner" style="display:none;margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#eaf8ee;border:1.5px solid #1a7a3e;color:#12602f;font-size:13.5px;font-weight:700">🌾 F2B/C2B Bill: Farmer / Customer se anaj-saman kharid rahe ho aur unhe paisa de rahe ho. Stock badhega, ye bikri (sale) mein nahi judega.</div>
+    <div id="f2bBanner" style="display:none;margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#eaf8ee;border:1.5px solid #1a7a3e;color:#12602f;font-size:13.5px;font-weight:700">🌾 F2B/C2B Bill: Farmer / Customer se anaj-saman kharid rahe ho aur unhe paisa de rahe ho. Ye bill Stock Record mein save nahi hoga aur bikri (sale) mein bhi nahi judega.</div>
     <div class="grid2">
       <div class="field">
         <label>S. No. (Bill No.)</label>
@@ -3207,7 +3213,7 @@ function generateBill(openFile = true){
   saveBillToHistory(_billRecord);
 
   // Stock record se connect: bill ke items ka stock automatically kam karo
-  try { if(_f2b) addStockForPurchase(itemList); else deductStockForBill(itemList); } catch(e){ console.warn('Stock update failed:', e); }
+  try { if(!_f2b) deductStockForBill(itemList); } catch(e){ console.warn('Stock update failed:', e); }
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
@@ -7156,6 +7162,19 @@ function renderStockList(){
   const lowCount = list.filter(it => it.lowAlert && Number(it.quantity) <= Number(it.lowAlert)).length;
   document.getElementById('stockLowCount').textContent = lowCount;
 
+  // Category chips: All + jitni category hain (ek hi line, left-right scroll)
+  (function(){
+    const box = document.getElementById('stockCatChips'); if(!box) return;
+    const cnt = {}; list.forEach(it => { const c = String(it.category || '').trim(); if(c) cnt[c] = (cnt[c] || 0) + 1; });
+    const names = Object.keys(cnt).sort((a, b) => a.localeCompare(b));
+    if(window._stockCat && !cnt[window._stockCat]) window._stockCat = '';
+    if(!names.length){ box.style.display = 'none'; return; }
+    const cur = window._stockCat || '';
+    const chip = (v, label) => '<button type="button" data-scat="' + _unitEsc(v) + '" style="flex:0 0 auto;border:1.5px solid ' + (cur === v ? '#a04e00' : '#d9dde4') + ';background:' + (cur === v ? '#a04e00' : '#fff') + ';color:' + (cur === v ? '#fff' : '#444') + ';border-radius:18px;padding:8px 14px;font-weight:800;font-size:13px;white-space:nowrap">' + label + '</button>';
+    box.style.display = 'flex';
+    box.innerHTML = chip('', 'All (' + list.length + ')') + names.map(n => chip(n, _unitEsc(n) + ' (' + cnt[n] + ')')).join('');
+  })();
+  if(window._stockCat) list = list.filter(it => String(it.category || '').trim() === window._stockCat);
   if(query){
     list = list.filter(it => String(it.itemName||'').toLowerCase().includes(query));
   }
@@ -7220,13 +7239,14 @@ function openStockItemModal(id){
   if(item){
     document.getElementById('stockItemName').value = item.itemName || '';
     document.getElementById('stockItemHindi').value = item.hindiName || '';
+    document.getElementById('stockItemCategory').value = item.category || '';
     document.getElementById('stockItemQty').value = item.quantity || 0;
     document.getElementById('stockItemPurchasePrice').value = item.purchasePrice || '';
     document.getElementById('stockItemLowAlert').value = item.lowAlert || '';
     setUnitBtn(pBtn, item.unit || '');
     getSalePrices(item).forEach((p, i) => addSalePriceRow(p.price, p.unit, i === 0 ? item.imageUrl : p.imageUrl));
   } else {
-    ['stockItemName','stockItemHindi','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
+    ['stockItemName','stockItemHindi','stockItemCategory','stockItemQty','stockItemPurchasePrice','stockItemLowAlert'].forEach(id2 => {
       document.getElementById(id2).value = '';
     });
     setUnitBtn(pBtn, '');
@@ -7240,6 +7260,7 @@ function openStockItemModal(id){
   if(supplierField) supplierField.style.display = id ? 'none' : '';
   updateStockQtyLabel();
   closeUnitMenu();
+  if(typeof rtFillCatList === 'function') rtFillCatList();
   overlay.style.display = 'flex';
 }
 function closeStockItemModal(){
@@ -7268,6 +7289,7 @@ function saveStockItemModal(){
     id: id || ('stk_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)),
     itemName: name,
     hindiName: hindiClean(document.getElementById('stockItemHindi').value) || hindiFromDict(name),
+    category: document.getElementById('stockItemCategory').value.trim().slice(0, 40),
     quantity: Number(document.getElementById('stockItemQty').value) || 0,
     unit: qtyUnit,
     purchasePrice: Number(document.getElementById('stockItemPurchasePrice').value) || 0,
@@ -9667,21 +9689,29 @@ function renderSearchResults(){
 // ---------------- CUSTOMER RECORD PDF (all bills, one row each) ----------------
 function openCustomerRecords(){
   closeDrawer();
-  try {
-    const result = exportCustomerRecordsPDF();
-    if (result && typeof result.catch === 'function'){
-      result.catch(e => {
-        console.error('Customer Record PDF failed:', e);
-        alert('An error occurred while creating the Customer Record PDF: ' + (e && e.message ? e.message : e));
-      });
+  let ov = document.getElementById('crPickOverlay');
+  if(ov) ov.remove();
+  ov = document.createElement('div'); ov.id = 'crPickOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center';
+  const btn = (k, t, c) => '<button type="button" data-cr="' + k + '" style="display:block;width:100%;border:0;border-radius:14px;padding:15px;margin-top:10px;font-size:16px;font-weight:800;color:#fff;background:' + c + '">' + t + '</button>';
+  ov.innerHTML = '<div style="width:100%;max-width:480px;background:#fff;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))"><div style="font-weight:800;font-size:18px;color:#16325c">Customer Record PDF</div><div style="font-size:13px;color:#666;margin-top:2px">Kaun sa PDF banana hai?</div>'
+    + btn('all', 'All PDF', '#16325c') + btn('physical', 'Physical Bill PDF', '#a04e00') + btn('f2b', 'F2B/C2B Bill PDF', '#1a7a3e')
+    + '<button type="button" data-cr="x" style="display:block;width:100%;border:0;border-radius:14px;padding:13px;margin-top:10px;font-size:15px;font-weight:700;background:#eef0f4;color:#444">Cancel</button></div>';
+  ov.addEventListener('click', function(e){
+    const b = e.target.closest && e.target.closest('[data-cr]');
+    if(!b && e.target !== ov) return;
+    const k = b ? b.getAttribute('data-cr') : 'x';
+    ov.remove();
+    if(k === 'x') return;
+    try {
+      const result = exportCustomerRecordsPDF(k);
+      if (result && typeof result.catch === 'function') result.catch(err => alert('An error occurred while creating the Customer Record PDF: ' + (err && err.message ? err.message : err)));
+    } catch(err){
+      console.error('Customer Record PDF failed (sync):', err);
+      alert('An error occurred while creating the Customer Record PDF: ' + (err && err.message ? err.message : err));
     }
-  } catch(e){
-    // Catches errors thrown BEFORE the html2canvas promise is even created
-    // (e.g. a missing element) — without this, such errors were silently
-    // swallowed by the browser and the button looked like it did nothing.
-    console.error('Customer Record PDF failed (sync):', e);
-    alert('An error occurred while creating the Customer Record PDF: ' + (e && e.message ? e.message : e));
-  }
+  });
+  document.body.appendChild(ov);
 }
 
 // Builds the Customer Record PDF directly with jsPDF text drawing instead
@@ -9691,14 +9721,16 @@ function openCustomerRecords(){
 // rows — it can silently fail or produce a blank canvas, which is why the
 // button appeared to do nothing. Drawing text straight into the PDF has
 // no such dependency and is not a promise, so it can't ever hang.
-function exportCustomerRecordsPDF(){
-  const history = getBillHistory();
+function exportCustomerRecordsPDF(kind){
+  kind = kind || 'all';
+  let history = getBillHistory();
+  if (history && kind !== 'all') history = history.filter(r => { const f = !!(r && r.type === 'f2b'), on = !!(r && (r.source === 'online' || r.orderId)); return kind === 'f2b' ? f : (!f && !on); });
   if (history === null){
     alert('Storage is not available in this environment.');
     return;
   }
   if (history.length === 0){
-    alert('No bill has been generated yet.');
+    alert(kind === 'f2b' ? 'Abhi koi F2B/C2B bill nahi hai.' : kind === 'physical' ? 'Abhi koi physical bill nahi hai.' : 'No bill has been generated yet.');
     return;
   }
 
@@ -9721,7 +9753,7 @@ function exportCustomerRecordsPDF(){
   function drawHeader(){
     pdf.setFontSize(15);
     pdf.setFont(undefined, 'bold');
-    pdf.text('Mittu Wholesaler & Retailer - Customer Record', pageWidth / 2, y, { align: 'center' });
+    pdf.text('Mittu Wholesaler & Retailer - Customer Record' + (kind === 'f2b' ? ' (F2B/C2B Bills)' : kind === 'physical' ? ' (Physical Bills)' : ''), pageWidth / 2, y, { align: 'center' });
     y += 7;
     pdf.setFontSize(9);
     pdf.setFont(undefined, 'normal');
@@ -9760,7 +9792,7 @@ function exportCustomerRecordsPDF(){
   });
 
   const stamp = formatNow().replace(/[/,: ]/g, '-');
-  downloadPDF(pdf, `Mittu_Customer_Records_${stamp}.pdf`);
+  downloadPDF(pdf, `Mittu_Customer_Records${kind === 'all' ? '' : '_' + kind}_${stamp}.pdf`);
 }
 
 // init
@@ -9990,6 +10022,16 @@ document.addEventListener('click', function(e){
 })();
 </script>
 <script id="f2b">
+window.rtFillCatList = window.rtFillCatList || function(){
+  var set = {}, out = [];
+  try { getStockList().forEach(function(it){ if(it && it.category) set[it.category] = 1; }); } catch(e){}
+  Object.keys(set).forEach(function(c){ out.push('<option value="' + c.replace(/"/g, '&quot;') + '">'); });
+  var dl = document.getElementById('stockCatList'); if(dl) dl.innerHTML = out.join('');
+};
+document.addEventListener('click', function(e){
+  var b = e.target && e.target.closest && e.target.closest('[data-scat]');
+  if(b){ window._stockCat = b.getAttribute('data-scat') || ''; if(typeof renderStockList === 'function') renderStockList(); }
+});
 /* F2B/C2B: Farmer/Customer se saman kharidna aur unhe paisa dena (kharid bill) */
 window._f2b = false;
 function setF2bMode(on, silent){
