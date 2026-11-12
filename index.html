@@ -1919,6 +1919,7 @@
 .drc-tab{flex:0 0 auto;white-space:nowrap;line-height:1.2;border:1px solid #d9dde4;background:#fff;color:#444;border-radius:16px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer}
 .drc-tab.on{background:#16325c;border-color:#16325c;color:#fff}
 .drc-tab.blue.on{background:#1565c0;border-color:#1565c0}
+.drc-tab.green.on{background:#1a7a3e;border-color:#1a7a3e}
 .drawer-recent-row.online{background:#e8f1ff;border-left:3px solid #1565c0;margin:2px 0}
 .drawer-recent-row.online .drawer-recent-avatar{background:#cfe1fb;color:#0d47a1}
 .drawer-recent-row.online:active{background:#d7e7fd}
@@ -2333,7 +2334,9 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
     <button type="button" class="ai-bill-generate-btn ai-bill-top-btn" onclick="openAiBillGenerator()">
       <span class="ai-bill-spark">✦</span> AI se Bill Generate karein
     </button>
-    <h2>Customer &amp; Bill Details</h2>
+    <h2 style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span id="billHeadTxt">Customer &amp; Bill Details</span>
+      <label id="f2bSw" style="display:flex;align-items:center;gap:6px;flex:0 0 auto;font-size:12px;font-weight:800;color:#1a7a3e;cursor:pointer" title="Farmer/Customer se saman kharidna"><span>F2B/C2B</span><input type="checkbox" id="f2bToggle" style="position:absolute;opacity:0;width:0;height:0"><span id="f2bKnob" style="width:44px;height:25px;border-radius:14px;background:#c9ced6;position:relative;transition:.2s;display:inline-block"><i id="f2bDot" style="position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:.2s"></i></span></label></h2>
+    <div id="f2bBanner" style="display:none;margin:0 0 10px;padding:10px 12px;border-radius:12px;background:#eaf8ee;border:1.5px solid #1a7a3e;color:#12602f;font-size:13.5px;font-weight:700">🌾 F2B/C2B Bill: Farmer / Customer se anaj-saman kharid rahe ho aur unhe paisa de rahe ho. Stock badhega, ye bikri (sale) mein nahi judega.</div>
     <div class="grid2">
       <div class="field">
         <label>S. No. (Bill No.)</label>
@@ -2728,6 +2731,7 @@ a.oo-map{color:#1a56c4;text-decoration:underline;font-weight:600}
       </div>
     </div>
 
+    <div id="historyFilterTabs" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;scrollbar-width:none"></div>
     <div id="historyList"></div>
     <button class="rm-btn" style="width:100%; padding:10px; margin-top:10px;" onclick="clearBillHistory()"><svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete All History</button>
   </div>
@@ -2779,7 +2783,7 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
 <div id="invoiceCapture">
   <div class="inv-topbar">
     <span>Page No. 1 of 1</span>
-    <span class="inv-doctitle">INVOICE</span>
+    <span class="inv-doctitle" id="p_doctitle">INVOICE</span>
     <span>Original Copy</span>
   </div>
 
@@ -2791,30 +2795,30 @@ theme isn't affected. downloadQR() captures this instead of the plain QR. -->
 
   <div class="inv-info-row">
     <div class="inv-box inv-billing">
-      <div class="inv-box-title">Billing Details</div>
+      <div class="inv-box-title" id="p_billtitle">Billing Details</div>
       <div><b id="p_cust"></b></div>
       <div id="p_addr"></div>
       <div id="p_mobile"></div>
     </div>
     <div class="inv-box inv-invinfo">
-      <div class="inv-row"><span>Invoice Number</span><span id="p_sno" style="color:#7a1a00;"></span></div>
-      <div class="inv-row"><span>Invoice Date</span><span id="p_date"></span></div>
+      <div class="inv-row"><span id="p_lblno">Invoice Number</span><span id="p_sno" style="color:#7a1a00;"></span></div>
+      <div class="inv-row"><span id="p_lbldate">Invoice Date</span><span id="p_date"></span></div>
       <div class="inv-row"><span>Time</span><span id="p_time"></span></div>
     </div>
   </div>
 
   <table id="invTable">
     <thead>
-      <tr><th style="width:8%">Sr</th><th>Item Description</th><th style="width:13%">Qty</th><th style="width:20%">List Price (₹)</th><th style="width:20%">Amount (₹)</th></tr>
+      <tr><th style="width:8%">Sr</th><th>Item Description</th><th style="width:13%">Qty</th><th style="width:20%" id="p_thrate">List Price (₹)</th><th style="width:20%">Amount (₹)</th></tr>
     </thead>
     <tbody id="p_itemsBody"></tbody>
-    <tr class="inv-total-row"><td colspan="4" style="text-align:right;">Total</td><td class="num" id="p_total"></td></tr>
+    <tr class="inv-total-row"><td colspan="4" style="text-align:right;" id="p_lbltotal">Total</td><td class="num" id="p_total"></td></tr>
   </table>
 
   <div class="inv-words">Rs. <span id="p_totalWords"></span></div>
 
   <div class="inv-bottom-row">
-    <div class="inv-box inv-terms">
+    <div class="inv-box inv-terms" id="p_terms">
       <div class="inv-box-title">Terms and Conditions</div>
       E &amp; O.E<br>
       1. Goods once sold will not be taken back.<br>
@@ -3136,6 +3140,8 @@ function renderInvoiceToPdf(pdf, el){
 }
 
 function generateBill(openFile = true){
+  const _f2b = !!window._f2b;
+  applyBillTypeToInvoice(_f2b);
   // Fill invoice template with entered data
   const snoInput = document.getElementById('sno');
   const currentSno = snoInput.value;
@@ -3197,16 +3203,18 @@ function generateBill(openFile = true){
   };
   if(_serialNo) _billRecord.serial = _serialNo;      // Firebase undefined value nahi leta
   if(window._billOrder && window._billOrder.id){ _billRecord.source = 'online'; _billRecord.orderId = window._billOrder.id; }
+  if(_f2b) _billRecord.type = 'f2b';
   saveBillToHistory(_billRecord);
 
   // Stock record se connect: bill ke items ka stock automatically kam karo
-  try { deductStockForBill(itemList); } catch(e){ console.warn('Stock deduct failed:', e); }
+  try { if(_f2b) addStockForPurchase(itemList); else deductStockForBill(itemList); } catch(e){ console.warn('Stock update failed:', e); }
 
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   return renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    downloadPDF(pdf, `Mittu_Bill_${currentSno || 'bill'}.pdf`, openFile);
+    downloadPDF(pdf, `${_f2b ? 'Mittu_Purchase_' : 'Mittu_Bill_'}${currentSno || 'bill'}.pdf`, openFile);
+    if(_f2b){ applyBillTypeToInvoice(false); setF2bMode(false, true); }
 
     // Bill save/print ho chuka hai — ab customer ke fields (naam, mobile,
     // address) aur items ko clear kar do taaki agla bill genuinely NAYE
@@ -4387,7 +4395,15 @@ function renderBillHistory(){
   document.getElementById('historyDeleteSelectedBtn').innerHTML =
     `<svg class="pro-icon history-trash-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg> Delete Selected (${historySelectedSet.size})`;
 
+  window.renderHistoryFilterTabs && window.renderHistoryFilterTabs();
+  const _hf = window._histFilter || 'all';
+  let _shownCnt = 0;
   history.forEach((rec, idx) => {
+    const _on = !!(rec.source === 'online' || rec.orderId), _f = rec.type === 'f2b';
+    if(_hf === 'online' && !_on) return;
+    if(_hf === 'f2b' && !_f) return;
+    if(_hf === 'physical' && (_on || _f)) return;
+    _shownCnt++;
     const card = document.createElement('div');
     const isSelected = historySelectedSet.has(idx);
     card.style.cssText = `border:1px solid ${isSelected ? '#a04e00' : ((rec.source === 'online' || rec.orderId) ? '#9ec5f5' : '#e1e5eb')}; border-radius:12px; padding:11px 12px; margin-bottom:8px; background:${isSelected ? '#ffe9d1' : ((rec.source === 'online' || rec.orderId) ? '#eaf3ff' : '#fff')}; display:flex; gap:10px; align-items:center; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04);`;
@@ -4400,7 +4416,7 @@ function renderBillHistory(){
       <div style="flex:1; min-width:0;">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <div style="min-width:0;">
-            <div style="font-size:14px; font-weight:800; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${shortName}${(rec.source === 'online' || rec.orderId) ? ' <span class="drc-pill">Online Order</span>' : ''}</div>
+            <div style="font-size:14px; font-weight:800; color:#222; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${shortName}${(rec.source === 'online' || rec.orderId) ? ' <span class="drc-pill">Online Order</span>' : ''}${rec.type === 'f2b' ? ' <span class="drc-pill" style="background:#1a7a3e">F2B/C2B</span>' : ''}</div>
             <div style="font-size:11px; color:#777; margin-top:3px;">Bill ${rec.billNo || ''} · ${rec.dateTime || ''}${itemCount ? ' · ' + itemCount + ' item' + (itemCount > 1 ? 's' : '') : ''}</div>
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
@@ -4453,6 +4469,7 @@ function renderBillHistory(){
 
     listEl.appendChild(card);
   });
+  if(!_shownCnt) listEl.innerHTML = '<p style="text-align:center; color:#777; padding:20px;">Is section mein abhi koi bill nahi hai.</p>';
 }
 
 function toggleSelectAllHistory(){
@@ -4585,6 +4602,7 @@ function restoreBillToForm(idx){
   document.getElementById('sno').value = rec.billNo || '';
   window._snoAuto = false;      // purana bill khula hai: iska number badalna nahi
   setOrderBillMode(rec.source === 'online' && rec.orderId ? { id: rec.orderId, name: rec.custName } : null);
+  setF2bMode(rec.type === 'f2b', true);
   document.getElementById('custName').value = rec.custName || '';
   document.getElementById('custMobile').value = rec.custMobile || '';
   document.getElementById('custAddr').value = rec.address || '';
@@ -4636,6 +4654,7 @@ function redownloadBill(idx){
   const history = getBillHistory();
   if(!history || !history[idx]) return;
   const rec = history[idx];
+  applyBillTypeToInvoice(rec.type === 'f2b');
 
   document.getElementById('p_sno').textContent = ': ' + rec.billNo;
   const [d, t] = rec.dateTime.split(', ');
@@ -4666,7 +4685,8 @@ function redownloadBill(idx){
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   renderInvoiceToPdf(pdf, el).then(() => {
     el.style.left = '-9999px';
-    openPdfInApp(pdf, `Mittu_Bill_${rec.billNo}.pdf`);
+    openPdfInApp(pdf, `${rec.type === 'f2b' ? 'Mittu_Purchase_' : 'Mittu_Bill_'}${rec.billNo}.pdf`);
+    applyBillTypeToInvoice(false);
   });
 }
 
@@ -5352,7 +5372,7 @@ function printThermalBill(){
 }
 
 // ---------------- DRAWER RECENTS (ChatGPT-style) ----------------
-function getRecentFilter(){ try { const f = localStorage.getItem('mittu_recent_filter'); return f === 'physical' || f === 'online' ? f : 'all'; } catch(e){ return 'all'; } }
+function getRecentFilter(){ try { const f = localStorage.getItem('mittu_recent_filter'); return f === 'physical' || f === 'online' || f === 'f2b' ? f : 'all'; } catch(e){ return 'all'; } }
 function setRecentFilter(f){ try { localStorage.setItem('mittu_recent_filter', f); } catch(e){} renderDrawerRecents(); }
 function esc(x){ return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function renderDrawerRecents(){
@@ -5361,16 +5381,17 @@ function renderDrawerRecents(){
   const history = getBillHistory();
   const f = getRecentFilter();
   const tabs = document.getElementById('drawerRecentTabs');
-  if(tabs) tabs.innerHTML = [['all','All'],['physical','Physical Bill'],['online','Online Order Bill']].map(t => '<button type="button" class="drc-tab' + (t[0] === f ? ' on' : '') + (t[0] === 'online' ? ' blue' : '') + '" onclick="setRecentFilter(\'' + t[0] + '\')">' + t[1] + '</button>').join('');
+  if(tabs) tabs.innerHTML = [['all','All'],['physical','Physical Bill'],['online','Online Order Bill'],['f2b','F2B/C2B Bill']].map(t => '<button type="button" class="drc-tab' + (t[0] === f ? ' on' : '') + (t[0] === 'online' ? ' blue' : t[0] === 'f2b' ? ' green' : '') + '" onclick="setRecentFilter(\'' + t[0] + '\')">' + t[1] + '</button>').join('');
   if(!Array.isArray(history) || history.length === 0){
     el.innerHTML = '<div class="drawer-recent-empty">No recent bills yet.</div>';
     return;
   }
   const isOn = r => !!(r && (r.source === 'online' || r.orderId));
-  const shown = history.map((rec, idx) => ({ rec, idx })).filter(x => f === 'all' || (f === 'online' ? isOn(x.rec) : !isOn(x.rec))).slice(0, 8);
+  const isF = r => !!(r && r.type === 'f2b');
+  const shown = history.map((rec, idx) => ({ rec, idx })).filter(x => f === 'all' || (f === 'online' ? isOn(x.rec) : f === 'f2b' ? isF(x.rec) : (!isOn(x.rec) && !isF(x.rec)))).slice(0, 8);
   el.innerHTML = '';
   if(!shown.length){
-    el.innerHTML = '<div class="drawer-recent-empty">' + (f === 'online' ? 'Abhi koi online order se bana bill nahi hai.' : 'Abhi koi physical bill nahi hai.') + '</div>';
+    el.innerHTML = '<div class="drawer-recent-empty">' + (f === 'online' ? 'Abhi koi online order se bana bill nahi hai.' : f === 'f2b' ? 'Abhi koi F2B/C2B (kharid) bill nahi hai.' : 'Abhi koi physical bill nahi hai.') + '</div>';
   }
   shown.forEach(({ rec, idx }) => {
     const online = isOn(rec);
@@ -5385,7 +5406,7 @@ function renderDrawerRecents(){
     if(time.includes(',')) time = time.split(',').pop().trim();
     if(time.includes('·')) time = time.split('·').pop().trim();
     const amount = '₹' + Number(rec.total || 0).toFixed(2);
-    row.innerHTML = '<div class="drawer-recent-avatar">' + initials + '</div><div class="drawer-recent-main"><div class="drawer-recent-name drc-nm"><span class="nm">' + shortName + '</span></div><div class="drawer-recent-meta">' + esc(time || ('Bill ' + (rec.billNo || ''))) + (online ? ' <span class="drc-pill">Online Order</span>' : '') + '</div></div><div class="drawer-recent-amount">' + amount + '</div>';
+    row.innerHTML = '<div class="drawer-recent-avatar">' + initials + '</div><div class="drawer-recent-main"><div class="drawer-recent-name drc-nm"><span class="nm">' + shortName + '</span></div><div class="drawer-recent-meta">' + esc(time || ('Bill ' + (rec.billNo || ''))) + (online ? ' <span class="drc-pill">Online Order</span>' : '') + (rec.type === 'f2b' ? ' <span class="drc-pill" style="background:#1a7a3e">F2B/C2B</span>' : '') + '</div></div><div class="drawer-recent-amount">' + amount + '</div>';
     row.onclick = () => {
       closeDrawer();
       setTimeout(() => { if(typeof restoreBillToForm === 'function') restoreBillToForm(idx); }, 280);
@@ -8616,7 +8637,7 @@ function getUnknownBillItemsForReview(){
 }
 
 function requestBillFinalAction(action){
-  const unknown = getUnknownBillItemsForReview();
+  const unknown = window._f2b ? [] : getUnknownBillItemsForReview();
   if(unknown.length){
     pendingBillFinalAction = action;
     stockScanReviewMode = 'billUnknown';
@@ -9967,6 +9988,87 @@ document.addEventListener('click', function(e){
     shopLocFetch(function(g){ if(g) shopLocSet(g); });
   }, 3000);
 })();
+</script>
+<script id="f2b">
+/* F2B/C2B: Farmer/Customer se saman kharidna aur unhe paisa dena (kharid bill) */
+window._f2b = false;
+function setF2bMode(on, silent){
+  on = !!on;
+  if(on && window._billOrder){ if(!silent) alert('Online order ka bill ban raha hai — pehle use poora karein, phir F2B/C2B chalu karein.'); on = false; }
+  window._f2b = on;
+  var t = document.getElementById('f2bToggle'); if(t) t.checked = on;
+  var k = document.getElementById('f2bKnob'), d = document.getElementById('f2bDot');
+  if(k) k.style.background = on ? '#1a7a3e' : '#c9ced6'; if(d) d.style.left = on ? '22px' : '3px';
+  var h = document.getElementById('billHeadTxt'); if(h) h.textContent = on ? 'Farmer / Customer se Kharid' : 'Customer & Bill Details';
+  var b = document.getElementById('f2bBanner'); if(b) b.style.display = on ? 'block' : 'none';
+  var cn = document.getElementById('custName');
+  if(cn){ var f = cn.closest('.field'), lb = f && f.querySelector('label'); if(lb) lb.textContent = on ? 'Farmer / Customer Name' : 'Customer Name'; cn.placeholder = on ? 'Farmer / Customer name' : 'Customer name'; }
+  // Kharid bill mein UPI QR, WhatsApp, udhar aur staff/DQR wale button nahi chahiye
+  var hide = [document.querySelector('.upi-btn'), document.querySelector('.whatsapp-btn'), document.querySelector('.udhar-btn-row')];
+  var sb = document.querySelector('[onclick="sendListToStaff()"]'); if(sb && sb.parentElement) hide.push(sb.parentElement);
+  hide.forEach(function(e){ if(e) e.style.display = on ? 'none' : ''; });
+  var gb = document.querySelector('.generate-btn'); if(gb) gb.style.background = on ? '#1a7a3e' : '';
+}
+document.addEventListener('change', function(e){ if(e.target && e.target.id === 'f2bToggle') setF2bMode(e.target.checked); });
+var _invOrig = null;
+function applyBillTypeToInvoice(f2b){
+  var g = function(i){ return document.getElementById(i); };
+  if(!_invOrig){ var tm = g('p_terms'); _invOrig = { terms: tm ? tm.innerHTML : '' }; }
+  var set = function(i, a, b){ var e = g(i); if(e) e.textContent = f2b ? b : a; };
+  set('p_doctitle', 'INVOICE', 'PURCHASE VOUCHER');
+  set('p_billtitle', 'Billing Details', 'Paid To (Farmer / Customer)');
+  set('p_lblno', 'Invoice Number', 'Voucher Number');
+  set('p_lbldate', 'Invoice Date', 'Voucher Date');
+  set('p_thrate', 'List Price (₹)', 'Purchase Rate (₹)');
+  set('p_lbltotal', 'Total', 'Total Paid');
+  var tm = g('p_terms');
+  if(tm) tm.innerHTML = f2b ? '<div class="inv-box-title">Note</div>Goods purchased from the seller named above by Mittu Wholesaler &amp; Retailer.<br>Full amount paid to the seller against this voucher.' : _invOrig.terms;
+}
+// Kharid ka maal stock mein jodo (naya item ho to naya bana do)
+function addStockForPurchase(items){
+  var list = getStockList() || [], changed = [], added = [], mismatch = [];
+  items.forEach(function(it){
+    var qty = Number(it.qty) || 0, name = String(it.name || '').trim();
+    if(!name || name === '-' || qty <= 0) return;
+    var stock = smartFindStock(name, list), rate = Number(it.rate) || 0;
+    if(!stock){
+      var u = String(it.unit || '').trim() || 'pcs';
+      stock = { id: 'stk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), itemName: name, hindiName: (typeof hindiFromDict === 'function' ? hindiFromDict(name) : '') || '', quantity: Math.round(qty * 1000) / 1000, unit: u, purchasePrice: rate, salePrice: 0, salePrices: [{ price: 0, unit: u }], unitConv: {}, lowAlert: 0, createdAt: Date.now() };
+      list.push(stock); added.push(name); changed.push(stock); return;
+    }
+    var bu = String(it.unit || '').trim().toLowerCase(), su = String(stock.unit || '').trim().toLowerCase(), addQty = qty, newRate = rate;
+    if(bu && su && bu !== su){
+      var per = stock.unitConv ? Number(stock.unitConv[bu]) : 0;
+      if(!(per > 0)){ mismatch.push(stock.itemName + ' (bill: ' + it.unit + ', stock: ' + stock.unit + ')'); return; }
+      addQty = qty / per; newRate = rate * per;
+    }
+    stock.quantity = Math.round(((Number(stock.quantity) || 0) + addQty) * 1000) / 1000;
+    if(newRate > 0) stock.purchasePrice = Math.round(newRate * 100) / 100;
+    if(changed.indexOf(stock) < 0) changed.push(stock);
+  });
+  if(!changed.length){ if(mismatch.length) showStockToast('⚠ Unit alag hai, stock badha nahi: ' + mismatch.join(', '), true); return; }
+  saveStockList(list);
+  changed.forEach(function(st){ if(window.saveStockItemToFirebase) window.saveStockItemToFirebase(st).catch(function(err){ console.warn('Firebase stock save failed:', err); }); });
+  var panel = document.getElementById('stockRecordPanel'); if(panel && panel.style.display !== 'none') renderStockList();
+  if(typeof refreshBillStockNames === 'function') refreshBillStockNames();
+  if(mismatch.length) showStockToast('⚠ Unit alag hai, stock badha nahi: ' + mismatch.join(', '), true);
+  else if(added.length) showStockToast('✅ Stock badh gaya. Naya item judaa: ' + added.join(', ') + ' (sale price baad mein daalein)');
+  else showStockToast('✅ Stock badh gaya (' + changed.length + ' item)');
+}
+// Full history screen ke filter: All / Physical / Online / F2B-C2B
+window._histFilter = 'all';
+window.renderHistoryFilterTabs = function(){
+  var el = document.getElementById('historyFilterTabs'); if(!el) return;
+  var f = window._histFilter || 'all';
+  el.innerHTML = [['all', 'All'], ['physical', 'Physical Bill'], ['online', 'Online Bill'], ['f2b', 'F2B/C2B Bill']].map(function(t){
+    var on = t[0] === f, col = t[0] === 'f2b' ? '#1a7a3e' : t[0] === 'online' ? '#1565c0' : '#16325c';
+    return '<button type="button" data-hf="' + t[0] + '" style="flex:0 0 auto;white-space:nowrap;border:1px solid ' + (on ? col : '#d9dde4') + ';background:' + (on ? col : '#fff') + ';color:' + (on ? '#fff' : '#444') + ';border-radius:16px;padding:7px 13px;font-size:13px;font-weight:700">' + t[1] + '</button>';
+  }).join('');
+};
+document.addEventListener('click', function(e){
+  var b = e.target && e.target.closest && e.target.closest('[data-hf]');
+  if(b){ window._histFilter = b.getAttribute('data-hf'); if(typeof renderBillHistory === 'function') renderBillHistory(); }
+});
 </script>
 <script id="paycfg">
 /* Setting > Payment: Sirf UPI ID ya Payment Gateway (PhonePe / Razorpay / Cashfree) */
