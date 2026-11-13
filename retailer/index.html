@@ -2609,7 +2609,7 @@ button[onclick="sendListToStaff()"],.rt-hide{display:none !important}
     <button type="button" class="udhar-add-btn" onclick="openUdharAddModal()">➕ उधार खाते में जोड़ें</button>
   </div>
 
-  <button class="generate-btn" onclick="requestBillFinalAction('pdf')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> GENERATE BILL (PDF Download)</button>
+  <button class="generate-btn" onclick="requestBillFinalAction('save')"><svg class="pro-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg> SAVE BILL IN HISTORY</button>
 
 </div>
 
@@ -3325,8 +3325,12 @@ function renderInvoiceToPdf(pdf, el){
   })();
 }
 
-function generateBill(openFile = true){
+function generateBill(openFile = true, saveOnly = false){
   const _f2b = !!window._f2b;
+  if(saveOnly){
+    const ok = Array.from(document.querySelectorAll('#itemsBody tr')).some(tr => (tr.querySelector('.itemName').value || '').trim() && (parseFloat(tr.querySelector('.itemQty').value) || 0) * (parseFloat(tr.querySelector('.itemRate').value) || 0) > 0);
+    if(!ok){ alert('Bill khali hai — kam se kam ek item (naam, qty aur rate) bharein.'); return Promise.resolve(); }
+  }
   applyBillTypeToInvoice(_f2b);
   // Fill invoice template with entered data
   const snoInput = document.getElementById('sno');
@@ -3395,6 +3399,20 @@ function generateBill(openFile = true){
   // Stock record se connect: bill ke items ka stock automatically kam karo
   try { if(!_f2b) deductStockForBill(itemList); } catch(e){ console.warn('Stock update failed:', e); }
 
+  if(saveOnly){
+    el.style.left = '-9999px';
+    if(_f2b){ applyBillTypeToInvoice(false); setF2bMode(false, true); }
+    document.getElementById('custName').value = '';
+    document.getElementById('custMobile').value = '';
+    document.getElementById('custAddr').value = '';
+    document.getElementById('itemsBody').innerHTML = '';
+    rowCount = 0;
+    addRow();
+    generateRandomBillNo();
+    try { if(typeof renderDrawerRecents === 'function') renderDrawerRecents(); } catch(e){}
+    alert('✅ Bill ' + currentSno + ' history mein save ho gaya. (Menu → View All Bills Record mein dikhega)');
+    return Promise.resolve();
+  }
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4', compress: true });
   return renderInvoiceToPdf(pdf, el).then(() => {
@@ -8882,6 +8900,7 @@ function runPendingBillFinalAction(action){
   if(action==='thermal') return printThermalBill();
   if(action==='whatsapp') return sendWhatsApp();
   if(action==='customerReview') return pushCustomerReviewCardFromBill();
+  if(action==='save') return generateBill(true, true);
   return generateBill();
 }
 
