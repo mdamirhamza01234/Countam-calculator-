@@ -3145,7 +3145,7 @@ function renderInvoiceToPdf(pdf, el){
   })();
 }
 
-function generateBill(openFile = true, saveOnly = false){
+function generateBill(openFile = true, saveOnly = false, quiet = false){
   const _f2b = !!window._f2b;
   if(saveOnly){
     const ok = Array.from(document.querySelectorAll('#itemsBody tr')).some(tr => (tr.querySelector('.itemName').value || '').trim() && (parseFloat(tr.querySelector('.itemQty').value) || 0) * (parseFloat(tr.querySelector('.itemRate').value) || 0) > 0);
@@ -3215,6 +3215,7 @@ function generateBill(openFile = true, saveOnly = false){
   if(window._billOrder && window._billOrder.id){ _billRecord.source = 'online'; _billRecord.orderId = window._billOrder.id; }
   if(_f2b) _billRecord.type = 'f2b';
   saveBillToHistory(_billRecord);
+  window._billActed = false;
 
   // Stock record se connect: bill ke items ka stock automatically kam karo
   try { if(!_f2b) deductStockForBill(itemList); } catch(e){ console.warn('Stock update failed:', e); }
@@ -3230,7 +3231,7 @@ function generateBill(openFile = true, saveOnly = false){
     addRow();
     generateRandomBillNo();
     try { if(typeof renderDrawerRecents === 'function') renderDrawerRecents(); } catch(e){}
-    alert('✅ Bill ' + currentSno + ' history mein save ho gaya. (Menu → View All Bills Record mein dikhega)');
+    if(!quiet) alert('✅ Bill ' + currentSno + ' history mein save ho gaya. (Menu → View All Bills Record mein dikhega)');
     return Promise.resolve();
   }
   const { jsPDF } = window.jspdf;
@@ -9646,6 +9647,14 @@ try { updateStockAiBtn(); } catch(e){}
 
 // ---------------- NEW BILL ----------------
 function startNewBill(){
+  // Neeche ka koi button (Print / QR / WhatsApp / Staff / DQR) dabane ke baad pencil dabaye to bill khali hone se pehle history mein save
+  if(window._billActed){
+    try {
+      const okItem = Array.from(document.querySelectorAll('#itemsBody tr')).some(tr => (tr.querySelector('.itemName').value || '').trim() && (parseFloat(tr.querySelector('.itemQty').value) || 0) * (parseFloat(tr.querySelector('.itemRate').value) || 0) > 0);
+      window._billActed = false;
+      if(okItem){ generateBill(false, true, true); setOrderBillMode(null); closeDrawer(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    } catch(e){ console.warn('auto-save before new bill failed', e); }
+  }
   const hasData = document.getElementById('custName').value.trim() ||
                    document.getElementById('custMobile').value.trim() ||
                    document.getElementById('custAddr').value.trim() ||
@@ -10251,6 +10260,17 @@ document.addEventListener('click', function(e){
   document.addEventListener('focusout', function(e){ if(isMine(e.target)) setTimeout(function(){ if(!isMine(document.activeElement)) close(); }, 120); });
   document.addEventListener('keydown', function(e){ if(e.key === 'Enter' && isMine(e.target)) close(); });
   window.addEventListener('scroll', function(){ if(cur){ var m = document.getElementById('dlSuggest'); if(m) place(cur, m); } }, true);
+})();
+</script>
+<script id="actflag">
+/* Bill ke neeche ke action button dabaye gaye -> pencil (naya bill) par bill apne-aap history mein save */
+(function(){
+  ['sendFixAmountToDqr','sendListToStaff','thermalPrintClick','sendOnlineOrderToStaff'].forEach(function(n){
+    var f = window[n]; if(typeof f !== 'function') return;
+    window[n] = function(){ window._billActed = true; return f.apply(this, arguments); };
+  });
+  var r = window.requestBillFinalAction;
+  if(typeof r === 'function') window.requestBillFinalAction = function(a){ if(a !== 'save') window._billActed = true; return r.apply(this, arguments); };
 })();
 </script>
 <script id="f2b">
