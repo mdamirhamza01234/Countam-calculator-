@@ -10678,7 +10678,7 @@ window.cldPick = function(cb, busy){
 };
 // Internet (free-license) se item ki photo dhundhna: Wikimedia Commons + Openverse
 window.cldWebSearch = async function(q){
-  var out = [], enc = encodeURIComponent(q);
+  var out = [], web = [], enc = encodeURIComponent(q);
   function ok(u){ return typeof u === 'string' && /^https:\/\//.test(u); }
   var jobs = [
     fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=12&gsrsearch=' + enc + '&prop=imageinfo&iiprop=url|mime&iiurlwidth=700')
@@ -10693,8 +10693,14 @@ window.cldWebSearch = async function(q){
         (d.results || []).forEach(function(x){ var u = x.thumbnail || x.url; if(ok(u)) out.push({ t: u, src: 'Openverse' }); });
       }).catch(function(){})
   ];
+  jobs.push(fetch('/api/img-search?q=' + enc).then(function(r){ return r.json(); }).then(function(d){
+    (d.results || []).forEach(function(x){ if(ok(x.t) && ok(x.u)) web.push({ t: x.t, u: x.u, src: 'Web' }); });
+  }).catch(function(){}));
   await Promise.all(jobs);
-  return out.slice(0, 20);
+  // free-license aur web (non-free ho sakti hai) dono mix mein
+  var res = [], i = 0;
+  while(res.length < 36 && (i < out.length || i < web.length)){ if(i < out.length) res.push(out[i]); if(i < web.length) res.push(web[i]); i++; }
+  return res;
 };
 window.cldWebPick = function(query, cb, busy){
   var ov = document.createElement('div'); ov.id = 'cldWebOverlay';
@@ -10702,7 +10708,7 @@ window.cldWebPick = function(query, cb, busy){
   ov.innerHTML = '<div style="width:100%;max-width:480px;height:86vh;background:#fff;border-radius:20px 20px 0 0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)">'
     + '<div style="display:flex;align-items:center;gap:8px;padding:14px 14px 6px"><b style="flex:1;font-size:18px;color:#1a3a8a">🔍 Internet se photo</b><button type="button" id="cldWebX" style="border:0;background:#eee;border-radius:50%;width:36px;height:36px;font-size:18px">✕</button></div>'
     + '<div style="padding:0 14px 6px;display:flex;gap:8px"><input id="cldWebQ" style="flex:1;padding:11px;border:1.5px solid #cfd8e3;border-radius:12px;font-size:16px;min-width:0" placeholder="Item ka naam (English mein behtar)"><button type="button" id="cldWebGo" style="border:0;background:#1a56c4;color:#fff;border-radius:12px;padding:0 16px;font-weight:800">Search</button></div>'
-    + '<div style="padding:0 14px 6px;font-size:12px;color:#666">Free-license photos hain. Packet wale (brand) items ki photo na mile to apni khud ki asli photo lagayein.</div>'
+    + '<div style="padding:0 14px 6px;font-size:12px;color:#666">🟢 Free = free-license. 🌐 Web = internet ki photo, copyright wali ho sakti hai — bechne ke liye sirf apni ya sahi photo lagayein.</div>'
     + '<div id="cldWebRes" style="flex:1;overflow:auto;padding:6px 14px 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start"></div></div>';
   document.body.appendChild(ov);
   var qi = ov.querySelector('#cldWebQ'), res = ov.querySelector('#cldWebRes'); qi.value = query || '';
@@ -10715,15 +10721,16 @@ window.cldWebPick = function(query, cb, busy){
     var list = await window.cldWebSearch(q);
     if(!list.length){ res.innerHTML = '<div style="padding:30px;text-align:center;color:#666">Kuch nahi mila. Doosra naam try karein (jaise English mein) ya apni khud ki photo lagayein.</div>'; return; }
     res.style.display = 'grid';
-    res.innerHTML = list.map(function(x, i){ return '<button type="button" data-i="' + i + '" style="border:1px solid #dde3ea;border-radius:12px;padding:0;background:#f6f8fa;aspect-ratio:1/1;overflow:hidden"><img src="' + x.t.replace(/"/g, '&quot;') + '" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display=\'none\'"></button>'; }).join('');
+    res.innerHTML = list.map(function(x, i){ return '<button type="button" data-i="' + i + '" style="position:relative;border:1px solid #dde3ea;border-radius:12px;padding:0;background:#f6f8fa;aspect-ratio:1/1;overflow:hidden"><span style="position:absolute;left:4px;top:4px;z-index:1;font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px;color:#fff;background:' + (x.src === 'Web' ? '#c2410c' : '#15803d') + '">' + (x.src === 'Web' ? '🌐 Web' : '🟢 Free') + '</span><img src="' + x.t.replace(/"/g, '&quot;') + '" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.style.display=\'none\'"></button>'; }).join('');
     res._list = list;
   }
   res.addEventListener('click', async function(e){
     var b = e.target.closest && e.target.closest('button[data-i]'); if(!b || !res._list) return;
     var x = res._list[parseInt(b.getAttribute('data-i'), 10)]; if(!x) return;
     var blob = null;
-    try { var r = await fetch(x.t); if(r.ok) blob = await r.blob(); } catch(err){}
-    if(!blob){ if(confirm('Ye photo set karne wali window mein nahi khul payi. Seedha isi photo ko laga dein?')){ close(); cb(x.t); } return; }
+    try { var r = await fetch(x.src === 'Web' ? '/api/img-search?p=' + encodeURIComponent(x.u) : x.t); if(r.ok) blob = await r.blob(); } catch(err){}
+    if(!blob && x.src === 'Web'){ try { var r2 = await fetch('/api/img-search?p=' + encodeURIComponent(x.t)); if(r2.ok) blob = await r2.blob(); } catch(err){} }
+    if(!blob){ if(confirm('Ye photo set karne wali window mein nahi khul payi. Seedha isi photo ko laga dein?')){ close(); cb(x.u || x.t); } return; }
     close();
     var cropped = await window.cldCrop(blob); if(!cropped) return;
     if(busy) busy(true);
