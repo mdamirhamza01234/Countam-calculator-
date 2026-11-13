@@ -453,7 +453,7 @@
   window.publishShopLoc = function(l){
     const u = window.currentFirebaseUser; if(!l || !u || u.isAnonymous) return;
     const path = (typeof window.RT_NAME === 'function') ? 'retailers/' + u.uid + '/loc' : 'publicShop/loc';
-    set(ref(fbDb, path), { lat: l.lat, lng: l.lng, ts: Date.now() }).catch(e => console.warn('shop loc publish', e));
+    set(ref(fbDb, path), { lat: l.lat, lng: l.lng, acc: Math.round(Number(l.acc) || 0), ts: Date.now() }).catch(e => console.warn('shop loc publish', e));
   };
   window.addEventListener('mittuFirebaseUserReady', () => { setTimeout(() => { try { const l = (typeof shopLocGet === 'function') ? shopLocGet() : null; if(l) window.publishShopLoc(l); } catch(e){} }, 3500); });
 
