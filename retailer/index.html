@@ -5520,16 +5520,8 @@ function printThermalBill(){
   // laptop/desktop browsers and on Android when no native bridge exists.
   const data = buildThermalBillHtml();
   const widthMm = thermalPaperWidth;
-  const printWindow = window.open('', '_blank');
-  if(!printWindow){
-    window.__thermalPrintBusy = false;
-    alert('Printer bridge not found. Allow pop-ups in the browser, or run the app with a native thermal-printer bridge.');
-    return;
-  }
-
-  printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=${widthMm}mm, initial-scale=1"><title>Mittu Bill</title>
-    <style>
+  // Naya window nahi: isi app ke andar full-screen preview (Back button / swipe gesture se band hota hai)
+  const css = `
       @page { size: ${widthMm}mm auto; margin: 0; }
       html,body { margin:0; padding:0; background:#fff; width:${widthMm}mm; }
       body { font-family: Arial, Helvetica, sans-serif; color:#000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -5557,17 +5549,26 @@ function printThermalBill(){
       @media print { .nobar { display:none !important; }
       }
       @media print { body { width:${widthMm}mm; } .receipt { break-inside:avoid; } }
-    </style></head><body><div class="nobar"><button type="button" id="bk">← Back</button><span>Bill preview</span><button type="button" id="pr" style="margin-left:auto">🖨️ Print</button></div>${data.html}<script>
-      (function(){ var c=function(){ try{ window.close(); }catch(e){} setTimeout(function(){ if(!window.closed){ try{ history.back(); }catch(e){} } },150); };
-        document.getElementById('bk').onclick=c; document.getElementById('pr').onclick=function(){ window.print(); };
-        window.addEventListener('hashchange', function(){ if(location.hash !== '#bill'){ try{ window.close(); }catch(e){} } });
-        try{ location.hash = '#bill'; }catch(e){}
-      })();
-    <\/script></body></html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => { printWindow.print(); }, 350);
+    `;
+  const doc = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mittu Bill</title><style>${css}
+      html,body{width:auto !important}</style></head><body>${data.html}</body></html>`;
+  closeThermalPreview();
+  const ov = document.createElement('div');
+  ov.id = 'thermalPrevOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#fff;display:flex;flex-direction:column';
+  ov.innerHTML = '<div style="display:flex;align-items:center;gap:10px;background:#1a3a8a;color:#fff;font:700 16px Arial;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px">'
+    + '<button type="button" id="thPrevBack" style="border:0;background:rgba(255,255,255,.2);color:#fff;font:700 15px Arial;border-radius:8px;padding:8px 12px">\u2190 Back</button><span>Bill preview</span>'
+    + '<button type="button" id="thPrevPrint" style="margin-left:auto;border:0;background:rgba(255,255,255,.2);color:#fff;font:700 15px Arial;border-radius:8px;padding:8px 12px">\ud83d\udda8\ufe0f Print</button></div>'
+    + '<iframe id="thPrevFrame" style="flex:1;border:0;width:100%;background:#fff"></iframe>';
+  document.body.appendChild(ov);
+  document.getElementById('thPrevFrame').srcdoc = doc;
+  document.getElementById('thPrevBack').onclick = closeThermalPreview;
+  document.getElementById('thPrevPrint').onclick = function(){
+    try { const f = document.getElementById('thPrevFrame'); f.contentWindow.focus(); f.contentWindow.print(); }
+    catch(e){ try { window.print(); } catch(_){} }
+  };
 }
+function closeThermalPreview(){ const o = document.getElementById('thermalPrevOverlay'); if(o) o.remove(); }
 
 // ---------------- DRAWER RECENTS (ChatGPT-style) ----------------
 function getRecentFilter(){ try { const f = localStorage.getItem('mittu_recent_filter'); return f === 'physical' || f === 'online' || f === 'f2b' ? f : 'all'; } catch(e){ return 'all'; } }
@@ -10756,6 +10757,8 @@ window.cldThumb = function(url){ return url ? '<img src="' + String(url).replace
 </script>
 <script id="backguard">
 window.__bgExtra=function(){
+  var tp=document.getElementById('thermalPrevOverlay');
+  if(tp){tp.remove();return true;}
   var wx=document.getElementById('cldWebX');
   if(wx){wx.click();return true;}
   var cc=document.getElementById('cldCancel');
