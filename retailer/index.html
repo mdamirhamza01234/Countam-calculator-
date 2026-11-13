@@ -5384,8 +5384,8 @@ function buildThermalBillHtml(){
   const itemRows = rows.map(it => `
     <tr>
       <td class="sr">${it.i}</td>
-      <td class="item">${escHtml(it.name)}</td>
-      <td class="num">${it.qty}${it.unit ? ' ' + escHtml(it.unit) : ''}</td>
+      <td class="item">${escHtml(it.name)}${it.unit ? '<div class="un">per ' + escHtml(it.unit) + '</div>' : ''}</td>
+      <td class="num">${it.qty}</td>
       <td class="num">${it.rate.toFixed(2)}</td>
       <td class="num">${it.amt.toFixed(2)}</td>
     </tr>`).join('');
@@ -5551,8 +5551,19 @@ function printThermalBill(){
       .num { text-align:right; white-space:nowrap; }
       .grand { display:flex; justify-content:space-between; font-size:${widthMm === 58 ? 14 : 16}px; font-weight:900; padding:1mm 0; }
       .words { font-size:9px; font-weight:700; word-break:break-word; }
+      .un { font-size:8px; font-weight:600; color:#333; }
+      .nobar { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; background:#1a3a8a; color:#fff; font:700 16px Arial; padding:calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; width:100vw; box-sizing:border-box; }
+      .nobar button { border:0; background:rgba(255,255,255,.2); color:#fff; font:700 15px Arial; border-radius:8px; padding:7px 12px; }
+      @media print { .nobar { display:none !important; }
+      }
       @media print { body { width:${widthMm}mm; } .receipt { break-inside:avoid; } }
-    </style></head><body>${data.html}</body></html>`);
+    </style></head><body><div class="nobar"><button type="button" id="bk">← Back</button><span>Bill preview</span><button type="button" id="pr" style="margin-left:auto">🖨️ Print</button></div>${data.html}<script>
+      (function(){ var c=function(){ try{ window.close(); }catch(e){} setTimeout(function(){ if(!window.closed){ try{ history.back(); }catch(e){} } },150); };
+        document.getElementById('bk').onclick=c; document.getElementById('pr').onclick=function(){ window.print(); };
+        window.addEventListener('hashchange', function(){ if(location.hash !== '#bill'){ try{ window.close(); }catch(e){} } });
+        try{ location.hash = '#bill'; }catch(e){}
+      })();
+    <\/script></body></html>`);
   printWindow.document.close();
   printWindow.focus();
   setTimeout(() => { printWindow.print(); }, 350);
